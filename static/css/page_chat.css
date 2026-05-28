@@ -14,7 +14,7 @@ body {
     padding: 20px;
     /*background: #00A67C;*/
     /* 背景图片 */
-    background-image: url("a.png");
+    background-image: url("../a.png");
     /* 铺满全屏 */
     background-size: cover;
     /* 不重复平铺 */

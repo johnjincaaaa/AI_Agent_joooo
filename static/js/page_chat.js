@@ -1,11 +1,12 @@
 const API_AI_CHAT = "http://127.0.0.1:8000/ai/chat";
+const API_AI_CHAT_savaToDb = "http://127.0.0.1:8000/ai/chat/savaToDb";
 
 
 //////////////////////////////////  点击按钮发送
 // 全局锁：防止重复发送
 let isSending = false;
 let chatData = [];
-
+let div;
 async function sendMessage() {
     // 🔥 锁已经打开 → 直接拒绝！绝对不会执行第二次
     if (isSending) {
@@ -19,18 +20,21 @@ async function sendMessage() {
     if (!content) {
         return;
     }
-    // TODO:ai分析标题结构
+
+
     if (!chatSession.textContent.trim()) {
         chatSession.textContent = content;
-        // TODO:数据库存储第一条系统索引数据
-        // chatData.push({'message': content, 'role': 'system'});
-        let div = document.createElement("div");
+        div = document.createElement("div");
         div.textContent = content;
-        div.title = Date();
+        div.title = new Date().getTime();
         div.className = `history title`;
         // 对历史会话操作：拉取数据库对话数据到对话框
         div.addEventListener('click', function () {
-            alert('你点击拉我')
+            alert('你点击了我')
+
+
+
+
         });
         sideBar.appendChild(div);
     }
@@ -39,7 +43,7 @@ async function sendMessage() {
     addMessage(content, "user");
 
     input.value = "";
-    sendMessage.disable = true;
+    sendMessage.disabled = true;
     isSending = true;
     sendMessage.textContent = "发送中⏹️";
     try {
@@ -65,16 +69,43 @@ async function sendMessage() {
         chatData = data['new_history'];
         addMessage(aiReply, "ai");
 
+
     } catch (err) {
         addMessage("AI出错了，请检查API Key", "ai");
         console.error(err);
 
     } finally {
         isSending = false;
-        sendMessage.disable = false;
+        sendMessage.disabled = false;
         sendMessage.textContent = "发送🪄";
+        await postToDb(chatData, div.title, div.textContent);
     }
 }
+
+// 发送聊天数据到数据库
+async function postToDb(chatData, createTime, sessionName) {
+  try {
+    const res = await fetch(API_AI_CHAT_savaToDb, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        chat_data: chatData,
+        create_time: createTime,
+        session_name: sessionName,
+      }),
+    });
+
+    const result = await res.json();
+    console.log("✅ 保存成功：", result);
+    return result;
+  } catch (err) {
+    console.error("❌ 请求失败：", err);
+    return null;
+  }
+}
+
 
 // 添加消息到界面
 function addMessage(text, sender) {
@@ -93,7 +124,7 @@ document.getElementById("userInput").addEventListener("keypress", e => {
     }
 });
 
-///////////////////////////////// 折叠和添加会话按钮
+////////////////////////////////// 折叠和添加会话按钮
 function foldHistorySession() {
     const sideBar = document.getElementById('sideBar');
 
@@ -105,6 +136,7 @@ function createNewSession() {
     // 清除所有 class="message" 的子元素 并清空缓存
     document.querySelectorAll("#chatBox .message").forEach(el => el.remove());
     chatData = [];
+    div = null;
     chatSession.textContent = null;
 }
 

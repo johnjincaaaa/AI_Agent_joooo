@@ -1,8 +1,12 @@
+from sqlalchemy.orm import Session
 import uvicorn
-from fastapi import FastAPI
+from fastapi import FastAPI, Request, Depends, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.templating import Jinja2Templates
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 from typing import List
+from datetime import datetime
 
 try:
     from langchain.chat_models import init_chat_model
@@ -16,6 +20,8 @@ except ModuleNotFoundError as e:
 
 # 初始化 FastAPI 应用
 app = FastAPI()
+app.mount("/static", StaticFiles(directory="static"), name="static")  # ✅ 静态文件统一配置（全局只需这一句）
+templates = Jinja2Templates(directory="templates")  # 自动找 HTML
 
 # 允许跨域（让你的 HTML 页面可以调用）
 app.add_middleware(
@@ -27,15 +33,34 @@ app.add_middleware(
 )
 
 
+# 登录页
+# @app.get("/")
+# def login_page(request: Request):
+#     return templates.TemplateResponse("login.html", {"request": request})
+#
+# # 注册页
+# @app.get("/register")
+# def register_page(request: Request):
+#     return templates.TemplateResponse("register.html", {"request": request})
+
+# ------------------- 聊天页 -------------------
+@app.get("/chat")
+def chat_page(request: Request):
+    return templates.TemplateResponse(name="ai.html", request=request)
+
+
 # 定义消息结构
 class ChatMessage(BaseModel):
-    role: str       # user / assistant
+    role: str  # user / assistant
     message: str
+
 
 # 前端传过来的结构
 class ChatRequest(BaseModel):
     history: List[ChatMessage]  # 完整历史
-    newMessage: str             # 最新一条消息
+    newMessage: str  # 最新一条消息
+
+
 """
 {
   "history": [
@@ -50,15 +75,15 @@ class ChatRequest(BaseModel):
 # 本地 Ollama 地址
 OLLAMA_URL = "http://localhost:11434/api/chat"
 
+
 # ------------------- 主接口：AI 聊天 -------------------
 @app.post("/ai/chat")
 def ai_chat(request: ChatRequest):
-
     # ==========================================
     # 1. 构建完整对话历史 = 历史对话 + 最新发送
     # ==========================================
     full_history = request.history.copy()
-    full_history.append(ChatMessage(role='user',message=request.newMessage))
+    full_history.append(ChatMessage(role='user', message=request.newMessage))
     # ==========================================
     # 2. 【关键】只取最后 20 条给 AI
     # ==========================================
@@ -67,7 +92,8 @@ def ai_chat(request: ChatRequest):
     # ==========================================
     # 3. 把 ai_context 传给 AI
     # ==========================================
-    model = init_chat_model(model="ollama:llama3-groq-tool-use:8b", temperature=0,num_gpu=-1)
+    model = init_chat_model(model="ollama:llama3-groq-tool-use:8b", temperature=0, num_gpu=-1)
+    # TODO:添加工具做成skill
     agent = create_agent(
         model=model,
         system_prompt="你是一个乐于助人的助手，全程中文回答",
@@ -103,16 +129,56 @@ def ai_chat(request: ChatRequest):
     }
 
 
+class ChatDbRequest(BaseModel):
+    chat_data: List[ChatMessage]
+    create_time: int
+    session_name: str
 
-# # ------------------- 你可以加各种工具接口 -------------------
-# @app.get("/tool/weather")
-# def get_weather(city: str):
-#     # 这里你可以写查天气、查时间、操作文件、控制硬件...
-#     return {"city": city, "weather": "晴天", "temp": "25℃"}
-#
-# @app.get("/tool/time")
-# def get_time():
-#     from datetime import datetime
-#     return {"now": datetime.now().strftime("%Y-%m-%d %H:%M:%S")}
+
+# ------------------- 接口：接收数据并存入数据库 -------------------
+from sqlOrm import *
+@app.post('/ai/chat/savaToDb')
+def ai_savaToDb(
+        request: ChatDbRequest,
+        db: Session = Depends(get_db)):
+    # TODO:后续转化为用户凭证
+    user_id = 1
+    clean_time = request.create_time
+
+    # ========================
+    # 按 【user_id + 秒级时间】 查询
+    # ========================
+    existing_session = db.query(ChatSession).filter(
+        ChatSession.user_id == user_id,
+        ChatSession.session_time == clean_time
+    ).first()
+
+    try:
+        if existing_session:
+            # 更新
+            existing_session.messages = [m.model_dump() for m in request.chat_data]
+            existing_session.session_name = request.session_name
+
+        else:
+            # 插入
+            new_session = ChatSession(
+                user_id=user_id,
+                session_name=request.session_name,
+                session_time=clean_time,
+                messages=[m.model_dump() for m in request.chat_data]
+            )
+            db.add(new_session)
+
+        db.commit()
+        return {"code": 200, "msg": "保存/更新成功"}
+
+    except Exception as error:
+        db.rollback()
+        raise HTTPException(
+            status_code=500,
+            detail={"code": 500, "msg": f"异常：{str(error)}"}
+        )
+
+
 if __name__ == "__main__":
-    uvicorn.run("main:app", host="0.0.0.0", port=8000,workers=1)
+    uvicorn.run("main:app", host="0.0.0.0", port=8000, workers=1)
