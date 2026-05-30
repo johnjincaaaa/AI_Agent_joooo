@@ -176,7 +176,8 @@ async function initHistory() {
                     h.classList.remove('active')
                 });
                 this.classList.add('active');
-                const session_time = this.title;
+                this.title = e['session_time'];
+                window.localStorage.setItem('thisSessionTime',this.title);
                 const result = e['messages'];
                 chatData = result;
                 const box = document.getElementById("chatBox");

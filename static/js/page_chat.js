@@ -55,6 +55,7 @@ async function sendMessage() {
 
             div = document.createElement("div");
             div.title = String(new Date().getTime());
+            window.localStorage.setItem('thisSessionTime',div.title);
             // 改为ai分析第一句话的标题，指定提示词
             let aiGenerateContent = await generateTitleFromTwoRounds(chatData || []);
 
@@ -71,7 +72,7 @@ async function sendMessage() {
                 });
                 this.classList.add('active');
                 const session_time = this.title;
-
+                window.localStorage.setItem('thisSessionTime',this.title);
                 const messageList = window.localStorage.getItem(session_time) || [];
                 chatData = messageList;
                 chatSession.textContent = this.textContent;
@@ -92,8 +93,7 @@ async function sendMessage() {
         sendMessage.disabled = false;
         sendMessage.textContent = "发送🪄";
         if (chatSession.textContent.trim() !== "新对话") {
-
-            await postToDb(chatData, div.title, div.textContent);
+            await postToDb(chatData, window.localStorage.getItem('thisSessionTime'), chatSession.textContent);
         }
     }
 }
