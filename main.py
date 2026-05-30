@@ -1,12 +1,13 @@
 from sqlalchemy.orm import Session
 import uvicorn
-from fastapi import FastAPI, Request, Depends, HTTPException
+from fastapi import FastAPI, Request, Depends, HTTPException, Query, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.templating import Jinja2Templates
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 from typing import List
-from datetime import datetime
+from config import *
+from token_utils import create_access_token, verify_token
 
 try:
     from langchain.chat_models import init_chat_model
@@ -19,7 +20,12 @@ except ModuleNotFoundError as e:
     print(e)
 
 # 初始化 FastAPI 应用
-app = FastAPI()
+app = FastAPI(
+    title="有料ai",
+    description="一个致力于取悦自我的ai应用",
+    version="1.0",
+
+)
 app.mount("/static", StaticFiles(directory="static"), name="static")  # ✅ 静态文件统一配置（全局只需这一句）
 templates = Jinja2Templates(directory="templates")  # 自动找 HTML
 
@@ -44,7 +50,8 @@ app.add_middleware(
 #     return templates.TemplateResponse("register.html", {"request": request})
 
 # ------------------- 聊天页 -------------------
-@app.get("/chat")
+@app.get("/chat", summary="聊天页",
+         description="启动入口，返回html")
 def chat_page(request: Request):
     return templates.TemplateResponse(name="ai.html", request=request)
 
@@ -72,13 +79,14 @@ class ChatRequest(BaseModel):
 }
 """
 
-# 本地 Ollama 地址
-OLLAMA_URL = "http://localhost:11434/api/chat"
-
 
 # ------------------- 主接口：AI 聊天 -------------------
-@app.post("/ai/chat")
-def ai_chat(request: ChatRequest):
+@app.post("/ai/chat", summary='AI 聊天'
+    , description="""构建完整对话历史,取最后20条传给 AI，返回完整新历史给前端，前端同步内存""")
+def ai_chat(
+        request: ChatRequest,
+        temperature:float = 0.7
+):
     # ==========================================
     # 1. 构建完整对话历史 = 历史对话 + 最新发送
     # ==========================================
@@ -92,11 +100,11 @@ def ai_chat(request: ChatRequest):
     # ==========================================
     # 3. 把 ai_context 传给 AI
     # ==========================================
-    model = init_chat_model(model="ollama:llama3-groq-tool-use:8b", temperature=0, num_gpu=-1)
+    model = init_chat_model(model=MODEL, temperature=temperature, num_gpu=-1)
     # TODO:添加工具做成skill
     agent = create_agent(
         model=model,
-        system_prompt="你是一个乐于助人的助手，全程中文回答",
+        system_prompt=SYSTEM_PROMPT,
     )
 
     # 把最后20条转成 AI 能识别的格式
@@ -106,27 +114,29 @@ def ai_chat(request: ChatRequest):
             messages.append(HumanMessage(content=msg.message))
         else:
             messages.append(AIMessage(content=msg.message))
+    try:
+        result = agent.invoke({"messages": messages})
+        ai_reply = result["messages"][-1].content
 
-    result = agent.invoke({"messages": messages})
-    ai_reply = result["messages"][-1].content
+        # ==========================================
+        # 4. 返回【完整对话】
+        # ==========================================
+        # 完整新历史 = (旧历史 + 用户新消息) + AI回复
+        final_history = full_history + [{"role": "ai", "message": ai_reply}]
 
-    # ==========================================
-    # 4. 【保存数据库】保存【完整对话】
-    # ==========================================
-    # 完整新历史 = (旧历史 + 用户新消息) + AI回复
-    final_history = full_history + [{"role": "ai", "message": ai_reply}]
-
-    # 这里保存 final_history 到 DB（根据当前登录用户ID）
-    # db.save_history(user_id, final_history)
-
-    # ==========================================
-    # 5. 返回完整新历史给前端，前端同步内存
-    # ==========================================
-    return {
-        "code": 200,
-        "content": ai_reply,
-        "new_history": final_history  # 前端用这个覆盖 chatData
-    }
+        # ==========================================
+        # 5. 返回完整新历史给前端，前端同步内存
+        # ==========================================
+        return {
+            "code": 200,
+            "content": ai_reply,
+            "new_history": final_history  # 前端用这个覆盖 chatData
+        }
+    except Exception as error:
+        raise HTTPException(
+            status_code=500,
+            detail={"code": 500, "msg": f"异常：{str(error)}"}
+        )
 
 
 class ChatDbRequest(BaseModel):
@@ -137,20 +147,25 @@ class ChatDbRequest(BaseModel):
 
 # ------------------- 接口：接收数据并存入数据库 -------------------
 from sqlOrm import *
-@app.post('/ai/chat/savaToDb')
+
+
+@app.post('/ai/chat/savaToDb', summary='接收数据并存入数据库',
+          description=""" 按 【user_id + 秒级时间】 查询,数据更新或创建""")
 def ai_savaToDb(
         request: ChatDbRequest,
-        db: Session = Depends(get_db)):
-    # TODO:后续转化为用户凭证
-    user_id = 1
-    clean_time = request.create_time
+        db: Session = Depends(get_db),
+        user_id: int = Depends(verify_token)
+):
+    # 转化为用户凭证
+    # user_id = 1
+    session_time = request.create_time
 
     # ========================
     # 按 【user_id + 秒级时间】 查询
     # ========================
     existing_session = db.query(ChatSession).filter(
         ChatSession.user_id == user_id,
-        ChatSession.session_time == clean_time
+        ChatSession.session_time == session_time
     ).first()
 
     try:
@@ -164,7 +179,7 @@ def ai_savaToDb(
             new_session = ChatSession(
                 user_id=user_id,
                 session_name=request.session_name,
-                session_time=clean_time,
+                session_time=session_time,
                 messages=[m.model_dump() for m in request.chat_data]
             )
             db.add(new_session)
@@ -178,6 +193,130 @@ def ai_savaToDb(
             status_code=500,
             detail={"code": 500, "msg": f"异常：{str(error)}"}
         )
+
+
+# ------------------- 接口：读取数据库chat_sessions中的messages ------------------
+@app.get('/ai/chat/history', summary='读取数据库chat_sessions中的messages',
+         description="""需要加密 ！！ """)
+def ai_history(
+        # 转化为用户凭证，由前端传入，后端校验
+        user_id: int = Depends(verify_token),
+        session_time: int = Query(None),
+        is_Load_All: bool = Query(False),
+        db: Session = Depends(get_db)
+):
+    if is_Load_All:
+        existing_sessions = db.query(ChatSession).filter(
+            ChatSession.user_id == user_id,
+        ).order_by(ChatSession.session_time.desc()).all()
+        try:
+            if existing_sessions:
+                # ✅ 把对象转成字典列表（前端能识别）
+                result = []
+                for item in existing_sessions:
+                    result.append({
+                        "session_name": item.session_name,
+                        "session_time": item.session_time,
+                        "messages": item.messages
+                    })
+                return {
+                    "code": 200,
+                    "chat_sessions": result,
+                }
+            else:
+                raise HTTPException(
+                    status_code=500,
+                    detail={"messages": None, "session_name": None}
+                )
+        except Exception as error:
+            raise HTTPException(
+                status_code=500,
+                detail={"code": 500, "msg": f"异常：{str(error)}"}
+            )
+
+    else:
+        existing_session = db.query(ChatSession).filter(
+            ChatSession.user_id == user_id,
+            ChatSession.session_time == session_time
+        ).first()
+
+        try:
+            if existing_session:
+                return {
+                    "code": 200,
+                    "messages": existing_session.messages,
+                    "session_name": existing_session.session_name,
+                }
+            else:
+                raise HTTPException(
+                    status_code=500,
+                    detail={"messages": None, "session_name": None}
+                )
+        except Exception as error:
+            raise HTTPException(
+                status_code=500,
+                detail={"code": 500, "msg": f"异常：{str(error)}"}
+            )
+
+
+# ------------------- 接口：登录 ------------------
+class LoginForm(BaseModel):
+    username: str
+    password: str
+
+
+@app.post('/login', summary='登录')
+def login(
+        form: LoginForm,
+        db: Session = Depends(get_db),
+
+):
+    existing_user = db.query(User).filter(
+        User.username == form.username,
+        User.password == form.password
+    ).first()
+    if existing_user:
+        token: str = create_access_token({'user_id': existing_user.id})
+        return {
+            "code": 200,
+            "msg": "登录成功",
+            "token": token,
+            "user_id": existing_user.id,
+        }
+    else:
+        return {
+            "code": 401,
+            "msg": "用户名或密码错误"
+        }
+
+
+class RegisterForm(BaseModel):
+    username: str
+    password: str
+
+
+@app.post('/register', summary='注册')
+def register(
+        form: RegisterForm,
+        db: Session = Depends(get_db)
+):
+    existed_user = db.query(User).filter(
+        User.username == form.username,
+    ).first()
+    if existed_user:
+        return {'code': 401, "msg": "已存在用户名"}
+    else:
+        new_user = User(
+            username=form.username,
+            password=form.password,
+        )
+        db.add(new_user)
+        db.commit()  # <-- 关键！提交后才有ID
+        db.refresh(new_user)  # <-- 刷新对象，加载数据库生成的ID
+        return {
+            "code": 200,
+            "msg": "注册成功",
+        }
 
 
 if __name__ == "__main__":

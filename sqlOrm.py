@@ -29,7 +29,7 @@ class ChatSession(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     user_id = Column(Integer, ForeignKey("users.id"))
-    session_name = Column(String(100))  # 加上会话名字段
+    session_name = Column(String(100),nullable=False)  # 加上会话名字段
     session_time = Column(BIGINT,nullable=False,comment="创建时间（ms时间戳）")
     messages = Column(JSON)  # 对话JSON
     # 👇 核心：user_id + session_time 联合唯一索引（同一会话不重复）
@@ -51,4 +51,8 @@ def get_db():
 
 if __name__ == '__main__':
     with SessionLocal() as session:
-        print(session.query(ChatSession).all())
+        a = session.query(ChatSession).filter(
+            ChatSession.user_id==1
+        ).all()
+        for i in a:
+            print(i.session_name)

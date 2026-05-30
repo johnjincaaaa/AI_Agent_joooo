@@ -1,12 +1,12 @@
-const API_AI_CHAT = "http://127.0.0.1:8000/ai/chat";
-const API_AI_CHAT_savaToDb = "http://127.0.0.1:8000/ai/chat/savaToDb";
-
-
-//////////////////////////////////  点击按钮发送
+const API_AI_CHAT = `${config.API_BASE_URL}/ai/chat`;
+const API_AI_CHAT_savaToDb = `${config.API_BASE_URL}/ai/chat/savaToDb`;
+const API_AI_CHAT_history = `${config.API_BASE_URL}/ai/chat/history`;
+// 点击按钮发送
 // 全局锁：防止重复发送
 let isSending = false;
 let chatData = [];
 let div;
+
 async function sendMessage() {
     // 🔥 锁已经打开 → 直接拒绝！绝对不会执行第二次
     if (isSending) {
@@ -19,24 +19,6 @@ async function sendMessage() {
     const sendMessage = document.getElementById("sendMessage");
     if (!content) {
         return;
-    }
-
-
-    if (!chatSession.textContent.trim()) {
-        chatSession.textContent = content;
-        div = document.createElement("div");
-        div.textContent = content;
-        div.title = new Date().getTime();
-        div.className = `history title`;
-        // 对历史会话操作：拉取数据库对话数据到对话框
-        div.addEventListener('click', function () {
-            alert('你点击了我')
-
-
-
-
-        });
-        sideBar.appendChild(div);
     }
 
     // 显示用户消息
@@ -52,7 +34,7 @@ async function sendMessage() {
         //     "message": content,
         // };
         // const queryString = new URLSearchParams(params).toString();
-        const response = await fetch(API_AI_CHAT, {
+        const response = await fetch(`${API_AI_CHAT}`, {
             method: "POST",
             headers: {
                 "Content-Type": "application/json"
@@ -69,6 +51,37 @@ async function sendMessage() {
         chatData = data['new_history'];
         addMessage(aiReply, "ai");
 
+        if (chatSession.textContent.trim() === "新对话") {
+
+            div = document.createElement("div");
+            div.title = String(new Date().getTime());
+            // 改为ai分析第一句话的标题，指定提示词
+            let aiGenerateContent = await generateTitleFromTwoRounds(chatData || []);
+
+            chatSession.textContent = aiGenerateContent;
+            div.className = `history title active`;
+            div.textContent = aiGenerateContent;
+            // 对历史会话操作：拉取数据库对话数据到对话框 && 清除class active 并激活点击历史对话
+            div.addEventListener('click', async function () {
+                // 清空当前右边聊天记录,清空chatSession,调取数据库存入全部聊天记录，chatDate取全部聊天记录
+                document.getElementById("chatBox").querySelectorAll(".message").forEach(el => el.remove());
+                const histories = document.querySelectorAll('.history');
+                histories.forEach(h => {
+                    h.classList.remove('active')
+                });
+                this.classList.add('active');
+                const session_time = this.title;
+
+                const messageList = window.localStorage.getItem(session_time) || [];
+                chatData = messageList;
+                chatSession.textContent = this.textContent;
+
+                renderHistoryChat(chatData);
+            });
+            if (chatSession.textContent.trim() !== "新对话") {
+                sideBar.insertBefore(div, sideBar.children[1]);
+            }
+        }
 
     } catch (err) {
         addMessage("AI出错了，请检查API Key", "ai");
@@ -78,32 +91,89 @@ async function sendMessage() {
         isSending = false;
         sendMessage.disabled = false;
         sendMessage.textContent = "发送🪄";
-        await postToDb(chatData, div.title, div.textContent);
+        if (chatSession.textContent.trim() !== "新对话") {
+
+            await postToDb(chatData, div.title, div.textContent);
+        }
     }
 }
 
-// 发送聊天数据到数据库
-async function postToDb(chatData, createTime, sessionName) {
-  try {
-    const res = await fetch(API_AI_CHAT_savaToDb, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        chat_data: chatData,
-        create_time: createTime,
-        session_name: sessionName,
-      }),
+// 根据前两轮对话生成 8～12 字标题
+async function generateTitleFromTwoRounds(dialogue) {
+
+    // AI 生成标题
+    const res = await fetch(`${API_AI_CHAT}?temperature=1.5`, {
+        method: "POST",
+        headers: {
+            "Content-Type": "application/json"
+        },
+
+        body: JSON.stringify({
+            "history": dialogue,
+            "newMessage": `
+                    请根据以上2轮对话，生成一个8-12字的对话标题。
+                    要求：简洁概括、无标点、不换行。
+                    只返回标题，不要任何多余内容。
+                    `.trim()
+        })
+    });
+    if (res.status === 200) {
+        let resJson = await res.json();
+        return resJson.content;
+    } else {
+        return '新对话'
+    }
+
+}
+
+
+// 渲染历史记录（切换会话时用）
+function renderHistoryChat(messages) {
+    const box = document.getElementById("chatBox");
+
+    messages.forEach(msg => {
+
+        const sender = msg.role === "user" ? "user" : "ai";
+        const div = document.createElement("div");
+        div.className = `message ${sender}`;
+        div.textContent = msg.message;
+        box.appendChild(div);
     });
 
-    const result = await res.json();
-    console.log("✅ 保存成功：", result);
-    return result;
-  } catch (err) {
-    console.error("❌ 请求失败：", err);
-    return null;
-  }
+    // box.scrollTop = box.scrollHeight;
+}
+
+
+// 发送聊天数据到数据库
+async function postToDb(chatData, createTime, sessionName) {
+    try {
+        const token = localStorage.getItem("token");
+        const res = await fetch(API_AI_CHAT_savaToDb, {
+            method: "POST",
+            headers: {
+                "Authorization": "Bearer " + token,
+                "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+                chat_data: chatData,
+                create_time: createTime,
+                session_name: sessionName,
+            }),
+        });
+        if (res.status === 401) {
+            window.localStorage.setItem('token', null);
+            document.getElementById('openLoginBtn').textContent = '未登录';
+            console.log('登录信息已过期❗❗❗');
+            return null;
+        }
+        const result = await res.json();
+
+        console.log("✅ 保存数据成功：", result);
+        return result;
+    } catch (err) {
+        console.error("❌ 保存数据请求失败：", err);
+        return null;
+    }
 }
 
 
@@ -124,7 +194,7 @@ document.getElementById("userInput").addEventListener("keypress", e => {
     }
 });
 
-////////////////////////////////// 折叠和添加会话按钮
+// 折叠和添加会话按钮
 function foldHistorySession() {
     const sideBar = document.getElementById('sideBar');
 
@@ -137,7 +207,11 @@ function createNewSession() {
     document.querySelectorAll("#chatBox .message").forEach(el => el.remove());
     chatData = [];
     div = null;
-    chatSession.textContent = null;
+    chatSession.textContent = '新对话';
+    const histories = document.querySelectorAll('.history');
+    histories.forEach(h => {
+        h.classList.remove('active')
+    });
+
 }
 
-/////////////////////////////////////

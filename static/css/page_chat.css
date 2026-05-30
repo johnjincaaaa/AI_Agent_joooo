@@ -9,51 +9,59 @@
 }
 
 body {
-    max-width: 800px;
-    margin: 20px auto;
-    padding: 20px;
+    /*max-width: 800px;*/
+    /*margin: 20px auto;*/
+    /*padding: 20px;*/
+
+    /* 新增：让body占满整个视口，没有边距 */
+    margin: 0;
+    padding: 0;
+    height: 100vh; /* 让body高度等于屏幕高度 */
+    overflow: hidden; /* 防止出现滚动条 */
     /*background: #00A67C;*/
     /* 背景图片 */
-    background-image: url("../a.png");
+    /*background-image: url("../a.png");*/
+    background-color: #121212; /* 深色背景 */
     /* 铺满全屏 */
     background-size: cover;
     /* 不重复平铺 */
     background-repeat: no-repeat;
     /* 居中显示 */
     background-position: center;
-    opacity: 0.8; /* 盒子变透明，透出背景图 */
+    opacity: 1; /* 盒子变透明，透出背景图 */
+
+    /* 新增：让flex布局的子元素能正常占满高度 */
+    display: flex;
+    flex-direction: column;
 }
+
 
 .sidebar {
-    width: 300px;
-    background: #c4e3f3;
-    border-radius: 10px;
+    /*新增固定宽度，和DeepSeek一样 */
+    width: 260px;
+    flex-shrink: 0; /* 禁止被挤压变小 */
+    height: 100vh; /* 让侧边栏高度和屏幕一样 */
+    background: #1e1e1e; /* 改成深色背景，和DeepSeek风格统一 */
+    border-radius: 0; /* 去掉圆角，变成直角边栏 */
     text-align: center;
-    color: darkred;
+    color: #e1edf7;
     font-style: oblique;
     font-size: 0.8em;
-}
-
-.chat-box {
-    height: 600px;
-    background: white;
-    border: 2px solid #007bff;
-    border-radius: 10px;
-    padding: 20px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
     overflow-y: auto;
-    margin-bottom: 20px;
+    /* --------------- 给聊天历史列表留出底部空间（防止被头像挡住） --------------- */
+    padding-bottom: 70px; /* 给头像组件留出高度，防止聊天历史最后一条被挡住 */
+
+    scrollbar-width: thin; /* 细滚动条 */
+    scrollbar-color: #555 #222; /* 滑块色 轨道色（和背景一致） */
 
 }
 
-.history {
-    /* 底部横线 */
-    border-bottom: 1px solid #e1edf7;
-}
-
-.title:hover {
-  color: black;
-  font-weight: bold; /* 加粗 */
-  transition: all 0.2s ease; /* 平滑动画，体验更好 */
+.chat-whole {
+    background: #1e1e1e; /* 聊天框也改成深色 */
+    color: #ffffff; /* 文字白色 */
+    border: 2px solid #0A0C20;
+    border-radius: 4px;
 }
 
 .chat-box-title {
@@ -63,10 +71,10 @@ body {
 
     /* 宽度撑满、不透明、挡住下面内容 */
     width: 100%;
-    background: #ffffff; /* 不透明背景 */
+    /*background: #ffffff; !* 不透明背景 *!*/
 
     /* 底部横线 */
-    border-bottom: 1px solid #007bff;
+    border-bottom: 1px solid #0A0C20;
 
     /* 文字居中、美观 */
     text-align: center;
@@ -77,6 +85,52 @@ body {
     /* 层级最高，不会被内容盖住 */
     z-index: 99;
 }
+
+.chat-box {
+    height: 600px;
+    padding: 20px;
+    overflow-y: auto;
+    margin-bottom: 10px;
+
+}
+
+.history {
+    /* 底部横线 */
+    border-bottom: 1px solid #e1edf7;
+    padding: 15px 10px; /* 新增：增加上下内边距，提升排版舒适度 */
+    margin-bottom: 10px; /* 新增：和下方title拉开间距 */
+    font-size: 1em; /* 调整历史会话标题字号 */
+    font-weight: 600; /* 加粗历史会话标题 */
+    color: #bfcfe1; /* 调整历史会话标题颜色 */
+}
+
+/* 新增.title基础样式（原仅存在hover，补充默认样式） */
+.title {
+    padding: 10px 15px; /* 内边距，扩大点击区域 */
+    margin: 8px 10px; /* 外边距，避免挤在一起 */
+    border-radius: 8px; /* 圆角，更柔和 */
+    cursor: pointer; /* 鼠标悬浮显示手型 */
+    text-align: left; /* 文字左对齐，更易读 */
+    overflow: hidden; /* 超出隐藏 */
+    text-overflow: ellipsis; /* 文字溢出显示省略号 */
+    white-space: nowrap; /* 禁止换行 */
+    transition: all 0.2s ease; /* 统一过渡动画 */
+}
+
+.history.title.active {
+    color: #007bff;
+    font-weight: bold;
+
+}
+
+.title:hover {
+    color: #007bff; /* 调整hover文字颜色为主题蓝 */
+    font-weight: bold; /* 加粗 */
+    background-color: #e8f4fc; /* 新增：hover背景色，增强交互感 */
+    transform: translateX(4px); /* 新增：轻微右移，提升动效 */
+    transition: all 0.2s ease; /* 平滑动画，体验更好 */
+}
+
 
 .chat-session {
     position: absolute;
@@ -107,7 +161,11 @@ body {
 
 /*  hover 效果（可选） */
 .chat-box-title button:hover {
-    background: #f0f0f0;
+    color: #007bff; /* 调整hover文字颜色为主题蓝 */
+    font-weight: bold; /* 加粗 */
+    background-color: #e8f4fc; /* 新增：hover背景色，增强交互感 */
+    transform: translateX(2px); /* 新增：轻微右移，提升动效 */
+    transition: all 0.2s ease; /* 平滑动画，体验更好 */
 }
 
 .message {
@@ -118,7 +176,7 @@ body {
 }
 
 .user {
-    background: #00A67C;
+    background: #00B198;
     color: white;
     margin-left: auto;
 }
@@ -144,9 +202,232 @@ input {
 
 .button-sendMessage {
     padding: 15px 25px;
-    background: #007bff;
+    background: #373737;
     color: white;
     border: none;
     border-radius: 30px;
     cursor: pointer;
 }
+
+.button-sendMessage:hover {
+    color: #007bff; /* 调整hover文字颜色为主题蓝 */
+    font-weight: bold; /* 加粗 */
+    background-color: #e8f4fc; /* 新增：hover背景色，增强交互感 */
+    transform: translateX(4px); /* 新增：轻微右移，提升动效 */
+    transition: all 0.2s ease; /* 平滑动画，体验更好 */
+}
+
+/* 登录按钮 */
+.login-btn {
+    position: fixed;
+    top: 20px;
+    right: 20px;
+    padding: 8px 16px;
+    background: #0A0C20;
+    color: #fff;
+    border: none;
+    border-radius: 100px;
+    cursor: pointer;
+    z-index: 9998;
+}
+
+.login-btn:hover {
+    color: #007bff; /* 调整hover文字颜色为主题蓝 */
+    font-weight: bold; /* 加粗 */
+    background-color: #e8f4fc; /* 新增：hover背景色，增强交互感 */
+    transform: translateX(4px); /* 新增：轻微右移，提升动效 */
+    transition: all 0.2s ease; /* 平滑动画，体验更好 */
+}
+
+/* 弹窗遮罩 */
+.login-modal {
+    display: none;
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    z-index: 9999;
+}
+
+.modal-overlay {
+    width: 100%;
+    height: 100%;
+    background: rgba(0, 0, 0, 0.6);
+}
+
+.modal-content {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    background: #fff;
+    padding: 30px;
+    border-radius: 12px;
+    width: 360px;
+    text-align: center;
+}
+
+.close-btn {
+    position: absolute;
+    right: 15px;
+    top: 10px;
+    background: none;
+    border: none;
+    font-size: 22px;
+    cursor: pointer;
+}
+
+/* 选项卡 */
+.tab-box {
+    display: flex;
+    justify-content: center;
+    gap: 30px;
+    margin-bottom: 20px;
+}
+
+.tab {
+    font-size: 16px;
+    cursor: pointer;
+    padding: 4px 0;
+}
+
+.tab.active {
+    color: #007bff;
+    font-weight: bold;
+    border-bottom: 2px solid #007bff;
+}
+
+/* 表单 */
+.form-box {
+    display: none;
+}
+
+.form-box.show {
+    display: block;
+}
+
+.input-item {
+    margin-bottom: 15px;
+    text-align: left;
+}
+
+.input-item label {
+    display: block;
+    margin-bottom: 6px;
+    font-size: 14px;
+}
+
+.input-item input {
+    width: 100%;
+    padding: 10px;
+    border: 1px solid #ddd;
+    border-radius: 6px;
+    font-size: 14px;
+}
+
+.submit-btn {
+    width: 100%;
+    padding: 11px;
+    background: #007bff;
+    color: #fff;
+    border: none;
+    border-radius: 6px;
+    cursor: pointer;
+    margin-top: 10px;
+}
+
+
+/* --------------- 底部用户头像组件 --------------- */
+/* 侧边栏底部用户信息容器 */
+.user-profile {
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    width: 260px;
+    background: #1e1e1e; /* 和侧边栏背景统一 */
+    border-top: 1px solid #333; /* 和上方内容分隔 */
+    padding: 12px 16px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    box-sizing: border-box;
+    flex-shrink: 0; /* 不会被挤压 */
+}
+
+/* 头像样式 */
+.user-profile .avatar img {
+    width: 40px;
+    height: 40px;
+    border-radius: 50%; /* 圆形头像 */
+    object-fit: cover; /* 防止头像变形 */
+    background: #333; /* 未登录时的背景 */
+}
+
+/* 用户信息文字 */
+.user-profile .user-info {
+    flex: 1; /* 占满剩余宽度，把按钮挤到右边 */
+    overflow: hidden;
+}
+
+.user-profile .user-info span {
+    color: #fff;
+    font-size: 14px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis; /* 名字太长时显示省略号 */
+}
+
+/* 更多按钮 */
+.profile-menu-btn {
+    background: transparent;
+    border: none;
+    color: #aaa;
+    cursor: pointer;
+    padding: 4px;
+    border-radius: 4px;
+    transition: background 0.2s;
+}
+
+.profile-menu-btn:hover {
+    background: #333;
+    color: #fff;
+}
+
+/* 下拉菜单 */
+.profile-dropdown {
+    position: absolute;
+    bottom: 100%; /* 定位在头像上方 */
+    right: 16px;
+    background: #2d2d2d;
+    border-radius: 8px;
+    padding: 4px 0;
+    min-width: 160px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+    display: none; /* 默认隐藏 */
+}
+
+.profile-dropdown.show {
+    display: block; /* 点击后显示 */
+}
+
+/* 菜单项 */
+.dropdown-item {
+    padding: 10px 16px;
+    color: #fff;
+    font-size: 14px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    cursor: pointer;
+    transition: background 0.2s;
+}
+
+.dropdown-item:hover {
+    background: #3a3a3a;
+}
+
+.logout-btn {
+    color: #ff6b6b; /* 退出按钮用红色，更醒目 */
+}
+
