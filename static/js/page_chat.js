@@ -27,13 +27,16 @@ async function sendMessage() {
     input.value = "";
     sendMessage.disabled = true;
     isSending = true;
-    sendMessage.textContent = "发送中⏹️";
+    sendMessage.textContent = "⏹️";
     try {
         // 调用AI接口
         // params = {
         //     "message": content,
         // };
         // const queryString = new URLSearchParams(params).toString();
+
+        // 判断是否联网
+        const isOnline = document.getElementById('searchBtn').classList.contains('active');
         const response = await fetch(`${API_AI_CHAT}`, {
             method: "POST",
             headers: {
@@ -43,6 +46,8 @@ async function sendMessage() {
             body: JSON.stringify({
                 "history": chatData,
                 "newMessage": content,
+                "open_online": isOnline
+
             })
         });
 
@@ -51,11 +56,12 @@ async function sendMessage() {
         chatData = data['new_history'];
         addMessage(aiReply, "ai");
 
+
         if (chatSession.textContent.trim() === "新对话") {
 
             div = document.createElement("div");
             div.title = String(new Date().getTime());
-            window.localStorage.setItem('thisSessionTime',div.title);
+            window.localStorage.setItem('thisSessionTime', div.title);
             // 改为ai分析第一句话的标题，指定提示词
             let aiGenerateContent = await generateTitleFromTwoRounds(chatData || []);
 
@@ -72,8 +78,8 @@ async function sendMessage() {
                 });
                 this.classList.add('active');
                 const session_time = this.title;
-                window.localStorage.setItem('thisSessionTime',this.title);
-                const messageList = window.localStorage.getItem(session_time) || [];
+                window.localStorage.setItem('thisSessionTime', this.title);
+                const messageList = JSON.parse(window.localStorage.getItem(session_time) || []);
                 chatData = messageList;
                 chatSession.textContent = this.textContent;
 
@@ -91,8 +97,9 @@ async function sendMessage() {
     } finally {
         isSending = false;
         sendMessage.disabled = false;
-        sendMessage.textContent = "发送🪄";
+        sendMessage.textContent = "➤";
         if (chatSession.textContent.trim() !== "新对话") {
+            window.localStorage.setItem(window.localStorage.getItem('thisSessionTime'), JSON.stringify(chatData));
             await postToDb(chatData, window.localStorage.getItem('thisSessionTime'), chatSession.textContent);
         }
     }
@@ -163,7 +170,7 @@ async function postToDb(chatData, createTime, sessionName) {
         if (res.status === 401) {
             window.localStorage.setItem('token', null);
             document.getElementById('openLoginBtn').textContent = '未登录';
-            console.log('登录信息已过期❗❗❗');
+            showLoginExpiredModal('🔐 登录已过期，请重新登录！', 'error');
             return null;
         }
         const result = await res.json();
@@ -182,7 +189,9 @@ function addMessage(text, sender) {
     const box = document.getElementById("chatBox");
     const div = document.createElement("div");
     div.className = `message ${sender}`;
-    div.textContent = text;
+    // div.textContent = text;
+    marked.setOptions({breaks: true, gfm: true}); // 换行生效、支持表格列表
+    div.innerHTML = marked.parse(text);
     box.appendChild(div);
     box.scrollTop = box.scrollHeight; // 自动滚动到底部
 }
@@ -197,8 +206,11 @@ document.getElementById("userInput").addEventListener("keypress", e => {
 // 折叠和添加会话按钮
 function foldHistorySession() {
     const sideBar = document.getElementById('sideBar');
-
-    sideBar.hidden = !sideBar.hidden;
+    const userprofile = document.getElementById('userProfile');
+    // 切换侧边栏（假设 sideBar 是侧边栏元素，需确保已正确获取）
+    sideBar.classList.toggle('hidden');
+    // 切换用户信息栏
+    userprofile.classList.toggle('hidden');
 }
 
 function createNewSession() {

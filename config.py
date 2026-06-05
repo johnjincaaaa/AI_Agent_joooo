@@ -8,7 +8,18 @@ ACCESS_TOKEN_EXPIRE_MINUTES = 30
 
 
 # ===================== main.py =====================
-MODEL = 'ollama:llama3-groq-tool-use:8b'
+# MODEL = 'ollama:llama3-groq-tool-use:8b'
+
 SYSTEM_PROMPT = "你是一个乐于助人的助手，全程中文回答"
 # 本地 Ollama 地址
 OLLAMA_URL = "http://localhost:11434/api/chat"
+
+# 阿里云配置
+MODEL = "qwen3.7-plus"
+DASHSCOPE_API_KEY = "sk-910580700c1a44d2944152fda72177b4"
+# 阿里云兼容openai接口地址
+BASE_URL = "https://dashscope.aliyuncs.com/compatible-mode/v1"
+
+# ===================== tools =====================
+import tools
+TOOL_LIST = []

@@ -18,7 +18,8 @@ if (isLogining) {
         console.log(r)
     });
 } else {
-    openBtn.textContent = '未登录'
+    openBtn.textContent = '未登录';
+    showLoginExpiredModal('未登录,请登录！', 'error');
 }
 // 打开弹窗
 openBtn.onclick = () => {
@@ -177,7 +178,7 @@ async function initHistory() {
                 });
                 this.classList.add('active');
                 this.title = e['session_time'];
-                window.localStorage.setItem('thisSessionTime',this.title);
+                window.localStorage.setItem('thisSessionTime', this.title);
                 const result = e['messages'];
                 chatData = result;
                 const box = document.getElementById("chatBox");
@@ -187,12 +188,14 @@ async function initHistory() {
                     const sender = msg.role === "user" ? "user" : "ai";
                     const div = document.createElement("div");
                     div.className = `message ${sender}`;
-                    div.textContent = msg.message;
+                    // div.textContent = msg.message;
+                    marked.setOptions({breaks: true, gfm: true}); // 换行生效、支持表格列表
+                    div.innerHTML = marked.parse(msg.message);
                     box.appendChild(div);
                 });
 
             });
-            window.localStorage.setItem(e['session_time'], e['messages'])
+            window.localStorage.setItem(e['session_time'], JSON.stringify(e['messages']))
         });
 
     } else if (res.status === 401) {

@@ -1,3 +1,4 @@
+from dashscope import api_key
 from sqlalchemy.orm import Session
 import uvicorn
 from fastapi import FastAPI, Request, Depends, HTTPException, Query, status
@@ -6,16 +7,21 @@ from fastapi.templating import Jinja2Templates
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 from typing import List
+import logging
+
+import config
+
+logger = logging.getLogger("uvicorn.info")
+
+# 自定义api
 from config import *
 from token_utils import create_access_token, verify_token
+import tools
 
 try:
     from langchain.chat_models import init_chat_model
     from langchain.agents import create_agent
-    from langchain.messages import HumanMessage
-    from langchain.messages import SystemMessage
-    from langchain.messages import AIMessage
-    from langchain.messages import ToolMessage
+    from langchain.messages import HumanMessage, SystemMessage, AIMessage, ToolMessage
 except ModuleNotFoundError as e:
     print(e)
 
@@ -39,16 +45,6 @@ app.add_middleware(
 )
 
 
-# 登录页
-# @app.get("/")
-# def login_page(request: Request):
-#     return templates.TemplateResponse("login.html", {"request": request})
-#
-# # 注册页
-# @app.get("/register")
-# def register_page(request: Request):
-#     return templates.TemplateResponse("register.html", {"request": request})
-
 # ------------------- 聊天页 -------------------
 @app.get("/chat", summary="聊天页",
          description="启动入口，返回html")
@@ -58,26 +54,28 @@ def chat_page(request: Request):
 
 # 定义消息结构
 class ChatMessage(BaseModel):
-    role: str  # user / assistant
+    role: str  # user / ai
     message: str
 
 
 # 前端传过来的结构
 class ChatRequest(BaseModel):
+    """
+    {
+      "history": [
+        {"role": "user", "message": "你好"}, === ChatMessage
+        {"role": "ai", "message": "你好！"},
+        ...
+      ],
+      "newMessage": "我最新说的话",
+      open_online: False # 全局一键联网开关
+
+
+    }
+    """
     history: List[ChatMessage]  # 完整历史
     newMessage: str  # 最新一条消息
-
-
-"""
-{
-  "history": [
-    {"role": "user", "content": "你好"},
-    {"role": "assistant", "content": "你好！"},
-    ...
-  ],
-  "newMessage": "我最新说的话"
-}
-"""
+    open_online: bool = False  # 全局一键联网开关
 
 
 # ------------------- 主接口：AI 聊天 -------------------
@@ -85,7 +83,7 @@ class ChatRequest(BaseModel):
     , description="""构建完整对话历史,取最后20条传给 AI，返回完整新历史给前端，前端同步内存""")
 def ai_chat(
         request: ChatRequest,
-        temperature:float = 0.7
+        temperature: float = 0.7
 ):
     # ==========================================
     # 1. 构建完整对话历史 = 历史对话 + 最新发送
@@ -100,11 +98,22 @@ def ai_chat(
     # ==========================================
     # 3. 把 ai_context 传给 AI
     # ==========================================
-    model = init_chat_model(model=MODEL, temperature=temperature, num_gpu=-1)
-    # TODO:添加工具做成skill
+    model = init_chat_model(
+        model=MODEL,
+        model_provider="openai",  # 走openai兼容模式
+        base_url=BASE_URL,
+        api_key=DASHSCOPE_API_KEY,
+        temperature=temperature,
+        # num_gpu=-1
+    )
+    tool_list = config.TOOL_LIST
+    if request.open_online:
+        tool_list.append(tools.online)
+        tool_list.append(tools.online_intensive)
     agent = create_agent(
         model=model,
         system_prompt=SYSTEM_PROMPT,
+        tools=tool_list,
     )
 
     # 把最后20条转成 AI 能识别的格式
@@ -116,6 +125,11 @@ def ai_chat(
             messages.append(AIMessage(content=msg.message))
     try:
         result = agent.invoke({"messages": messages})
+        for msg in result["messages"]:
+            if msg.type == "tool":
+                logger.info(f"[调用工具] {msg.name} | {msg.content}")
+            elif msg.type == "ai" and msg.content:
+                logger.info(f"\n最终AI回答: {msg.content}")
         ai_reply = result["messages"][-1].content
 
         # ==========================================
@@ -321,3 +335,4 @@ def register(
 
 if __name__ == "__main__":
     uvicorn.run("main:app", host="0.0.0.0", port=8000, workers=1)
+    # uvicorn main:app --host 0.0.0.0 --port 8000 --reload

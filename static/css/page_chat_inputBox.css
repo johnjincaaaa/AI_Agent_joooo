@@ -1,0 +1,140 @@
+/* ==============================
+   新版输入框：嵌套 + 联网标识
+============================== */
+.input-box-wrapper {
+    width: 100%;
+    background: #373737;
+    border-radius: 16px;
+    padding: 12px 14px;
+    box-shadow: 0 2px 12px rgba(0, 0, 0, 0.08);
+    box-sizing: border-box;
+}
+
+/* 输入框容器：嵌套结构 */
+.input-inner {
+    position: relative;
+    display: flex;
+    align-items: center;
+    margin-bottom: 10px;
+}
+
+/* 输入框本体：豆包同款多行自动换行 */
+#userInput {
+    width: 100%;
+    background: #373737;
+    border: none;
+    outline: none;
+    border-radius: 12px;
+    padding: 12px 50px 12px 14px; /* 右侧留出发送按钮位置 */
+    font-size: 15px;
+    color: #e1edf7;
+    line-height: 1.4;
+    box-sizing: border-box;
+
+    /* 核心配置 */
+    resize: none;               /* 禁止用户手动拖动大小 */
+    overflow-y: auto;           /* 超出最大高度时显示垂直滚动条 */
+    overflow-x: hidden;         /* 禁止横向滚动 */
+    white-space: pre-wrap;      /* 自动换行 */
+    word-wrap: break-word;      /* 强制长单词/长文本换行 */
+    word-break: break-all;      /* 兼容：防止英文/数字溢出 */
+
+    /* 高度控制 */
+    min-height: 48px;           /* 初始最小高度（单行） */
+    max-height: 300px;          /* 最大扩展高度（超过后出现滚动条） */
+}
+
+
+
+#userInput::-webkit-scrollbar {
+    display: none;
+}
+
+#userInput::placeholder {
+    color: #999;
+}
+
+/* 发送按钮：内嵌在输入框内部右侧 */
+.button-send {
+    position: absolute;
+    right: 8px;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 34px;
+    height: 34px;
+    border-radius: 50%;
+    background: #4285f4;
+    color: #fff;
+    border: none;
+    font-size: 16px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: background 0.2s;
+}
+
+.button-send:hover {
+    background: #3367d6;
+}
+
+/* 底部工具栏 */
+.input-toolbar {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+/* 左侧：智能联网按钮 */
+.left-tools .tool-btn {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 12px;
+    border-radius: 12px;
+    background: #f7f8fa;
+    border: 1px solid #eee;
+    font-size: 13px;
+    color: #666;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.left-tools .tool-btn.active {
+    background: #e8f3ff;
+    color: #4285f4;
+    border-color: #d0e3ff;
+}
+
+.left-tools .tool-btn:hover {
+    /*background: #e1edf7;*/
+    font-weight: bold; /* 加粗 */
+    background-color: #e8f4fc; /* 新增：hover背景色，增强交互感 */
+    transform: translateX(4px); /* 新增：轻微右移，提升动效 */
+    transition: all 0.2s ease; /* 平滑动画，体验更好 */
+}
+
+/* 右侧：联网状态标识 */
+.right-status .net-status {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 12px;
+    color: #999;
+}
+
+.net-status .net-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: #ccc;
+}
+
+.net-status.online {
+    color: #4caf50;
+}
+
+.net-status.online .net-dot {
+    background: #4caf50;
+    box-shadow: 0 0 6px #4caf50;
+}
