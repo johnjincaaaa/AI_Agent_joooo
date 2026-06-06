@@ -2,7 +2,7 @@
 const openBtn = document.getElementById('openLoginBtn');
 const closeBtn = document.getElementById('closeLoginBtn');
 const modal = document.getElementById('loginModal');
-
+/* global marked */
 // 验证登录状态
 const isLogining = window.localStorage.getItem('token');
 if (isLogining) {
@@ -179,11 +179,10 @@ async function initHistory() {
                 this.classList.add('active');
                 this.title = e['session_time'];
                 window.localStorage.setItem('thisSessionTime', this.title);
-                const result = e['messages'];
-                chatData = result;
+                chatData = JSON.parse(window.localStorage.getItem(this.title) || e['session_time']);
                 const box = document.getElementById("chatBox");
 
-                result.forEach(msg => {
+                chatData.forEach(msg => {
 
                     const sender = msg.role === "user" ? "user" : "ai";
                     const div = document.createElement("div");

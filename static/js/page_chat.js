@@ -1,22 +1,40 @@
+/* global marked */
 const API_AI_CHAT = `${config.API_BASE_URL}/ai/chat`;
 const API_AI_CHAT_savaToDb = `${config.API_BASE_URL}/ai/chat/savaToDb`;
 const API_AI_CHAT_history = `${config.API_BASE_URL}/ai/chat/history`;
+const API_AI_CHAT_STREAM = `${config.API_BASE_URL}/ai/chatStream`; // 流式接口
+
 // 点击按钮发送
 // 全局锁：防止重复发送
 let isSending = false;
 let chatData = [];
 let div;
+// 流式控制：用于中止请求
+let abortController = null;
+
 
 async function sendMessage() {
-    // 🔥 锁已经打开 → 直接拒绝！绝对不会执行第二次
-    if (isSending) {
-        return;
-    }
     const input = document.getElementById("userInput");
     const content = input.value.trim();
     const chatSession = document.getElementById('chatSession');
     const sideBar = document.getElementById('sideBar');
-    const sendMessage = document.getElementById("sendMessage");
+    const sendMessage_ele = document.getElementById("sendMessage");
+    // ==============================================
+    // 🔥 核心修复1：先判断【停止】，再判断【发送】
+    // ==============================================
+    if (isSending && abortController) {
+        console.log("🛑 手动停止AI输出");
+        abortController.abort();
+        isSending = false;
+        sendMessage_ele.textContent = "➤";
+        return;
+    }
+
+
+    // 🔥 锁已经打开 → 直接拒绝！绝对不会执行第二次
+    if (isSending) {
+        return;
+    }
     if (!content) {
         return;
     }
@@ -25,37 +43,73 @@ async function sendMessage() {
     addMessage(content, "user");
 
     input.value = "";
-    sendMessage.disabled = true;
     isSending = true;
-    sendMessage.textContent = "⏹️";
+    sendMessage_ele.textContent = "⏹️";
+    // 创建AI消息占位框（流式实时更新）
+    const box = document.getElementById("chatBox");
+
+
+    const currentAiMessageDiv = document.createElement("div");
+    currentAiMessageDiv.className = "message ai";
+    box.appendChild(currentAiMessageDiv);
+    let aiFullReply = "";
+
+
     try {
-        // 调用AI接口
-        // params = {
-        //     "message": content,
-        // };
-        // const queryString = new URLSearchParams(params).toString();
-
-        // 判断是否联网
+        abortController = new AbortController();
         const isOnline = document.getElementById('searchBtn').classList.contains('active');
-        const response = await fetch(`${API_AI_CHAT}`, {
+        const signal = abortController.signal;
+        // 🔥 核心：调用流式接口
+        const response = await fetch(API_AI_CHAT_STREAM + "?temperature=0.7", {
             method: "POST",
-            headers: {
-                "Content-Type": "application/json"
-            },
-
+            headers: {"Content-Type": "application/json"},
             body: JSON.stringify({
-                "history": chatData,
-                "newMessage": content,
-                "open_online": isOnline
-
-            })
+                history: chatData,
+                newMessage: content,
+                open_online: isOnline
+            }),
+            signal: signal
         });
 
-        const data = await response.json();
-        const aiReply = data.content;
-        chatData = data['new_history'];
-        addMessage(aiReply, "ai");
+        const decoder = new TextDecoder("utf-8");
+        const reader = response.body.getReader();
+        let buffer = "";
 
+        signal.addEventListener("abort", () => {
+            reader.cancel();
+        });
+
+        while (true) {
+
+
+            const {done, value} = await reader.read();
+            if (done) break;
+
+            buffer += decoder.decode(value, {stream: true});
+            const lines = buffer.split("\n");
+            // 专门解决网络传输中数据分包 / 不完整行的问题，没有它会导致消息解析错乱、内容丢失或格式错误。
+            buffer = lines.pop() || "";
+
+            for (const line of lines) {
+                const trimLine = line.trim();
+                if (!trimLine.startsWith("data: ")) continue;
+                const data = trimLine.replace("data: ", "").trim();
+
+                // 结束
+                if (data === "[DONE]") continue;
+                // 接收完整历史
+                if (data.startsWith("[HISTORY]")) {
+                    const historyJson = data.replace("[HISTORY] ", "");
+                    chatData = JSON.parse(historyJson);
+                    continue;
+                }
+                // 流式输出文字
+                aiFullReply += data;
+                marked.setOptions({breaks: true, gfm: true});
+                currentAiMessageDiv.innerHTML = marked.parse(aiFullReply);
+                box.scrollTop = box.scrollHeight;
+            }
+        }
 
         if (chatSession.textContent.trim() === "新对话") {
 
@@ -90,14 +144,85 @@ async function sendMessage() {
             }
         }
 
+        // try {
+        //     // 调用AI接口
+        //     // params = {
+        //     //     "message": content,
+        //     // };
+        //     // const queryString = new URLSearchParams(params).toString();
+        //
+        //     // 判断是否联网
+        //     const isOnline = document.getElementById('searchBtn').classList.contains('active');
+        //     const response = await fetch(`${API_AI_CHAT}`, {
+        //         method: "POST",
+        //         headers: {
+        //             "Content-Type": "application/json"
+        //         },
+        //
+        //         body: JSON.stringify({
+        //             "history": chatData,
+        //             "newMessage": content,
+        //             "open_online": isOnline
+        //
+        //         })
+        //     });
+        //
+        //     const data = await response.json();
+        //     const aiReply = data.content;
+        //     chatData = data['new_history'];
+        //     addMessage(aiReply, "ai");
+        //
+        //
+        //     if (chatSession.textContent.trim() === "新对话") {
+        //
+        //         div = document.createElement("div");
+        //         div.title = String(new Date().getTime());
+        //         window.localStorage.setItem('thisSessionTime', div.title);
+        //         // 改为ai分析第一句话的标题，指定提示词
+        //         let aiGenerateContent = await generateTitleFromTwoRounds(chatData || []);
+        //
+        //         chatSession.textContent = aiGenerateContent;
+        //         div.className = `history title active`;
+        //         div.textContent = aiGenerateContent;
+        //         // 对历史会话操作：拉取数据库对话数据到对话框 && 清除class active 并激活点击历史对话
+        //         div.addEventListener('click', async function () {
+        //             // 清空当前右边聊天记录,清空chatSession,调取数据库存入全部聊天记录，chatDate取全部聊天记录
+        //             document.getElementById("chatBox").querySelectorAll(".message").forEach(el => el.remove());
+        //             const histories = document.querySelectorAll('.history');
+        //             histories.forEach(h => {
+        //                 h.classList.remove('active')
+        //             });
+        //             this.classList.add('active');
+        //             const session_time = this.title;
+        //             window.localStorage.setItem('thisSessionTime', this.title);
+        //             const messageList = JSON.parse(window.localStorage.getItem(session_time) || []);
+        //             chatData = messageList;
+        //             chatSession.textContent = this.textContent;
+        //
+        //             renderHistoryChat(chatData);
+        //         });
+        //         if (chatSession.textContent.trim() !== "新对话") {
+        //             sideBar.insertBefore(div, sideBar.children[1]);
+        //         }
+        //     }
+
     } catch (err) {
+        // ==============================================
+        // 🔥 修复：用户主动停止，不报错
+        // ==============================================
+        if (err.name === "AbortError") {
+            console.log("✅ 手动停止输出");
+            return;
+        }
         addMessage("AI出错了，请检查API Key", "ai");
         console.error(err);
 
     } finally {
+        marked.setOptions({breaks: true, gfm: true}); // 换行生效、支持表格列表
+        currentAiMessageDiv.innerHTML = marked.parse(aiFullReply); // 重新渲染html
         isSending = false;
-        sendMessage.disabled = false;
-        sendMessage.textContent = "➤";
+        sendMessage_ele.disabled = false;
+        sendMessage_ele.textContent = "➤";
         if (chatSession.textContent.trim() !== "新对话") {
             window.localStorage.setItem(window.localStorage.getItem('thisSessionTime'), JSON.stringify(chatData));
             await postToDb(chatData, window.localStorage.getItem('thisSessionTime'), chatSession.textContent);
@@ -143,7 +268,9 @@ function renderHistoryChat(messages) {
         const sender = msg.role === "user" ? "user" : "ai";
         const div = document.createElement("div");
         div.className = `message ${sender}`;
-        div.textContent = msg.message;
+        // div.textContent = msg.message;
+        marked.setOptions({breaks: true, gfm: true}); // 换行生效、支持表格列表
+        div.innerHTML = marked.parse(msg.message);
         box.appendChild(div);
     });
 

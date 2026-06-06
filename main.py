@@ -5,6 +5,8 @@ from fastapi import FastAPI, Request, Depends, HTTPException, Query, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.templating import Jinja2Templates
 from fastapi.staticfiles import StaticFiles
+from fastapi.responses import StreamingResponse
+import json
 from pydantic import BaseModel
 from typing import List
 import logging
@@ -78,6 +80,72 @@ class ChatRequest(BaseModel):
     open_online: bool = False  # 全局一键联网开关
 
 
+# ==================== 改造后的 流式+历史 接口 ====================
+@app.post("/ai/chatStream")
+async def chat(request: ChatRequest, temperature: float = 0.7):
+    """SSE流式输出 + 最终返回完整对话历史"""
+
+    # 1. 构建历史（和原来完全一样）
+    full_history = request.history.copy()
+    full_history.append(ChatMessage(role='user', message=request.newMessage))
+    ai_context = full_history[-20:]
+
+    # 2. 初始化模型（和原来完全一样）
+    model = init_chat_model(
+        model=MODEL,
+        model_provider="openai",
+        base_url=DASHSCOPE_URL,
+        api_key=DASHSCOPE_API_KEY,
+        temperature=temperature,
+    )
+    tool_list = config.TOOL_LIST
+    if request.open_online:
+        tool_list.append(tools.online)
+        tool_list.append(tools.online_intensive)
+
+    agent = create_agent(
+        model=model,
+        system_prompt=SYSTEM_PROMPT,
+        tools=tool_list,
+    )
+
+    # 3. 格式化消息（和原来完全一样）
+    messages = []
+    for msg in ai_context:
+        messages.append(HumanMessage(content=msg.message) if msg.role == "user" else AIMessage(content=msg.message))
+
+    # ==================== 核心改造：流式输出 + 收集完整回答 ====================
+    async def generate():
+        # 新增：用于收集AI完整的回答内容
+        full_ai_reply = ""
+
+        # 1. 流式输出每一段文字
+        async for msg_chunk, metadata in agent.astream(
+                {"messages": messages},
+                stream_mode="messages",
+        ):
+            if msg_chunk.content:
+                content = msg_chunk.content
+                full_ai_reply += content  # 拼接完整回答
+                yield f"data: {content}\n\n"  # 实时流式输出
+
+        # 2. AI回答完毕，构建完整历史
+        # 格式化为标准ChatMessage结构
+        ai_message = ChatMessage(role="ai", message=full_ai_reply)
+        final_history = full_history + [ai_message]
+
+        # 3. 通过SSE发送【完整历史数据】给前端（特殊标记）
+        yield f"data: [HISTORY] {json.dumps([m.model_dump() for m in final_history], ensure_ascii=False)}\n\n"
+
+        # 4. 发送结束标记
+        yield "data: [DONE]\n\n"
+
+    # 返回SSE流式响应
+    return StreamingResponse(
+        generate(),
+        media_type="text/event-stream",
+    )
+
 # ------------------- 主接口：AI 聊天 -------------------
 @app.post("/ai/chat", summary='AI 聊天'
     , description="""构建完整对话历史,取最后20条传给 AI，返回完整新历史给前端，前端同步内存""")
@@ -101,7 +169,7 @@ def ai_chat(
     model = init_chat_model(
         model=MODEL,
         model_provider="openai",  # 走openai兼容模式
-        base_url=BASE_URL,
+        base_url=DASHSCOPE_URL,
         api_key=DASHSCOPE_API_KEY,
         temperature=temperature,
         # num_gpu=-1

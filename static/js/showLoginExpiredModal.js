@@ -1,5 +1,8 @@
 // 🔥 终极豪华版：登录过期弹窗（毛玻璃 + 动画 + 图标 + 按钮）
 function showLoginExpiredModal(meg) {
+    openBtn.disabled = false;        // 启用按钮
+    openBtn.style.cursor = 'pointer'; // 恢复小手光标
+    openBtn.style.opacity = '1';     // 恢复正常透明度
     // 遮罩层
     const overlay = document.createElement('div');
     overlay.style.cssText = `

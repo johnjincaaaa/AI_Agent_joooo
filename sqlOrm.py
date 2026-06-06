@@ -1,9 +1,8 @@
 from sqlalchemy import create_engine, Column, Integer, String, Text, DateTime, ForeignKey,JSON,BIGINT,UniqueConstraint
 from sqlalchemy.orm import declarative_base, relationship, sessionmaker
 from datetime import datetime
-
+from config import SQLALCHEMY_DATABASE_URL
 # MySQL 连接
-SQLALCHEMY_DATABASE_URL = "mysql+pymysql://root:147258@localhost:3306/ai_youliao"
 
 engine = create_engine(SQLALCHEMY_DATABASE_URL, pool_pre_ping=True)
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
