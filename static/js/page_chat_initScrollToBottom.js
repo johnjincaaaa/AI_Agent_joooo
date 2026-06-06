@@ -32,3 +32,18 @@
     // 初始化一次
     toggleBtn();
 })();
+
+
+// 绑定聊天外层容器，只执行一次即可，不用每次渲染消息
+const chatWrap = document.querySelector('.chat-box'); // 替换你的聊天父容器class
+chatWrap.addEventListener('click',e=>{
+  // 向上找最近a标签（文字嵌套span也能命中）
+  const a = e.target.closest('a');
+  if(!a) return;
+  const href = a.getAttribute('href');
+  // 外部链接拦截
+  if(/^https?:\/\//.test(href)){
+    e.preventDefault();// 阻止本页跳转
+    window.open(href,'_blank') // 新标签打开
+  }
+});
