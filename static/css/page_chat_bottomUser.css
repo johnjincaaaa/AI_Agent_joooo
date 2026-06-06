@@ -1,99 +1,115 @@
-
-/* --------------- 底部用户头像组件 --------------- */
-/* 侧边栏底部用户信息容器 */
+/* ==========================================================
+   侧边栏底部用户头像组件 · 精致深色版
+========================================================== */
 .user-profile {
     position: absolute;
     bottom: 0;
     left: 0;
-    width: 260px;
-    background: #1e1e1e; /* 和侧边栏背景统一 */
-    border-top: 1px solid #333; /* 和上方内容分隔 */
-    padding: 12px 16px;
+    width: 264px;
+    background: var(--bg-sidebar);
+    border-top: 1px solid var(--border);
+    border-right: 1px solid var(--border);
+    padding: 10px 12px;
     display: flex;
     align-items: center;
-    gap: 12px;
+    gap: 10px;
     box-sizing: border-box;
-    flex-shrink: 0; /* 不会被挤压 */
+    flex-shrink: 0;
 }
 
-/* 头像样式 */
+/* 头像 */
 .user-profile .avatar img {
-    width: 40px;
-    height: 40px;
-    border-radius: 50%; /* 圆形头像 */
-    object-fit: cover; /* 防止头像变形 */
-    background: #333; /* 未登录时的背景 */
+    width: 38px;
+    height: 38px;
+    border-radius: 50%;
+    object-fit: cover;
+    background: var(--bg-elevated);
+    border: 1px solid var(--border-strong);
 }
 
-/* 用户信息文字 */
+/* 用户信息 */
 .user-profile .user-info {
-    flex: 1; /* 占满剩余宽度，把按钮挤到右边 */
+    flex: 1;
     overflow: hidden;
 }
-
 .user-profile .user-info span {
-    color: #fff;
+    color: var(--text-primary);
     font-size: 14px;
+    font-weight: 500;
     white-space: nowrap;
     overflow: hidden;
-    text-overflow: ellipsis; /* 名字太长时显示省略号 */
+    text-overflow: ellipsis;
+    display: block;
 }
 
 /* 更多按钮 */
 .profile-menu-btn {
     background: transparent;
     border: none;
-    color: #aaa;
+    color: var(--text-secondary);
     cursor: pointer;
-    padding: 4px;
-    border-radius: 4px;
-    transition: background 0.2s;
+    padding: 6px;
+    border-radius: var(--radius-sm);
+    transition: background 0.2s ease, color 0.2s ease;
+    display: flex;
+    align-items: center;
+    justify-content: center;
 }
-
 .profile-menu-btn:hover {
-    background: #333;
-    color: #fff;
+    background: var(--bg-hover);
+    color: var(--text-primary);
 }
 
 /* 下拉菜单 */
 .profile-dropdown {
     position: absolute;
-    bottom: 100%; /* 定位在头像上方 */
-    right: 16px;
-    background: #2d2d2d;
-    border-radius: 8px;
-    padding: 4px 0;
-    min-width: 160px;
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
-    display: none; /* 默认隐藏 */
+    bottom: calc(100% + 6px);
+    right: 12px;
+    background: var(--bg-elevated);
+    border: 1px solid var(--border-strong);
+    border-radius: var(--radius-md);
+    padding: 6px;
+    min-width: 168px;
+    box-shadow: var(--shadow-soft);
+    display: none;
 }
-
 .profile-dropdown.show {
-    display: block; /* 点击后显示 */
+    display: block;
+    animation: dropIn 0.18s ease;
+}
+@keyframes dropIn {
+    from { opacity: 0; transform: translateY(6px); }
+    to { opacity: 1; transform: translateY(0); }
 }
 
 /* 菜单项 */
 .dropdown-item {
-    padding: 10px 16px;
-    color: #fff;
+    padding: 10px 12px;
+    color: var(--text-primary);
     font-size: 14px;
     display: flex;
     align-items: center;
     gap: 10px;
     cursor: pointer;
-    transition: background 0.2s;
+    border-radius: var(--radius-sm);
+    transition: background 0.18s ease;
 }
-
 .dropdown-item:hover {
-    background: #3a3a3a;
+    background: var(--bg-hover);
 }
 
 .logout-btn {
-    color: #ff6b6b; /* 退出按钮用红色，更醒目 */
+    color: #ff6b6b;
+}
+.logout-btn:hover {
+    background: rgba(255, 107, 107, 0.12);
 }
 
-/* 显隐控制类（优先级高于默认样式） */
+/* 显隐控制 */
 .user-profile.hidden {
     display: none !important;
 }
 
+@media (max-width: 768px) {
+    .user-profile { width: 220px; }
+}

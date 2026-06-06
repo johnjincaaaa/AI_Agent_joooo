@@ -3,14 +3,13 @@
 <head>
     <meta charset="UTF-8">
     <title>有料ai</title>
-    <style></style>
     <link rel="stylesheet" href="../static/css/page_chat.css">
     <link rel="stylesheet" href="../static/css/page_chat_bottomUser.css">
     <link rel="stylesheet" href="../static/css/page_chat_loginRegister.css">
     <link rel="stylesheet" href="../static/css/page_chat_inputBox.css">
+    <link rel="stylesheet" href="../static/css/page_chat_initScrollToBottom.css">
     <link rel="icon" href="../static/a.ico" type="image/x-icon">
     <script src="https://cdn.jsdelivr.net/npm/marked/lib/marked.umd.js"></script>
-    <!-- 新增：适配移动端视口 -->
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 </head>
 <body>
@@ -18,11 +17,20 @@
 <!-- 1. 右上角登录按钮 -->
 <button class="login-btn" id="openLoginBtn">登录</button>
 
-<!-- 2. 登录弹窗（优化版：登录 + 注册） -->
+<!-- 2. 登录弹窗（登录 + 注册） -->
 <div class="login-modal" id="loginModal">
     <div class="modal-overlay"></div>
     <div class="modal-content">
         <button class="close-btn" id="closeLoginBtn">×</button>
+
+        <!-- 品牌区 -->
+        <div class="modal-brand">
+            <div class="modal-logo">
+                <img src="../static/a.png" alt="有料ai">
+            </div>
+            <div class="modal-title">欢迎使用 有料ai</div>
+            <div class="modal-subtitle">登录后即可保存你的对话历史</div>
+        </div>
 
         <!-- 选项卡：登录 / 注册 -->
         <div class="tab-box">
@@ -63,16 +71,17 @@
 </div>
 
 
-<div style="display: flex; gap: 0; width: 100vw; height: 100vh; box-sizing: border-box; overflow: hidden;">
-    <div style="display: flex">
+<div class="app-shell">
+    <div class="sidebar-wrap">
         <div class="sidebar" id="sideBar">
-            <div class="history">
-                历史会话
+            <div class="brand">
+                <span class="brand-mark"></span>
+                <span class="brand-name">有料ai</span>
             </div>
+            <div class="history">历史会话</div>
             <!--
             <div title="1779986166533" class="history title">我是历史记录下的标签</div>
             -->
-
         </div>
         <!-- 用户头像组件（固定在侧边栏底部） -->
         <div class="user-profile" id="userProfile">
@@ -82,8 +91,9 @@
             <div class="user-info">
                 <span id="userName">未登录</span>
             </div>
-            <button class="profile-menu-btn" id="profileMenuBtn">
-                <svg width="16" height="16" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+            <button class="profile-menu-btn" id="profileMenuBtn" aria-label="更多操作">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                     stroke-linecap="round">
                     <circle cx="12" cy="12" r="1"></circle>
                     <circle cx="19" cy="12" r="1"></circle>
                     <circle cx="5" cy="12" r="1"></circle>
@@ -93,7 +103,8 @@
             <!-- 点击弹出的下拉菜单 -->
             <div class="profile-dropdown" id="profileDropdown">
                 <div class="dropdown-item logout-btn" id="logoutBtn">
-                    <svg width="16" height="16" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                         stroke-linecap="round" stroke-linejoin="round">
                         <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path>
                         <polyline points="16 17 21 12 16 7"></polyline>
                         <line x1="21" y1="12" x2="9" y2="12"></line>
@@ -105,59 +116,81 @@
     </div><!-- 左边 -->
 
 
-    <div class="chat-whole" style="flex: 1; display: flex; flex-direction: column; overflow: hidden;">
-        <div class="chat-box" id="chatBox">
-            <div class="chat-box-title" id="chatBoxTitle">
-                <div style="display: flex;gap: 8px;">
-                    <button class="fold-btn" onclick="foldHistorySession()" title="折叠/展开侧边栏">
-                        <svg width="22" height="22" viewBox="0 0 20 20" stroke="currentColor"
-                             stroke-width="2">
-                            <line x1="3" y1="12" x2="21" y2="12"></line>
-                            <line x1="3" y1="6" x2="21" y2="6"></line>
-                            <line x1="3" y1="18" x2="21" y2="18"></line>
-                        </svg>
-                    </button>
+    <div class="chat-whole">
+        <div class="chat-box-title" id="chatBoxTitle">
+            <div class="title-tools">
+                <button class="fold-btn" onclick="foldHistorySession()" title="折叠/展开侧边栏"
+                        aria-label="折叠/展开侧边栏">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                         stroke-linecap="round">
+                        <line x1="3" y1="12" x2="21" y2="12"></line>
+                        <line x1="3" y1="6" x2="21" y2="6"></line>
+                        <line x1="3" y1="18" x2="21" y2="18"></line>
+                    </svg>
+                </button>
 
-                    <button class="new-btn" onclick="createNewSession()" title="新建对话">
-                        <svg width="22" height="22" viewBox="0 0 20 20" stroke="currentColor"
-                             stroke-width="2">
-                            <line x1="12" y1="5" x2="12" y2="19"></line>
-                            <line x1="5" y1="12" x2="19" y2="12"></line>
-                        </svg>
-                    </button>
+                <button class="new-btn" onclick="createNewSession()" title="新建对话" aria-label="新建对话">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                         stroke-linecap="round">
+                        <line x1="12" y1="5" x2="12" y2="19"></line>
+                        <line x1="5" y1="12" x2="19" y2="12"></line>
+                    </svg>
+                </button>
+            </div>
+            <div class="chat-session" id="chatSession">新对话</div>
+        </div>
+
+        <div class="chat-box" id="chatBox">
+            <div class="empty-state" id="emptyState">
+                <div class="empty-logo">
+                    <img src="../static/a.png" alt="有料ai">
                 </div>
-                <div class="chat-session" id="chatSession">新对话</div>
+                <div class="empty-title">我是有料ai，有什么可以帮你？</div>
+                <div class="empty-desc">输入你的问题，开启一段新的对话</div>
             </div>
             <!--        <div class="message user"></div>-->
             <!--        <div class="message ai"></div>-->
         </div>
 
-        <div class="input-box-wrapper">
-            <!-- 嵌套输入框 + 按钮 -->
-            <div class="input-inner">
-                <label for="userInput"></label><textarea id="userInput" placeholder="输入你的问题..." autocomplete="off"></textarea>
-                <button onclick="sendMessage()" id="sendMessage" class="button-send">➤</button>
-            </div>
+        <!-- 一键滑到底部按钮 -->
+        <button class="scroll-bottom-btn" id="scrollBottomBtn" aria-label="滚动到底部" title="回到底部">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                 stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <line x1="12" y1="5" x2="12" y2="19"></line>
+                <polyline points="19 12 12 19 5 12"></polyline>
+            </svg>
+        </button>
 
-            <!-- 底部工具栏：智能搜索 + 联网标识 +......... -->
-            <div class="input-toolbar">
-                <div class="left-tools">
-                    <button class="tool-btn tooltip" id="searchBtn" data-tip="按需搜索网页">
-                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-                             stroke-width="2">
-                            <circle cx="11" cy="11" r="8"></circle>
-                            <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
-                        </svg>
-                        智能联网
-                    </button>
+        <div class="input-area">
+            <div class="input-box-wrapper">
+                <!-- 嵌套输入框 + 按钮 -->
+                <div class="input-inner">
+                    <label for="userInput" class="sr-only">输入你的问题</label>
+                    <textarea id="userInput" placeholder="输入你的问题..." autocomplete="off"></textarea>
+                    <button onclick="sendMessage()" id="sendMessage" class="button-send" aria-label="发送">➤</button>
                 </div>
-                <div class="right-status">
-                    <div class="net-status" id="netStatus" title="智能体是否基于网络回答">
-                        <span class="net-dot"></span>
-                        <span class="net-text">未联网</span>
+
+                <!-- 底部工具栏：智能搜索 + 联网标识 -->
+                <div class="input-toolbar">
+                    <div class="left-tools">
+                        <button class="tool-btn tooltip" id="searchBtn" data-tip="按需搜索网页">
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                                 stroke-width="2">
+                                <circle cx="11" cy="11" r="8"></circle>
+                                <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+                            </svg>
+                            智能联网
+                        </button>
+                    </div>
+                    <div class="right-status">
+                        <div class="net-status" id="netStatus" title="智能体是否基于网络回答">
+                            <span class="net-dot"></span>
+                            <span class="net-text">未联网</span>
+                        </div>
                     </div>
                 </div>
             </div>
+            <div class="input-tip">内容由 AI 生成，请注意甄别</div>
         </div>
 
 
@@ -165,14 +198,12 @@
 </div>
 
 
-
 <script src="../static/js/showLoginExpiredModal.js"></script>
 <script src="../static/js/config.js"></script>
 <script src="../static/js/page_chat.js"></script>
 <script src="../static/js/LoginRegister.js"></script>
 <script src="../static/js/inputTool.js"></script>
-
-
+<script src="../static/js/page_chat_initScrollToBottom.js"></script>
 
 </body>
 </html>

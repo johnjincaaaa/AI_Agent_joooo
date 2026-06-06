@@ -1,88 +1,109 @@
-/* ==============================
-   新版输入框：嵌套 + 联网标识
-============================== */
-.input-box-wrapper {
-    width: 100%;
-    background: #373737;
-    border-radius: 16px;
-    padding: 12px 14px;
-    box-shadow: 0 2px 12px rgba(0, 0, 0, 0.08);
-    box-sizing: border-box;
+/* ==============================================
+   输入区：嵌套输入框 + 工具栏  · 精致深色版
+============================================== */
+
+/* 屏幕阅读器专用 */
+.sr-only {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
 }
 
-/* 输入框容器：嵌套结构 */
+/* 输入区外层：居中、留白 */
+.input-area {
+    width: 100%;
+    max-width: 808px;
+    margin: 0 auto;
+    padding: 8px 24px 16px;
+    box-sizing: border-box;
+    flex-shrink: 0;
+}
+
+.input-box-wrapper {
+    width: 100%;
+    background: var(--bg-elevated);
+    border: 1px solid var(--border-strong);
+    border-radius: 20px;
+    padding: 10px 12px 8px;
+    box-shadow: var(--shadow-soft);
+    box-sizing: border-box;
+    transition: border-color 0.2s ease;
+}
+.input-box-wrapper:focus-within {
+    border-color: rgba(76, 141, 255, 0.5);
+}
+
+/* 输入框容器 */
 .input-inner {
     position: relative;
     display: flex;
-    align-items: center;
-    margin-bottom: 10px;
+    align-items: flex-end;
 }
 
-/* 输入框本体：豆包同款多行自动换行 */
+/* 输入框本体 */
 #userInput {
     width: 100%;
-    background: #373737;
+    background: transparent;
     border: none;
     outline: none;
     border-radius: 12px;
-    padding: 12px 50px 12px 14px; /* 右侧留出发送按钮位置 */
+    padding: 8px 50px 8px 8px;
     font-size: 15px;
-    color: #e1edf7;
-    line-height: 1.4;
+    color: var(--text-primary);
+    line-height: 1.5;
     box-sizing: border-box;
 
-    /* 核心配置 */
-    resize: none;               /* 禁止用户手动拖动大小 */
-    overflow-y: auto;           /* 超出最大高度时显示垂直滚动条 */
-    overflow-x: hidden;         /* 禁止横向滚动 */
-    white-space: pre-wrap;      /* 自动换行 */
-    word-wrap: break-word;      /* 强制长单词/长文本换行 */
-    word-break: break-all;      /* 兼容：防止英文/数字溢出 */
+    resize: none;
+    overflow-y: auto;
+    overflow-x: hidden;
+    white-space: pre-wrap;
+    word-wrap: break-word;
+    word-break: break-word;
 
-    /* 高度控制 */
-    min-height: 48px;           /* 初始最小高度（单行） */
-    max-height: 300px;          /* 最大扩展高度（超过后出现滚动条） */
+    min-height: 44px;
+    max-height: 300px;
 }
 
+#userInput::-webkit-scrollbar { display: none; }
+#userInput::placeholder { color: var(--text-muted); }
 
-
-#userInput::-webkit-scrollbar {
-    display: none;
-}
-
-#userInput::placeholder {
-    color: #999;
-}
-
-/* 发送按钮：内嵌在输入框内部右侧 */
+/* 发送按钮：内嵌右下角 */
 .button-send {
     position: absolute;
-    right: 8px;
-    top: 50%;
-    transform: translateY(-50%);
+    right: 4px;
+    bottom: 4px;
     width: 34px;
     height: 34px;
     border-radius: 50%;
-    background: #4285f4;
+    background: var(--accent);
     color: #fff;
     border: none;
-    font-size: 16px;
+    font-size: 15px;
     cursor: pointer;
     display: flex;
     align-items: center;
     justify-content: center;
-    transition: background 0.2s;
+    transition: background 0.2s ease, transform 0.15s ease;
+    flex-shrink: 0;
 }
-
 .button-send:hover {
-    background: #3367d6;
+    background: var(--accent-hover);
+    transform: scale(1.06);
 }
+.button-send:active { transform: scale(0.96); }
 
 /* 底部工具栏 */
 .input-toolbar {
     display: flex;
     justify-content: space-between;
     align-items: center;
+    padding: 4px 4px 0;
 }
 
 /* 左侧：智能联网按钮 */
@@ -91,27 +112,23 @@
     align-items: center;
     gap: 6px;
     padding: 6px 12px;
-    border-radius: 12px;
-    background: #f7f8fa;
-    border: 1px solid #eee;
+    border-radius: 100px;
+    background: transparent;
+    border: 1px solid var(--border-strong);
     font-size: 13px;
-    color: #666;
+    color: var(--text-secondary);
     cursor: pointer;
-    transition: all 0.2s;
+    transition: background 0.2s ease, color 0.2s ease, border-color 0.2s ease;
 }
-
-.left-tools .tool-btn.active {
-    background: #e8f3ff;
-    color: #4285f4;
-    border-color: #d0e3ff;
-}
-
 .left-tools .tool-btn:hover {
-    /*background: #e1edf7;*/
-    font-weight: bold; /* 加粗 */
-    background-color: #e8f4fc; /* 新增：hover背景色，增强交互感 */
-    transform: translateX(4px); /* 新增：轻微右移，提升动效 */
-    transition: all 0.2s ease; /* 平滑动画，体验更好 */
+    color: var(--text-primary);
+    background: var(--bg-hover);
+    border-color: var(--border-strong);
+}
+.left-tools .tool-btn.active {
+    background: var(--accent-soft);
+    color: var(--accent);
+    border-color: rgba(76, 141, 255, 0.4);
 }
 
 /* 右侧：联网状态标识 */
@@ -120,21 +137,31 @@
     align-items: center;
     gap: 6px;
     font-size: 12px;
-    color: #999;
+    color: var(--text-muted);
 }
-
 .net-status .net-dot {
-    width: 8px;
-    height: 8px;
+    width: 7px;
+    height: 7px;
     border-radius: 50%;
-    background: #ccc;
+    background: #555b66;
+    transition: background 0.2s ease, box-shadow 0.2s ease;
 }
-
 .net-status.online {
-    color: #4caf50;
+    color: #4caf86;
+}
+.net-status.online .net-dot {
+    background: #4caf86;
+    box-shadow: 0 0 8px #4caf86;
 }
 
-.net-status.online .net-dot {
-    background: #4caf50;
-    box-shadow: 0 0 6px #4caf50;
+/* 输入区底部提示 */
+.input-tip {
+    text-align: center;
+    font-size: 12px;
+    color: var(--text-muted);
+    margin-top: 10px;
+}
+
+@media (max-width: 768px) {
+    .input-area { padding: 8px 12px 12px; }
 }
