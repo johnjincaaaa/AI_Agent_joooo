@@ -218,8 +218,7 @@ async function sendMessage() {
         console.error(err);
 
     } finally {
-        marked.setOptions({breaks: true, gfm: true}); // 换行生效、支持表格列表
-        currentAiMessageDiv.innerHTML = marked.parse(aiFullReply); // 重新渲染html
+        currentAiMessageDiv.innerHTML = marked.parse(chatData.at(-1).message); // 重新渲染html
         isSending = false;
         sendMessage_ele.disabled = false;
         sendMessage_ele.textContent = "➤";
