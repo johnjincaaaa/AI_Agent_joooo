@@ -1,4 +1,3 @@
-from dashscope import api_key
 from sqlalchemy.orm import Session
 import uvicorn
 from fastapi import FastAPI, Request, Depends, HTTPException, Query, status
@@ -8,16 +7,17 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.responses import StreamingResponse
 import json
 from pydantic import BaseModel
-from typing import List
+from typing import List, Optional
 import logging
 
 import config
 
 logger = logging.getLogger("uvicorn.info")
 
-# 自定义api
 from config import *
-from token_utils import create_access_token, verify_token
+from token_utils import create_access_token, verify_token, get_optional_user_id
+from password_utils import hash_password, verify_password, needs_rehash
+from rate_limit import check_anonymous_rate_limit
 import tools
 
 try:
@@ -80,14 +80,32 @@ class ChatRequest(BaseModel):
     open_online: bool = False  # 全局一键联网开关
 
 
+def build_tool_list(open_online: bool):
+    tool_list = list(config.TOOL_LIST)
+    if open_online:
+        tool_list.extend([tools.online, tools.online_intensive])
+    return tool_list
+
+
+def ensure_chat_access(http_request: Request, user_id: Optional[int]) -> None:
+    if user_id is None:
+        check_anonymous_rate_limit(http_request)
+
+
 # ==================== 改造后的 流式+历史 接口 ====================
 @app.post("/ai/chatStream")
-async def chat(request: ChatRequest, temperature: float = 0.7):
+async def chat_stream(
+        chat_request: ChatRequest,
+        http_request: Request,
+        temperature: float = 0.7,
+        user_id: Optional[int] = Depends(get_optional_user_id),
+):
     """SSE流式输出 + 最终返回完整对话历史"""
+    ensure_chat_access(http_request, user_id)
 
     # 1. 构建历史（和原来完全一样）
-    full_history = request.history.copy()
-    full_history.append(ChatMessage(role='user', message=request.newMessage))
+    full_history = chat_request.history.copy()
+    full_history.append(ChatMessage(role='user', message=chat_request.newMessage))
     ai_context = full_history[-20:]
 
     # 2. 初始化模型（和原来完全一样）
@@ -98,10 +116,7 @@ async def chat(request: ChatRequest, temperature: float = 0.7):
         api_key=DASHSCOPE_API_KEY,
         temperature=temperature,
     )
-    tool_list = config.TOOL_LIST
-    if request.open_online:
-        tool_list.append(tools.online)
-        tool_list.append(tools.online_intensive)
+    tool_list = build_tool_list(chat_request.open_online)
 
     agent = create_agent(
         model=model,
@@ -150,14 +165,18 @@ async def chat(request: ChatRequest, temperature: float = 0.7):
 @app.post("/ai/chat", summary='AI 聊天'
     , description="""构建完整对话历史,取最后20条传给 AI，返回完整新历史给前端，前端同步内存""")
 def ai_chat(
-        request: ChatRequest,
-        temperature: float = 0.7
+        chat_request: ChatRequest,
+        http_request: Request,
+        temperature: float = 0.7,
+        user_id: Optional[int] = Depends(get_optional_user_id),
 ):
+    ensure_chat_access(http_request, user_id)
+
     # ==========================================
     # 1. 构建完整对话历史 = 历史对话 + 最新发送
     # ==========================================
-    full_history = request.history.copy()
-    full_history.append(ChatMessage(role='user', message=request.newMessage))
+    full_history = chat_request.history.copy()
+    full_history.append(ChatMessage(role='user', message=chat_request.newMessage))
     # ==========================================
     # 2. 【关键】只取最后 20 条给 AI
     # ==========================================
@@ -174,10 +193,7 @@ def ai_chat(
         temperature=temperature,
         # num_gpu=-1
     )
-    tool_list = config.TOOL_LIST
-    if request.open_online:
-        tool_list.append(tools.online)
-        tool_list.append(tools.online_intensive)
+    tool_list = build_tool_list(chat_request.open_online)
     agent = create_agent(
         model=model,
         system_prompt=SYSTEM_PROMPT,
@@ -355,9 +371,11 @@ def login(
 ):
     existing_user = db.query(User).filter(
         User.username == form.username,
-        User.password == form.password
     ).first()
-    if existing_user:
+    if existing_user and verify_password(form.password, existing_user.password):
+        if needs_rehash(existing_user.password):
+            existing_user.password = hash_password(form.password)
+            db.commit()
         token: str = create_access_token({'user_id': existing_user.id})
         return {
             "code": 200,
@@ -390,7 +408,7 @@ def register(
     else:
         new_user = User(
             username=form.username,
-            password=form.password,
+            password=hash_password(form.password),
         )
         db.add(new_user)
         db.commit()  # <-- 关键！提交后才有ID

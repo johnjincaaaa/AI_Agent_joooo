@@ -15,7 +15,7 @@ class User(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     username = Column(String(50), unique=True, index=True, nullable=False)  # 账号唯一
-    password = Column(String(255), nullable=False)  # 密码明文
+    password = Column(String(255), nullable=False)  # bcrypt 哈希
     register_time = Column(DateTime, default=datetime.now)
 
     sessions = relationship("ChatSession", back_populates="user", cascade="all, delete") # 意思：双向绑定，两边能互相找到对方session.user

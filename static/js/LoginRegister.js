@@ -124,7 +124,7 @@ document.getElementById('doRegister').onclick = async () => {
 
     try {
         // 4. 发送注册请求
-        const res = await fetch('http://127.0.0.1:8000/register', {
+        const res = await fetch(`${config.API_BASE_URL}/register`, {
             method: 'POST',
             headers: {'Content-Type': 'application/json'},
             body: JSON.stringify({username, password: pwd})
@@ -179,7 +179,8 @@ async function initHistory() {
                 this.classList.add('active');
                 this.title = e['session_time'];
                 window.localStorage.setItem('thisSessionTime', this.title);
-                chatData = JSON.parse(window.localStorage.getItem(this.title) || e['session_time']);
+                const stored = localStorage.getItem(String(this.title));
+                chatData = stored ? JSON.parse(stored) : e['messages'];
                 const box = document.getElementById("chatBox");
 
                 chatData.forEach(msg => {

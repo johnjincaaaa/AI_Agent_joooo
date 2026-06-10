@@ -4,6 +4,23 @@ const API_AI_CHAT_savaToDb = `${config.API_BASE_URL}/ai/chat/savaToDb`;
 const API_AI_CHAT_history = `${config.API_BASE_URL}/ai/chat/history`;
 const API_AI_CHAT_STREAM = `${config.API_BASE_URL}/ai/chatStream`; // 流式接口
 
+function buildAuthHeaders() {
+    const headers = {"Content-Type": "application/json"};
+    const token = localStorage.getItem("token");
+    if (token && token !== "null") {
+        headers["Authorization"] = "Bearer " + token;
+    }
+    return headers;
+}
+
+function parseApiErrorMessage(data, fallback) {
+    if (!data) return fallback;
+    if (typeof data.detail === "string") return data.detail;
+    if (data.detail?.msg) return data.detail.msg;
+    if (data.msg) return data.msg;
+    return fallback;
+}
+
 // 点击按钮发送
 // 全局锁：防止重复发送
 let isSending = false;
@@ -62,7 +79,7 @@ async function sendMessage() {
         // 🔥 核心：调用流式接口
         const response = await fetch(API_AI_CHAT_STREAM + "?temperature=0.7", {
             method: "POST",
-            headers: {"Content-Type": "application/json"},
+            headers: buildAuthHeaders(),
             body: JSON.stringify({
                 history: chatData,
                 newMessage: content,
@@ -70,6 +87,19 @@ async function sendMessage() {
             }),
             signal: signal
         });
+
+        if (response.status === 429) {
+            currentAiMessageDiv.remove();
+            const errData = await response.json();
+            addMessage(parseApiErrorMessage(errData, "未登录用户免费体验次数已用完，请注册或登录后继续使用"), "ai");
+            showLoginExpiredModal("🔐 免费体验次数已用完，请注册或登录！", "error");
+            return;
+        }
+        if (!response.ok) {
+            currentAiMessageDiv.remove();
+            addMessage("AI出错了，请检查API Key", "ai");
+            return;
+        }
 
         const decoder = new TextDecoder("utf-8");
         const reader = response.body.getReader();
@@ -133,7 +163,7 @@ async function sendMessage() {
                 this.classList.add('active');
                 const session_time = this.title;
                 window.localStorage.setItem('thisSessionTime', this.title);
-                const messageList = JSON.parse(window.localStorage.getItem(session_time) || []);
+                const messageList = JSON.parse(window.localStorage.getItem(session_time) || '[]');
                 chatData = messageList;
                 chatSession.textContent = this.textContent;
 
@@ -218,7 +248,11 @@ async function sendMessage() {
         console.error(err);
 
     } finally {
-        currentAiMessageDiv.innerHTML = marked.parse(chatData.at(-1).message); // 重新渲染html
+        if (chatData.at(-1)?.role === "ai" && currentAiMessageDiv.isConnected) {
+            currentAiMessageDiv.innerHTML = marked.parse(chatData.at(-1).message);
+        } else if (currentAiMessageDiv.isConnected && !currentAiMessageDiv.textContent.trim()) {
+            currentAiMessageDiv.remove();
+        }
         isSending = false;
         sendMessage_ele.disabled = false;
         sendMessage_ele.textContent = "➤";
@@ -235,10 +269,7 @@ async function generateTitleFromTwoRounds(dialogue) {
     // AI 生成标题
     const res = await fetch(`${API_AI_CHAT}?temperature=1.5`, {
         method: "POST",
-        headers: {
-            "Content-Type": "application/json"
-        },
-
+        headers: buildAuthHeaders(),
         body: JSON.stringify({
             "history": dialogue,
             "newMessage": `
@@ -248,6 +279,9 @@ async function generateTitleFromTwoRounds(dialogue) {
                     `.trim()
         })
     });
+    if (res.status === 429) {
+        return '新对话';
+    }
     if (res.status === 200) {
         let resJson = await res.json();
         return resJson.content;
