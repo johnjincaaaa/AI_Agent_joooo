@@ -44,7 +44,18 @@ app.mount("/uploads", StaticFiles(directory=str(UPLOAD_DIR)), name="uploads")
 templates = Jinja2Templates(directory="templates")  # 自动找 HTML
 
 ALLOWED_IMAGE_TYPES = {"image/jpeg", "image/png", "image/gif", "image/webp", "image/bmp"}
+ALLOWED_DOCUMENT_TYPES = {
+    "application/pdf",
+    "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    "application/msword",
+    "text/plain",
+}
+ALLOWED_FILE_EXTENSIONS = {
+    ".jpg", ".jpeg", ".png", ".gif", ".webp", ".bmp",
+    ".pdf", ".doc", ".docx", ".txt",
+}
 MAX_IMAGE_SIZE = 10 * 1024 * 1024  # 10MB
+MAX_DOCUMENT_SIZE = 20 * 1024 * 1024  # 20MB
 
 # 允许跨域（让你的 HTML 页面可以调用）
 app.add_middleware(
@@ -89,38 +100,80 @@ class ChatRequest(BaseModel):
     open_online: bool = False  # 全局一键联网开关
     enabled_skills: List[str] = []  # 前端选中的技能 id 列表
     image_paths: List[str] = []  # 用户粘贴/上传图片的服务端路径
+    document_paths: List[str] = []  # 用户上传文档的服务端路径
 
 
-def augment_message_with_images(message: str, image_paths: List[str]) -> str:
-    if not image_paths:
+def augment_message_with_attachments(
+        message: str,
+        image_paths: List[str],
+        document_paths: List[str],
+) -> str:
+    hints = []
+    if image_paths:
+        paths_text = "\n".join(f"- {path}" for path in image_paths)
+        hints.append(
+            f"[系统提示] 用户附带了图片，请使用 image_analyze 工具分析，图片本地路径：\n{paths_text}"
+        )
+    if document_paths:
+        paths_text = "\n".join(f"- {path}" for path in document_paths)
+        hints.append(
+            f"[系统提示] 用户附带了文档，请使用 document_analyze 工具读取，文档本地路径：\n{paths_text}"
+        )
+    if not hints:
         return message
-    paths_text = "\n".join(f"- {path}" for path in image_paths)
-    base = message.strip() if message.strip() else "请分析这张图片"
-    return (
-        f"{base}\n\n"
-        f"[系统提示] 用户附带了图片，请使用 image_analyze 工具分析，图片本地路径：\n"
-        f"{paths_text}"
-    )
+
+    if image_paths and not message.strip():
+        base = "请分析这张图片"
+    elif document_paths and not message.strip():
+        base = "请分析这些文档"
+    else:
+        base = message.strip() if message.strip() else "请处理附件内容"
+
+    return f"{base}\n\n" + "\n\n".join(hints)
 
 
-def resolve_enabled_skills(enabled_skills: List[str], image_paths: List[str]) -> List[str]:
+def resolve_enabled_skills(
+        enabled_skills: List[str],
+        image_paths: List[str],
+        document_paths: List[str],
+) -> List[str]:
     skills = list(enabled_skills)
     if image_paths and "image_parsing" not in skills:
         skills.append("image_parsing")
+    if document_paths and "document_parsing" not in skills:
+        skills.append("document_parsing")
     return skills
 
 
-def build_agent_messages(ai_context: List[ChatMessage], image_paths: List[str]):
+def build_agent_messages(
+        ai_context: List[ChatMessage],
+        image_paths: List[str],
+        document_paths: List[str],
+):
     messages = []
     for i, msg in enumerate(ai_context):
         content = msg.message
         if msg.role == "user" and i == len(ai_context) - 1:
-            content = augment_message_with_images(content, image_paths)
+            content = augment_message_with_attachments(content, image_paths, document_paths)
         if msg.role == "user":
             messages.append(HumanMessage(content=content))
         else:
             messages.append(AIMessage(content=content))
     return messages
+
+
+def _detect_file_kind(content_type: str, suffix: str) -> str:
+    if content_type in ALLOWED_IMAGE_TYPES or suffix in {".jpg", ".jpeg", ".png", ".gif", ".webp", ".bmp"}:
+        return "image"
+    return "document"
+
+
+def _save_upload_file(content: bytes, filename: str, suffix: str) -> Path:
+    safe_suffix = suffix if suffix in ALLOWED_FILE_EXTENSIONS else ".bin"
+    save_name = f"{uuid.uuid4().hex}{safe_suffix}"
+    save_path = UPLOAD_DIR / save_name
+    save_path.write_bytes(content)
+    return save_path
 
 
 def build_tool_list(open_online: bool, enabled_skills: Optional[List[str]] = None):
@@ -142,27 +195,51 @@ async def upload_image(
         file: UploadFile = File(...),
         user_id: Optional[int] = Depends(get_optional_user_id),
 ):
+    result = await _handle_file_upload(http_request, file, user_id)
+    if result["kind"] != "image":
+        raise HTTPException(status_code=400, detail={"code": 400, "msg": "请使用文档上传接口上传非图片文件"})
+    return result
+
+
+@app.post("/ai/upload-file", summary="上传聊天附件")
+async def upload_file(
+        http_request: Request,
+        file: UploadFile = File(...),
+        user_id: Optional[int] = Depends(get_optional_user_id),
+):
+    return await _handle_file_upload(http_request, file, user_id)
+
+
+async def _handle_file_upload(
+        http_request: Request,
+        file: UploadFile,
+        user_id: Optional[int],
+):
     ensure_chat_access(http_request, user_id)
 
-    if file.content_type not in ALLOWED_IMAGE_TYPES:
-        raise HTTPException(status_code=400, detail={"code": 400, "msg": "仅支持 JPEG/PNG/GIF/WebP/BMP 图片"})
+    suffix = Path(file.filename or "").suffix.lower()
+    if suffix not in ALLOWED_FILE_EXTENSIONS:
+        raise HTTPException(
+            status_code=400,
+            detail={"code": 400, "msg": "仅支持图片、PDF、Word(doc/docx)、TXT 文件"},
+        )
+
+    kind = _detect_file_kind(file.content_type or "", suffix)
+    max_size = MAX_IMAGE_SIZE if kind == "image" else MAX_DOCUMENT_SIZE
 
     content = await file.read()
-    if len(content) > MAX_IMAGE_SIZE:
-        raise HTTPException(status_code=400, detail={"code": 400, "msg": "图片大小不能超过 10MB"})
+    if len(content) > max_size:
+        limit_mb = max_size // (1024 * 1024)
+        raise HTTPException(status_code=400, detail={"code": 400, "msg": f"文件大小不能超过 {limit_mb}MB"})
 
-    suffix = Path(file.filename or "image.png").suffix.lower()
-    if suffix not in {".jpg", ".jpeg", ".png", ".gif", ".webp", ".bmp"}:
-        suffix = ".png"
-
-    filename = f"{uuid.uuid4().hex}{suffix}"
-    save_path = UPLOAD_DIR / filename
-    save_path.write_bytes(content)
+    save_path = _save_upload_file(content, file.filename or "file", suffix)
 
     return {
         "code": 200,
         "path": str(save_path.resolve()),
-        "url": f"/uploads/{filename}",
+        "url": f"/uploads/{save_path.name}",
+        "kind": kind,
+        "name": file.filename or save_path.name,
     }
 
 
@@ -195,7 +272,11 @@ async def chat_stream(
         api_key=DASHSCOPE_API_KEY,
         temperature=temperature,
     )
-    enabled_skills = resolve_enabled_skills(chat_request.enabled_skills, chat_request.image_paths)
+    enabled_skills = resolve_enabled_skills(
+        chat_request.enabled_skills,
+        chat_request.image_paths,
+        chat_request.document_paths,
+    )
     tool_list = build_tool_list(chat_request.open_online, enabled_skills)
 
     agent = create_agent(
@@ -205,7 +286,11 @@ async def chat_stream(
     )
 
     # 3. 格式化消息（含图片路径提示）
-    messages = build_agent_messages(ai_context, chat_request.image_paths)
+    messages = build_agent_messages(
+        ai_context,
+        chat_request.image_paths,
+        chat_request.document_paths,
+    )
 
     # ==================== 核心改造：流式输出 + 收集完整回答 ====================
     async def generate():
@@ -273,7 +358,11 @@ def ai_chat(
     )
     tool_list = build_tool_list(
         chat_request.open_online,
-        resolve_enabled_skills(chat_request.enabled_skills, chat_request.image_paths),
+        resolve_enabled_skills(
+            chat_request.enabled_skills,
+            chat_request.image_paths,
+            chat_request.document_paths,
+        ),
     )
     agent = create_agent(
         model=model,
@@ -281,7 +370,11 @@ def ai_chat(
         tools=tool_list,
     )
 
-    messages = build_agent_messages(ai_context, chat_request.image_paths)
+    messages = build_agent_messages(
+        ai_context,
+        chat_request.image_paths,
+        chat_request.document_paths,
+    )
     try:
         result = agent.invoke({"messages": messages})
         for msg in result["messages"]:

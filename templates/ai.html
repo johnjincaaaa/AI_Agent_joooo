@@ -202,17 +202,25 @@
 
         <div class="input-area">
             <div class="input-box-wrapper">
-                <div class="image-preview-bar" id="imagePreviewBar" hidden></div>
+                <div class="attachment-preview-bar" id="attachmentPreviewBar" hidden></div>
                 <!-- 嵌套输入框 + 按钮 -->
                 <div class="input-inner">
                     <label for="userInput" class="sr-only">输入你的问题</label>
-                    <textarea id="userInput" placeholder="输入问题，可直接 Ctrl+V 粘贴图片..." autocomplete="off"></textarea>
+                    <textarea id="userInput" placeholder="输入问题，可粘贴图片/文档或点击附件上传..." autocomplete="off"></textarea>
                     <button onclick="sendMessage()" id="sendMessage" class="button-send" aria-label="发送">➤</button>
                 </div>
 
                 <!-- 底部工具栏：智能搜索 + 技能 + 联网标识 -->
                 <div class="input-toolbar">
                     <div class="left-tools">
+                        <button class="tool-btn attach-btn" id="attachBtn" type="button" title="上传图片或文档">
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                <path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"></path>
+                            </svg>
+                            附件
+                        </button>
+                        <input type="file" id="fileInput" hidden multiple
+                               accept=".pdf,.doc,.docx,.txt,image/jpeg,image/png,image/gif,image/webp,image/bmp">
                         <div class="skills-wrap" id="skillsWrap">
                             <button class="tool-btn skills-btn" id="skillsBtn" type="button" data-tip="选择 AI 技能工具链">
                                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -259,7 +267,7 @@
 <script src="../static/js/LoginRegister.js"></script>
 <script src="../static/js/inputTool.js"></script>
 <script src="../static/js/skillsTool.js"></script>
-<script src="../static/js/imagePaste.js"></script>
+<script src="../static/js/fileAttachment.js"></script>
 <script src="../static/js/page_chat_initScrollToBottom.js"></script>
 
 </body>

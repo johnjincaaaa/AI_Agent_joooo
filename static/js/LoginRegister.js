@@ -202,8 +202,9 @@ async function initHistory() {
                     const div = document.createElement("div");
                     div.className = `message ${sender}`;
                     // div.textContent = msg.message;
-                    marked.setOptions({breaks: true, gfm: true}); // 换行生效、支持表格列表
-                    div.innerHTML = marked.parse(msg.message);
+                    div.innerHTML = typeof renderMarkdown === 'function'
+                        ? renderMarkdown(msg.message)
+                        : marked.parse(msg.message);
                     box.appendChild(div);
                 });
 

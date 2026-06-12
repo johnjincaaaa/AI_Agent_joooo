@@ -21,6 +21,14 @@ function parseApiErrorMessage(data, fallback) {
     return fallback;
 }
 
+function renderMarkdown(text) {
+    marked.setOptions({ breaks: true, gfm: true });
+    const html = marked.parse(text);
+    return html.replace(/<a /g, '<a target="_blank" rel="noopener noreferrer" ');
+}
+
+window.renderMarkdown = renderMarkdown;
+
 // 点击按钮发送
 // 全局锁：防止重复发送
 let isSending = false;
@@ -53,28 +61,28 @@ async function sendMessage() {
         return;
     }
 
-    const hasImages = typeof hasPendingImages === 'function' && hasPendingImages();
-    if (!content && !hasImages) {
+    const hasAttachments = typeof hasPendingAttachments === 'function' && hasPendingAttachments();
+    if (!content && !hasAttachments) {
         return;
     }
 
     let displayMessage = content;
     let imagePaths = [];
-    let imageUrls = [];
+    let documentPaths = [];
 
-    if (hasImages) {
+    if (hasAttachments) {
         try {
-            const uploaded = await uploadPendingImages();
-            imagePaths = uploaded.paths;
-            imageUrls = uploaded.urls;
-            displayMessage = buildDisplayMessage(content, imageUrls);
-            clearPendingImages();
+            const uploaded = await uploadPendingAttachments();
+            imagePaths = uploaded.imagePaths;
+            documentPaths = uploaded.documentPaths;
+            displayMessage = buildDisplayMessage(content, uploaded.imageUrls, uploaded.documentNames);
+            clearPendingAttachments();
         } catch (uploadErr) {
             if (uploadErr.message === 'RATE_LIMIT') {
                 addMessage("未登录用户免费体验次数已用完，请注册或登录后继续使用", "ai");
                 showLoginExpiredModal("🔐 免费体验次数已用完，请注册或登录！", "error");
             } else {
-                addMessage(uploadErr.message || "图片上传失败，请重试", "ai");
+                addMessage(uploadErr.message || "文件上传失败，请重试", "ai");
             }
             return;
         }
@@ -110,7 +118,8 @@ async function sendMessage() {
                 newMessage: displayMessage,
                 open_online: isOnline,
                 enabled_skills: typeof getEnabledSkills === 'function' ? getEnabledSkills() : [],
-                image_paths: imagePaths
+                image_paths: imagePaths,
+                document_paths: documentPaths
             }),
             signal: signal
         });
@@ -162,8 +171,7 @@ async function sendMessage() {
                 }
                 // 流式输出文字
                 aiFullReply += data;
-                marked.setOptions({breaks: true, gfm: true});
-                currentAiMessageDiv.innerHTML = marked.parse(aiFullReply);
+                currentAiMessageDiv.innerHTML = renderMarkdown(aiFullReply);
                 box.scrollTop = box.scrollHeight;
             }
         }
@@ -276,7 +284,7 @@ async function sendMessage() {
 
     } finally {
         if (chatData.at(-1)?.role === "ai" && currentAiMessageDiv.isConnected) {
-            currentAiMessageDiv.innerHTML = marked.parse(chatData.at(-1).message);
+            currentAiMessageDiv.innerHTML = renderMarkdown(chatData.at(-1).message);
         } else if (currentAiMessageDiv.isConnected && !currentAiMessageDiv.textContent.trim()) {
             currentAiMessageDiv.remove();
         }
@@ -329,8 +337,7 @@ function renderHistoryChat(messages) {
         const div = document.createElement("div");
         div.className = `message ${sender}`;
         // div.textContent = msg.message;
-        marked.setOptions({breaks: true, gfm: true}); // 换行生效、支持表格列表
-        div.innerHTML = marked.parse(msg.message);
+        div.innerHTML = renderMarkdown(msg.message);
         box.appendChild(div);
     });
 
@@ -377,8 +384,7 @@ function addMessage(text, sender) {
     const div = document.createElement("div");
     div.className = `message ${sender}`;
     // div.textContent = text;
-    marked.setOptions({breaks: true, gfm: true}); // 换行生效、支持表格列表
-    div.innerHTML = marked.parse(text);
+    div.innerHTML = renderMarkdown(text);
     box.appendChild(div);
     box.scrollTop = box.scrollHeight; // 自动滚动到底部
 }
@@ -411,8 +417,8 @@ function createNewSession() {
     histories.forEach(h => {
         h.classList.remove('active')
     });
-    if (typeof clearPendingImages === 'function') {
-        clearPendingImages();
+    if (typeof clearPendingAttachments === 'function') {
+        clearPendingAttachments();
     }
 
 }

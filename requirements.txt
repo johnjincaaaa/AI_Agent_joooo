@@ -13,3 +13,5 @@ dashscope
 requests
 beautifulsoup4
 pillow
+pypdf
+python-docx
