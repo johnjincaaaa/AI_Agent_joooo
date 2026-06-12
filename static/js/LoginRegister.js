@@ -31,6 +31,19 @@ closeBtn.onclick = () => {
     modal.style.display = 'none';
 };
 
+// 密码可视切换
+document.querySelectorAll('.pwd-toggle-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+        const input = document.getElementById(btn.dataset.target);
+        if (!input) return;
+        const show = input.type === 'password';
+        input.type = show ? 'text' : 'password';
+        btn.classList.toggle('visible', show);
+        btn.setAttribute('aria-label', show ? '隐藏密码' : '显示密码');
+        btn.title = show ? '隐藏密码' : '显示密码';
+    });
+});
+
 
 // 登录/注册 切换
 const tabs = document.querySelectorAll('.tab');

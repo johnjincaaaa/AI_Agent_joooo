@@ -157,6 +157,71 @@
     background: rgba(13, 15, 19, 0.9);
 }
 
+/* 密码输入框 + 可视切换 */
+.password-field {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    position: relative;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 12px;
+    background: rgba(13, 15, 19, 0.7);
+    transition: all 0.25s ease;
+    box-sizing: border-box;
+}
+.password-field:focus-within {
+    border-color: #4c8dff;
+    box-shadow: 0 0 0 3px rgba(76, 141, 255, 0.18);
+    background: rgba(13, 15, 19, 0.9);
+}
+.password-field input {
+    flex: 1;
+    min-width: 0;
+    width: auto;
+    text-align: left;
+    border: none;
+    border-radius: 12px;
+    background: transparent;
+    padding: 13px 44px 13px 16px;
+    box-shadow: none;
+}
+.password-field input:focus {
+    border: none;
+    box-shadow: none;
+    background: transparent;
+}
+.pwd-toggle-btn {
+    position: absolute;
+    right: 8px;
+    top: 50%;
+    transform: translateY(-50%);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 32px;
+    height: 32px;
+    padding: 0;
+    border: none;
+    border-radius: 8px;
+    background: transparent;
+    color: #8a909c;
+    cursor: pointer;
+    transition: color 0.2s ease, background 0.2s ease;
+}
+.pwd-toggle-btn:hover {
+    color: #f0f1f5;
+    background: rgba(255, 255, 255, 0.08);
+}
+.pwd-toggle-btn .icon-eye-closed {
+    display: none;
+}
+.pwd-toggle-btn.visible .icon-eye-open {
+    display: none;
+}
+.pwd-toggle-btn.visible .icon-eye-closed {
+    display: block;
+}
+
 /* 提交按钮 */
 .submit-btn {
     width: 100%;

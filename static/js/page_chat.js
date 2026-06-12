@@ -52,14 +52,39 @@ async function sendMessage() {
     if (isSending) {
         return;
     }
-    if (!content) {
+
+    const hasImages = typeof hasPendingImages === 'function' && hasPendingImages();
+    if (!content && !hasImages) {
         return;
     }
 
+    let displayMessage = content;
+    let imagePaths = [];
+    let imageUrls = [];
+
+    if (hasImages) {
+        try {
+            const uploaded = await uploadPendingImages();
+            imagePaths = uploaded.paths;
+            imageUrls = uploaded.urls;
+            displayMessage = buildDisplayMessage(content, imageUrls);
+            clearPendingImages();
+        } catch (uploadErr) {
+            if (uploadErr.message === 'RATE_LIMIT') {
+                addMessage("未登录用户免费体验次数已用完，请注册或登录后继续使用", "ai");
+                showLoginExpiredModal("🔐 免费体验次数已用完，请注册或登录！", "error");
+            } else {
+                addMessage(uploadErr.message || "图片上传失败，请重试", "ai");
+            }
+            return;
+        }
+    }
+
     // 显示用户消息
-    addMessage(content, "user");
+    addMessage(displayMessage, "user");
 
     input.value = "";
+    input.dispatchEvent(new Event('input'));
     isSending = true;
     sendMessage_ele.textContent = "⏹️";
     // 创建AI消息占位框（流式实时更新）
@@ -82,8 +107,10 @@ async function sendMessage() {
             headers: buildAuthHeaders(),
             body: JSON.stringify({
                 history: chatData,
-                newMessage: content,
-                open_online: isOnline
+                newMessage: displayMessage,
+                open_online: isOnline,
+                enabled_skills: typeof getEnabledSkills === 'function' ? getEnabledSkills() : [],
+                image_paths: imagePaths
             }),
             signal: signal
         });
@@ -384,6 +411,9 @@ function createNewSession() {
     histories.forEach(h => {
         h.classList.remove('active')
     });
+    if (typeof clearPendingImages === 'function') {
+        clearPendingImages();
+    }
 
 }
 

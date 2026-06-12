@@ -46,6 +46,53 @@
     align-items: flex-end;
 }
 
+/* 粘贴图片预览条 */
+.image-preview-bar {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    padding: 0 4px 8px;
+}
+
+.image-preview-item {
+    position: relative;
+    width: 72px;
+    height: 72px;
+    border-radius: 10px;
+    overflow: hidden;
+    border: 1px solid var(--border-strong);
+    background: var(--bg-hover);
+}
+
+.image-preview-item img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
+}
+
+.image-preview-remove {
+    position: absolute;
+    top: 4px;
+    right: 4px;
+    width: 20px;
+    height: 20px;
+    border: none;
+    border-radius: 50%;
+    background: rgba(0, 0, 0, 0.55);
+    color: #fff;
+    font-size: 14px;
+    line-height: 1;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.image-preview-remove:hover {
+    background: rgba(0, 0, 0, 0.75);
+}
+
 /* 输入框本体 */
 #userInput {
     width: 100%;
@@ -107,6 +154,12 @@
 }
 
 /* 左侧：智能联网按钮 */
+.left-tools {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
 .left-tools .tool-btn {
     display: flex;
     align-items: center;
@@ -129,6 +182,129 @@
     background: var(--accent-soft);
     color: var(--accent);
     border-color: rgba(76, 141, 255, 0.4);
+}
+
+/* 技能下拉菜单 */
+.skills-wrap {
+    position: relative;
+}
+
+.skills-dropdown {
+    display: none;
+    position: absolute;
+    bottom: calc(100% + 8px);
+    left: 0;
+    min-width: 220px;
+    max-width: 280px;
+    max-height: 280px;
+    background: var(--bg-elevated);
+    border: 1px solid var(--border-strong);
+    border-radius: var(--radius-md);
+    box-shadow: var(--shadow-soft);
+    z-index: 100;
+    overflow: hidden;
+    flex-direction: column;
+}
+
+.skills-dropdown.open {
+    display: flex;
+}
+
+.skills-dropdown-title {
+    padding: 10px 14px 6px;
+    font-size: 12px;
+    color: var(--text-muted);
+    border-bottom: 1px solid var(--border);
+    flex-shrink: 0;
+}
+
+.skills-list {
+    overflow-y: auto;
+    padding: 6px;
+}
+
+.skills-list::-webkit-scrollbar {
+    width: 4px;
+}
+
+.skills-list::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, 0.15);
+    border-radius: 4px;
+}
+
+.skills-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    width: 100%;
+    padding: 10px 12px;
+    border: none;
+    border-radius: var(--radius-sm);
+    background: transparent;
+    color: var(--text-primary);
+    cursor: pointer;
+    text-align: left;
+    transition: background 0.15s ease;
+}
+
+.skills-item:hover {
+    background: var(--bg-hover);
+}
+
+.skills-item.selected {
+    background: var(--accent-soft);
+}
+
+.skills-item-icon {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    color: var(--text-secondary);
+}
+
+.skills-item.selected .skills-item-icon {
+    color: var(--accent);
+}
+
+.skills-item-text {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.skills-item-name {
+    font-size: 14px;
+    line-height: 1.3;
+}
+
+.skills-item-desc {
+    font-size: 11px;
+    color: var(--text-muted);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.skills-item-check {
+    flex-shrink: 0;
+    font-size: 14px;
+    color: var(--accent);
+    opacity: 0;
+    transition: opacity 0.15s ease;
+}
+
+.skills-item.selected .skills-item-check {
+    opacity: 1;
+}
+
+.skills-empty {
+    padding: 16px 12px;
+    font-size: 13px;
+    color: var(--text-muted);
+    text-align: center;
 }
 
 /* 右侧：联网状态标识 */

@@ -291,6 +291,23 @@ body {
     box-shadow: 0 2px 8px rgba(76, 141, 255, 0.25);
 }
 
+.message.user img {
+    max-width: min(240px, 100%);
+    max-height: 180px;
+    border-radius: 10px;
+    display: block;
+    margin-bottom: 8px;
+    object-fit: cover;
+}
+
+.message.user p:last-child {
+    margin-bottom: 0;
+}
+
+.message.user p {
+    margin: 0 0 8px;
+}
+
 /* AI 消息：左侧无气泡纯文本（类 ChatGPT），加细微分隔 */
 .message.ai {
     color: var(--text-primary);

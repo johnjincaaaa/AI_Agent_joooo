@@ -1,6 +1,6 @@
 from sqlalchemy.orm import Session
 import uvicorn
-from fastapi import FastAPI, Request, Depends, HTTPException, Query, status
+from fastapi import FastAPI, Request, Depends, HTTPException, Query, status, UploadFile, File
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.templating import Jinja2Templates
 from fastapi.staticfiles import StaticFiles
@@ -9,6 +9,8 @@ import json
 from pydantic import BaseModel
 from typing import List, Optional
 import logging
+import uuid
+from pathlib import Path
 
 import config
 
@@ -19,6 +21,7 @@ from token_utils import create_access_token, verify_token, get_optional_user_id
 from password_utils import hash_password, verify_password, needs_rehash
 from rate_limit import check_anonymous_rate_limit
 import tools
+from tools.skills_registry import get_skill_catalog, resolve_tools
 
 try:
     from langchain.chat_models import init_chat_model
@@ -35,7 +38,13 @@ app = FastAPI(
 
 )
 app.mount("/static", StaticFiles(directory="static"), name="static")  # ✅ 静态文件统一配置（全局只需这一句）
+UPLOAD_DIR = Path("uploads")
+UPLOAD_DIR.mkdir(exist_ok=True)
+app.mount("/uploads", StaticFiles(directory=str(UPLOAD_DIR)), name="uploads")
 templates = Jinja2Templates(directory="templates")  # 自动找 HTML
+
+ALLOWED_IMAGE_TYPES = {"image/jpeg", "image/png", "image/gif", "image/webp", "image/bmp"}
+MAX_IMAGE_SIZE = 10 * 1024 * 1024  # 10MB
 
 # 允许跨域（让你的 HTML 页面可以调用）
 app.add_middleware(
@@ -78,13 +87,83 @@ class ChatRequest(BaseModel):
     history: List[ChatMessage]  # 完整历史
     newMessage: str  # 最新一条消息
     open_online: bool = False  # 全局一键联网开关
+    enabled_skills: List[str] = []  # 前端选中的技能 id 列表
+    image_paths: List[str] = []  # 用户粘贴/上传图片的服务端路径
 
 
-def build_tool_list(open_online: bool):
+def augment_message_with_images(message: str, image_paths: List[str]) -> str:
+    if not image_paths:
+        return message
+    paths_text = "\n".join(f"- {path}" for path in image_paths)
+    base = message.strip() if message.strip() else "请分析这张图片"
+    return (
+        f"{base}\n\n"
+        f"[系统提示] 用户附带了图片，请使用 image_analyze 工具分析，图片本地路径：\n"
+        f"{paths_text}"
+    )
+
+
+def resolve_enabled_skills(enabled_skills: List[str], image_paths: List[str]) -> List[str]:
+    skills = list(enabled_skills)
+    if image_paths and "image_parsing" not in skills:
+        skills.append("image_parsing")
+    return skills
+
+
+def build_agent_messages(ai_context: List[ChatMessage], image_paths: List[str]):
+    messages = []
+    for i, msg in enumerate(ai_context):
+        content = msg.message
+        if msg.role == "user" and i == len(ai_context) - 1:
+            content = augment_message_with_images(content, image_paths)
+        if msg.role == "user":
+            messages.append(HumanMessage(content=content))
+        else:
+            messages.append(AIMessage(content=content))
+    return messages
+
+
+def build_tool_list(open_online: bool, enabled_skills: Optional[List[str]] = None):
     tool_list = list(config.TOOL_LIST)
+    tool_list.extend(resolve_tools(enabled_skills or []))
     if open_online:
         tool_list.extend([tools.online, tools.online_intensive])
     return tool_list
+
+
+@app.get("/ai/skills", summary="获取可用技能列表")
+def list_skills():
+    return {"code": 200, "skills": get_skill_catalog()}
+
+
+@app.post("/ai/upload-image", summary="上传聊天图片")
+async def upload_image(
+        http_request: Request,
+        file: UploadFile = File(...),
+        user_id: Optional[int] = Depends(get_optional_user_id),
+):
+    ensure_chat_access(http_request, user_id)
+
+    if file.content_type not in ALLOWED_IMAGE_TYPES:
+        raise HTTPException(status_code=400, detail={"code": 400, "msg": "仅支持 JPEG/PNG/GIF/WebP/BMP 图片"})
+
+    content = await file.read()
+    if len(content) > MAX_IMAGE_SIZE:
+        raise HTTPException(status_code=400, detail={"code": 400, "msg": "图片大小不能超过 10MB"})
+
+    suffix = Path(file.filename or "image.png").suffix.lower()
+    if suffix not in {".jpg", ".jpeg", ".png", ".gif", ".webp", ".bmp"}:
+        suffix = ".png"
+
+    filename = f"{uuid.uuid4().hex}{suffix}"
+    save_path = UPLOAD_DIR / filename
+    save_path.write_bytes(content)
+
+    return {
+        "code": 200,
+        "path": str(save_path.resolve()),
+        "url": f"/uploads/{filename}",
+    }
 
 
 def ensure_chat_access(http_request: Request, user_id: Optional[int]) -> None:
@@ -116,7 +195,8 @@ async def chat_stream(
         api_key=DASHSCOPE_API_KEY,
         temperature=temperature,
     )
-    tool_list = build_tool_list(chat_request.open_online)
+    enabled_skills = resolve_enabled_skills(chat_request.enabled_skills, chat_request.image_paths)
+    tool_list = build_tool_list(chat_request.open_online, enabled_skills)
 
     agent = create_agent(
         model=model,
@@ -124,10 +204,8 @@ async def chat_stream(
         tools=tool_list,
     )
 
-    # 3. 格式化消息（和原来完全一样）
-    messages = []
-    for msg in ai_context:
-        messages.append(HumanMessage(content=msg.message) if msg.role == "user" else AIMessage(content=msg.message))
+    # 3. 格式化消息（含图片路径提示）
+    messages = build_agent_messages(ai_context, chat_request.image_paths)
 
     # ==================== 核心改造：流式输出 + 收集完整回答 ====================
     async def generate():
@@ -193,20 +271,17 @@ def ai_chat(
         temperature=temperature,
         # num_gpu=-1
     )
-    tool_list = build_tool_list(chat_request.open_online)
+    tool_list = build_tool_list(
+        chat_request.open_online,
+        resolve_enabled_skills(chat_request.enabled_skills, chat_request.image_paths),
+    )
     agent = create_agent(
         model=model,
         system_prompt=SYSTEM_PROMPT,
         tools=tool_list,
     )
 
-    # 把最后20条转成 AI 能识别的格式
-    messages = []
-    for msg in ai_context:
-        if msg.role == "user":
-            messages.append(HumanMessage(content=msg.message))
-        else:
-            messages.append(AIMessage(content=msg.message))
+    messages = build_agent_messages(ai_context, chat_request.image_paths)
     try:
         result = agent.invoke({"messages": messages})
         for msg in result["messages"]:
