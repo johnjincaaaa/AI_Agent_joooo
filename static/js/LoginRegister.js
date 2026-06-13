@@ -90,6 +90,7 @@ document.getElementById('doLogin').onclick = async () => {
         if (data.code === 200) {
             localStorage.setItem('token', data.token);
             localStorage.setItem('username', username);
+            if (data.user_id) localStorage.setItem('user_id', data.user_id);
             document.getElementById("userName").textContent = username;
 
             modal.style.display = 'none';
@@ -182,6 +183,7 @@ async function initHistory() {
             div.className = `history title`;
             sideBar.appendChild(div);
             div.addEventListener('click', async function () {
+                if (typeof exitJobHuntMode === 'function') exitJobHuntMode();
                 document.getElementById("chatBox").querySelectorAll(".message").forEach(el => el.remove());
                 const histories = document.querySelectorAll('.history');
                 const chatSession = document.getElementById('chatSession');
@@ -207,6 +209,7 @@ async function initHistory() {
                         : marked.parse(msg.message);
                     box.appendChild(div);
                 });
+                document.getElementById('emptyState')?.classList.add('hidden');
 
             });
             window.localStorage.setItem(e['session_time'], JSON.stringify(e['messages']))
@@ -216,6 +219,7 @@ async function initHistory() {
         // 清除本地存储的登录信息
         localStorage.removeItem("token");
         localStorage.removeItem("username");
+        localStorage.removeItem("user_id");
         // 关闭菜单
         profileDropdown.classList.remove("show");
         // 刷新页面，更新头像状态（也可以改成跳转到登录页）

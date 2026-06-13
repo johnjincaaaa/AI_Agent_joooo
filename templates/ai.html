@@ -8,6 +8,7 @@
     <link rel="stylesheet" href="../static/css/page_chat_loginRegister.css">
     <link rel="stylesheet" href="../static/css/page_chat_inputBox.css">
     <link rel="stylesheet" href="../static/css/page_chat_initScrollToBottom.css">
+    <link rel="stylesheet" href="../static/css/page_job_hunt.css">
     <link rel="icon" href="../static/a.ico" type="image/x-icon">
     <script src="https://cdn.jsdelivr.net/npm/marked/lib/marked.umd.js"></script>
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
@@ -117,6 +118,14 @@
                 <span class="brand-mark"></span>
                 <span class="brand-name">有料ai</span>
             </div>
+            <div class="sidebar-section-label">找工作</div>
+            <div class="sidebar-nav-item" id="jobHuntEntry" title="简历制作与岗位推荐">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <rect x="2" y="7" width="20" height="14" rx="2" ry="2"></rect>
+                    <path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"></path>
+                </svg>
+                简历制作 · 岗位推荐
+            </div>
             <div class="history">历史会话</div>
             <!--
             <div title="1779986166533" class="history title">我是历史记录下的标签</div>
@@ -189,6 +198,54 @@
             </div>
             <!--        <div class="message user"></div>-->
             <!--        <div class="message ai"></div>-->
+        </div>
+
+        <div class="job-hunt-panel hidden" id="jobHuntPanel">
+            <div class="job-panel-header">
+                <h2>找工作</h2>
+                <p>完善个人画像 → 选择简历模板 → AI 生成简历 → 匹配 BOSS 直聘对口岗位（当前为虚拟数据）</p>
+            </div>
+
+            <div class="job-steps">
+                <span class="job-step-tag active">① 个人画像</span>
+                <span class="job-step-tag">② 简历模板</span>
+                <span class="job-step-tag">③ AI 简历</span>
+                <span class="job-step-tag">④ 岗位推荐</span>
+            </div>
+
+            <section class="job-section">
+                <div class="job-section-title"><span class="num">1</span>个人画像</div>
+                <div class="job-form-grid" id="jobProfileForm"></div>
+                <div class="job-actions">
+                    <button type="button" class="job-btn job-btn-secondary" id="jobSaveProfileBtn">保存画像</button>
+                </div>
+                <div class="job-status-tip" id="jobSaveStatus"></div>
+            </section>
+
+            <section class="job-section">
+                <div class="job-section-title"><span class="num">2</span>挑选简历模板</div>
+                <div class="template-grid" id="jobTemplateGrid"></div>
+            </section>
+
+            <section class="job-section">
+                <div class="job-section-title"><span class="num">3</span>AI 完善简历</div>
+                <div class="resume-preview empty" id="jobResumePreview">点击「AI 完善简历」生成专业简历</div>
+                <div class="job-actions">
+                    <button type="button" class="job-btn job-btn-primary" id="jobGenerateBtn">AI 完善简历</button>
+                </div>
+                <div class="job-status-tip" id="jobResumeStatus"></div>
+            </section>
+
+            <section class="job-section">
+                <div class="job-section-title"><span class="num">4</span>对口岗位推荐</div>
+                <div class="job-list" id="jobRecommendList">
+                    <p class="job-status-tip">完成画像与简历后，点击匹配推荐岗位</p>
+                </div>
+                <div class="job-actions">
+                    <button type="button" class="job-btn job-btn-primary" id="jobMatchBtn">匹配推荐岗位</button>
+                </div>
+                <div class="job-status-tip" id="jobMatchStatus"></div>
+            </section>
         </div>
 
         <!-- 一键滑到底部按钮 -->
@@ -268,6 +325,7 @@
 <script src="../static/js/inputTool.js"></script>
 <script src="../static/js/skillsTool.js"></script>
 <script src="../static/js/fileAttachment.js"></script>
+<script src="../static/js/jobHunt.js"></script>
 <script src="../static/js/page_chat_initScrollToBottom.js"></script>
 
 </body>

@@ -189,6 +189,7 @@ async function sendMessage() {
             div.textContent = aiGenerateContent;
             // 对历史会话操作：拉取数据库对话数据到对话框 && 清除class active 并激活点击历史对话
             div.addEventListener('click', async function () {
+                if (typeof exitJobHuntMode === 'function') exitJobHuntMode();
                 // 清空当前右边聊天记录,清空chatSession,调取数据库存入全部聊天记录，chatDate取全部聊天记录
                 document.getElementById("chatBox").querySelectorAll(".message").forEach(el => el.remove());
                 const histories = document.querySelectorAll('.history');
@@ -203,9 +204,15 @@ async function sendMessage() {
                 chatSession.textContent = this.textContent;
 
                 renderHistoryChat(chatData);
+                document.getElementById('emptyState')?.classList.toggle('hidden', chatData.length > 0);
             });
             if (chatSession.textContent.trim() !== "新对话") {
-                sideBar.insertBefore(div, sideBar.children[1]);
+                const firstHistoryItem = sideBar.querySelector('.history.title');
+                if (firstHistoryItem) {
+                    sideBar.insertBefore(div, firstHistoryItem);
+                } else {
+                    sideBar.appendChild(div);
+                }
             }
         }
 
@@ -407,12 +414,14 @@ function foldHistorySession() {
 }
 
 function createNewSession() {
+    if (typeof exitJobHuntMode === 'function') exitJobHuntMode();
     const chatSession = document.getElementById('chatSession');
     // 清除所有 class="message" 的子元素 并清空缓存
     document.querySelectorAll("#chatBox .message").forEach(el => el.remove());
     chatData = [];
     div = null;
     chatSession.textContent = '新对话';
+    document.getElementById('emptyState')?.classList.remove('hidden');
     const histories = document.querySelectorAll('.history');
     histories.forEach(h => {
         h.classList.remove('active')

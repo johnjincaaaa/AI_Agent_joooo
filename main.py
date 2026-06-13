@@ -22,6 +22,7 @@ from password_utils import hash_password, verify_password, needs_rehash
 from rate_limit import check_anonymous_rate_limit
 import tools
 from tools.skills_registry import get_skill_catalog, resolve_tools
+from services.job_mock_data import RESUME_TEMPLATES, MOCK_JOBS, match_jobs
 
 try:
     from langchain.chat_models import init_chat_model
@@ -523,6 +524,163 @@ def ai_history(
                 status_code=500,
                 detail={"code": 500, "msg": f"异常：{str(error)}"}
             )
+
+
+# ==================== 找工作：简历 + 岗位推荐 ====================
+
+class JobProfilePayload(BaseModel):
+    name: str = ""
+    gender: str = ""
+    age: str = ""
+    education: str = ""
+    major: str = ""
+    school: str = ""
+    experience_years: str = ""
+    target_city: str = ""
+    target_role: str = ""
+    skills: str = ""
+    work_experience: str = ""
+    project_experience: str = ""
+    self_intro: str = ""
+    preset_resume: str = ""
+
+
+class JobProfileSaveRequest(BaseModel):
+    profile: JobProfilePayload
+    template_id: str = "classic"
+    resume_content: Optional[str] = None
+
+
+class JobGenerateResumeRequest(BaseModel):
+    profile: JobProfilePayload
+    template_id: str = "classic"
+
+
+class JobMatchRequest(BaseModel):
+    profile: JobProfilePayload
+    resume_content: str = ""
+
+
+@app.get("/ai/job/templates", summary="简历模板列表")
+def job_templates():
+    return {"code": 200, "templates": RESUME_TEMPLATES}
+
+
+@app.get("/ai/job/mock-jobs", summary="虚拟岗位列表（BOSS直聘风格）")
+def job_mock_list():
+    return {"code": 200, "jobs": MOCK_JOBS, "source": "mock"}
+
+
+@app.get("/ai/job/profile", summary="获取用户求职画像")
+def get_job_profile(
+        db: Session = Depends(get_db),
+        user_id: int = Depends(verify_token),
+):
+    record = db.query(JobProfile).filter(JobProfile.user_id == user_id).first()
+    if not record:
+        return {"code": 200, "profile": {}, "template_id": "classic", "resume_content": ""}
+    return {
+        "code": 200,
+        "profile": record.profile_data or {},
+        "template_id": record.template_id or "classic",
+        "resume_content": record.resume_content or "",
+    }
+
+
+@app.post("/ai/job/profile", summary="保存用户求职画像")
+def save_job_profile(
+        request: JobProfileSaveRequest,
+        db: Session = Depends(get_db),
+        user_id: int = Depends(verify_token),
+):
+    record = db.query(JobProfile).filter(JobProfile.user_id == user_id).first()
+    profile_dict = request.profile.model_dump()
+    if record:
+        record.profile_data = profile_dict
+        record.template_id = request.template_id
+        if request.resume_content is not None:
+            record.resume_content = request.resume_content
+    else:
+        record = JobProfile(
+            user_id=user_id,
+            profile_data=profile_dict,
+            template_id=request.template_id,
+            resume_content=request.resume_content or "",
+        )
+        db.add(record)
+    db.commit()
+    return {"code": 200, "msg": "画像已保存"}
+
+
+@app.post("/ai/job/generate-resume", summary="AI 完善简历")
+def generate_job_resume(
+        request: JobGenerateResumeRequest,
+        http_request: Request,
+        db: Session = Depends(get_db),
+        user_id: Optional[int] = Depends(get_optional_user_id),
+):
+    ensure_chat_access(http_request, user_id)
+
+    template_name = next(
+        (t["name"] for t in RESUME_TEMPLATES if t["id"] == request.template_id),
+        "经典简约",
+    )
+    profile = request.profile.model_dump()
+    preset = profile.get("preset_resume") or ""
+
+    prompt = f"""你是一名专业简历顾问。请根据以下个人画像和预设简历草稿，按「{template_name}」风格输出一份完整、专业、可直接投递的中文简历。
+
+要求：
+1. 使用 Markdown 格式，结构清晰（基本信息、求职意向、教育背景、工作/项目经历、技能、自我评价）
+2. 在草稿基础上润色、补全、量化成果，不要编造与画像明显矛盾的经历
+3. 语言简洁专业，适合 BOSS 直聘等平台
+4. 只输出简历正文，不要额外解释
+
+【个人画像】
+{json.dumps(profile, ensure_ascii=False, indent=2)}
+
+【预设简历草稿】
+{preset or "（无草稿，请根据画像生成）"}
+"""
+
+    model = init_chat_model(
+        model=MODEL,
+        model_provider="openai",
+        base_url=DASHSCOPE_URL,
+        api_key=DASHSCOPE_API_KEY,
+        temperature=0.7,
+    )
+    result = model.invoke([HumanMessage(content=prompt)])
+    resume_text = result.content if hasattr(result, "content") else str(result)
+
+    if user_id:
+        record = db.query(JobProfile).filter(JobProfile.user_id == user_id).first()
+        if record:
+            record.resume_content = resume_text
+            record.profile_data = profile
+            record.template_id = request.template_id
+        else:
+            db.add(JobProfile(
+                user_id=user_id,
+                profile_data=profile,
+                template_id=request.template_id,
+                resume_content=resume_text,
+            ))
+        db.commit()
+
+    return {"code": 200, "resume": resume_text}
+
+
+@app.post("/ai/job/match", summary="匹配推荐岗位")
+def match_job_recommendations(
+        request: JobMatchRequest,
+        http_request: Request,
+        user_id: Optional[int] = Depends(get_optional_user_id),
+):
+    ensure_chat_access(http_request, user_id)
+    profile = request.profile.model_dump()
+    jobs = match_jobs(profile, request.resume_content)
+    return {"code": 200, "jobs": jobs, "source": "mock"}
 
 
 # ------------------- 接口：登录 ------------------

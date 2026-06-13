@@ -412,6 +412,10 @@ body {
     color: var(--text-muted);
 }
 /* 一旦出现消息，自动隐藏空状态 */
+.empty-state.hidden {
+    display: none !important;
+}
+
 .chat-box:has(.message) .empty-state {
     display: none;
 }
