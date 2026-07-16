@@ -2,9 +2,15 @@ from sqlalchemy import create_engine, Column, Integer, String, Text, DateTime, F
 from sqlalchemy.orm import declarative_base, relationship, sessionmaker
 from datetime import datetime
 from config import SQLALCHEMY_DATABASE_URL
-# MySQL 连接
 
-engine = create_engine(SQLALCHEMY_DATABASE_URL, pool_pre_ping=True)
+# SQLite 需要关闭线程检查（FastAPI 多线程访问同一连接）；其它数据库正常连接。
+if SQLALCHEMY_DATABASE_URL.startswith("sqlite"):
+    engine = create_engine(
+        SQLALCHEMY_DATABASE_URL,
+        connect_args={"check_same_thread": False},
+    )
+else:
+    engine = create_engine(SQLALCHEMY_DATABASE_URL, pool_pre_ping=True)
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 Base = declarative_base()
 # ======================
@@ -61,9 +67,6 @@ def get_db():
         db.close()
 
 if __name__ == '__main__':
-    with SessionLocal() as session:
-        a = session.query(ChatSession).filter(
-            ChatSession.user_id==1
-        ).all()
-        for i in a:
-            print(i.session_name)
+    # 手动初始化数据库（创建 app.db 及所有表）
+    Base.metadata.create_all(bind=engine)
+    print("数据库初始化完成：", SQLALCHEMY_DATABASE_URL)

@@ -9,14 +9,82 @@
     <link rel="stylesheet" href="../static/css/page_chat_inputBox.css">
     <link rel="stylesheet" href="../static/css/page_chat_initScrollToBottom.css">
     <link rel="stylesheet" href="../static/css/page_job_hunt.css">
+    <link rel="stylesheet" href="../static/css/page_chat_apiGuide.css">
     <link rel="icon" href="../static/a.ico" type="image/x-icon">
     <script src="https://cdn.jsdelivr.net/npm/marked/lib/marked.umd.js"></script>
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 </head>
 <body>
 
-<!-- 1. 右上角登录按钮 -->
+<!-- 1. 右上角按钮组：接入教程 + 登录 -->
+<button class="guide-btn" id="openGuideBtn" title="如何接入 AI 大模型 API">接入教程</button>
 <button class="login-btn" id="openLoginBtn">登录</button>
+
+<!-- API 接入教程弹窗 -->
+<div class="guide-modal" id="guideModal">
+    <div class="guide-overlay" id="guideOverlay"></div>
+    <div class="guide-content">
+        <button class="close-btn" id="closeGuideBtn" aria-label="关闭">×</button>
+        <div class="guide-header">
+            <div class="guide-title">接入 AI 大模型（3 分钟搞定）</div>
+            <div class="guide-subtitle">
+                本系统兼容所有 OpenAI 格式的大模型接口。选择一家服务商，注册获取 API Key，
+                填入项目根目录的 <code>.env</code> 文件，保存后重启即可对话。
+            </div>
+        </div>
+
+        <div class="guide-tabs">
+            <span class="guide-tab active" data-guide="deepseek">DeepSeek（推荐）</span>
+            <span class="guide-tab" data-guide="aliyun">阿里云百炼（通义）</span>
+            <span class="guide-tab" data-guide="ollama">本地 Ollama（免费）</span>
+        </div>
+
+        <!-- DeepSeek -->
+        <div class="guide-pane show" data-guide-pane="deepseek">
+            <ol class="guide-steps">
+                <li>打开 <a href="https://platform.deepseek.com/" target="_blank" rel="noopener">platform.deepseek.com</a>，注册并登录。</li>
+                <li>进入「API Keys」页面，点击「创建 API Key」，复制得到的密钥（形如 <code>sk-xxxxxx</code>）。</li>
+                <li>在「充值」页面充值少量金额（DeepSeek 按用量计费，很便宜）。</li>
+                <li>打开项目根目录的 <code>.env</code> 文件，填入以下三项：</li>
+            </ol>
+            <pre class="guide-code">LLM_BASE_URL=https://api.deepseek.com/v1
+LLM_MODEL=deepseek-chat
+LLM_API_KEY=sk-把你的密钥粘贴到这里</pre>
+        </div>
+
+        <!-- 阿里云百炼 -->
+        <div class="guide-pane" data-guide-pane="aliyun">
+            <ol class="guide-steps">
+                <li>打开 <a href="https://bailian.console.aliyun.com/" target="_blank" rel="noopener">阿里云百炼控制台</a>，用阿里云账号登录。</li>
+                <li>在「API-KEY」页面创建密钥并复制（形如 <code>sk-xxxxxx</code>）。</li>
+                <li>开通「通义千问」模型服务（新用户通常有免费额度）。</li>
+                <li>打开项目根目录的 <code>.env</code> 文件，填入以下三项：</li>
+            </ol>
+            <pre class="guide-code">LLM_BASE_URL=https://dashscope.aliyuncs.com/compatible-mode/v1
+LLM_MODEL=qwen-plus
+LLM_API_KEY=sk-把你的密钥粘贴到这里</pre>
+            <p class="guide-note">提示：图片解析技能使用通义千问多模态模型，建议模型填 <code>qwen-vl-plus</code> 或另配阿里云 Key。</p>
+        </div>
+
+        <!-- 本地 Ollama -->
+        <div class="guide-pane" data-guide-pane="ollama">
+            <ol class="guide-steps">
+                <li>打开 <a href="https://ollama.com/download" target="_blank" rel="noopener">ollama.com/download</a> 下载并安装 Ollama。</li>
+                <li>打开命令行运行 <code>ollama pull qwen2.5</code> 下载模型（完全免费、本地运行、数据不外传）。</li>
+                <li>确保 Ollama 正在运行（默认端口 11434）。</li>
+                <li>打开项目根目录的 <code>.env</code> 文件，填入以下三项：</li>
+            </ol>
+            <pre class="guide-code">LLM_BASE_URL=http://localhost:11434/v1
+LLM_MODEL=qwen2.5
+LLM_API_KEY=ollama</pre>
+            <p class="guide-note">本地模型无需付费，但速度取决于你的电脑配置。</p>
+        </div>
+
+        <div class="guide-footer">
+            填写完成后，<b>保存 .env 文件</b>并重新运行 <code>start.bat</code>（或重启服务），即可开始对话。
+        </div>
+    </div>
+</div>
 
 <!-- 2. 登录弹窗（登录 + 注册） -->
 <div class="login-modal" id="loginModal">
@@ -326,6 +394,7 @@
 <script src="../static/js/skillsTool.js"></script>
 <script src="../static/js/fileAttachment.js"></script>
 <script src="../static/js/jobHunt.js"></script>
+<script src="../static/js/apiGuide.js"></script>
 <script src="../static/js/page_chat_initScrollToBottom.js"></script>
 
 </body>
