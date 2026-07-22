@@ -6,21 +6,43 @@ let isJobHuntMode = false;
 let selectedTemplateId = 'classic';
 let currentResume = '';
 
+// 下拉选项：value 用固定值（存库不随语言变），labelKey 用于显示翻译
+const GENDER_OPTS = [
+    { value: '', labelKey: 'opt_select' },
+    { value: '男', labelKey: 'opt_male' },
+    { value: '女', labelKey: 'opt_female' },
+];
+const EDUCATION_OPTS = [
+    { value: '', labelKey: 'opt_select' },
+    { value: '大专', labelKey: 'opt_edu_college' },
+    { value: '本科', labelKey: 'opt_edu_bachelor' },
+    { value: '硕士', labelKey: 'opt_edu_master' },
+    { value: '博士', labelKey: 'opt_edu_phd' },
+];
+const EXPERIENCE_OPTS = [
+    { value: '', labelKey: 'opt_select' },
+    { value: '在校/应届', labelKey: 'opt_exp_fresh' },
+    { value: '1-3年', labelKey: 'opt_exp_1_3' },
+    { value: '3-5年', labelKey: 'opt_exp_3_5' },
+    { value: '5-10年', labelKey: 'opt_exp_5_10' },
+];
+
+// labelKey / phKey 指向 i18n 字典，渲染时用 t() 取当前语言
 const PROFILE_FIELDS = [
-    { key: 'name', label: '姓名', type: 'text', placeholder: '张三' },
-    { key: 'gender', label: '性别', type: 'select', options: ['', '男', '女'] },
-    { key: 'age', label: '年龄', type: 'text', placeholder: '24' },
-    { key: 'education', label: '学历', type: 'select', options: ['', '大专', '本科', '硕士', '博士'] },
-    { key: 'major', label: '专业', type: 'text', placeholder: '计算机科学与技术' },
-    { key: 'school', label: '毕业院校', type: 'text', placeholder: 'XX大学' },
-    { key: 'experience_years', label: '工作年限', type: 'select', options: ['', '在校/应届', '1-3年', '3-5年', '5-10年'] },
-    { key: 'target_city', label: '期望城市', type: 'text', placeholder: '北京' },
-    { key: 'target_role', label: '期望岗位', type: 'text', placeholder: 'Java开发工程师' },
-    { key: 'skills', label: '技能标签', type: 'text', placeholder: 'Java,Spring Boot,MySQL', full: false },
-    { key: 'work_experience', label: '工作经历', type: 'textarea', full: true, placeholder: '公司、岗位、时间、主要工作内容…' },
-    { key: 'project_experience', label: '项目经历', type: 'textarea', full: true, placeholder: '项目名称、职责、技术栈、成果…' },
-    { key: 'self_intro', label: '自我评价', type: 'textarea', full: true, placeholder: '简要介绍优势与求职动机…' },
-    { key: 'preset_resume', label: '预设简历草稿（AI 将在此基础上完善）', type: 'textarea', full: true, placeholder: '可粘贴现有简历内容，AI 会自动润色补全…' },
+    { key: 'name', labelKey: 'f_name', type: 'text', phKey: 'ph_name' },
+    { key: 'gender', labelKey: 'f_gender', type: 'select', options: GENDER_OPTS },
+    { key: 'age', labelKey: 'f_age', type: 'text', phKey: 'ph_age' },
+    { key: 'education', labelKey: 'f_education', type: 'select', options: EDUCATION_OPTS },
+    { key: 'major', labelKey: 'f_major', type: 'text', phKey: 'ph_major' },
+    { key: 'school', labelKey: 'f_school', type: 'text', phKey: 'ph_school' },
+    { key: 'experience_years', labelKey: 'f_experience_years', type: 'select', options: EXPERIENCE_OPTS },
+    { key: 'target_city', labelKey: 'f_target_city', type: 'text', phKey: 'ph_target_city' },
+    { key: 'target_role', labelKey: 'f_target_role', type: 'text', phKey: 'ph_target_role' },
+    { key: 'skills', labelKey: 'f_skills', type: 'text', phKey: 'ph_skills', full: false },
+    { key: 'work_experience', labelKey: 'f_work_experience', type: 'textarea', full: true, phKey: 'ph_work_experience' },
+    { key: 'project_experience', labelKey: 'f_project_experience', type: 'textarea', full: true, phKey: 'ph_project_experience' },
+    { key: 'self_intro', labelKey: 'f_self_intro', type: 'textarea', full: true, phKey: 'ph_self_intro' },
+    { key: 'preset_resume', labelKey: 'f_preset_resume', type: 'textarea', full: true, phKey: 'ph_preset_resume' },
 ];
 
 function getProfileStorageKey() {
@@ -88,19 +110,26 @@ function renderProfileForm() {
     const container = document.getElementById('jobProfileForm');
     if (!container) return;
 
+    // 重新渲染前保留已填内容（语言切换时不丢数据）
+    const preserved = readProfileFromForm();
+
     container.innerHTML = PROFILE_FIELDS.map(field => {
         const fullClass = field.full ? 'job-field full-width' : 'job-field';
+        const ph = field.phKey ? t(field.phKey) : '';
         let inputHtml = '';
         if (field.type === 'select') {
             inputHtml = `<select id="jobField_${field.key}">${field.options.map(opt =>
-                `<option value="${opt}">${opt || '请选择'}</option>`).join('')}</select>`;
+                `<option value="${opt.value}">${t(opt.labelKey)}</option>`).join('')}</select>`;
         } else if (field.type === 'textarea') {
-            inputHtml = `<textarea id="jobField_${field.key}" placeholder="${field.placeholder || ''}"></textarea>`;
+            inputHtml = `<textarea id="jobField_${field.key}" placeholder="${ph}"></textarea>`;
         } else {
-            inputHtml = `<input id="jobField_${field.key}" type="text" placeholder="${field.placeholder || ''}">`;
+            inputHtml = `<input id="jobField_${field.key}" type="text" placeholder="${ph}">`;
         }
-        return `<div class="${fullClass}"><label for="jobField_${field.key}">${field.label}</label>${inputHtml}</div>`;
+        return `<div class="${fullClass}"><label for="jobField_${field.key}">${t(field.labelKey)}</label>${inputHtml}</div>`;
     }).join('');
+
+    // 回填保留的内容
+    fillProfileForm(preserved);
 }
 
 async function loadTemplates() {
@@ -127,7 +156,7 @@ async function loadTemplates() {
             });
         });
     } catch (err) {
-        grid.innerHTML = '<p class="job-status-tip error">模板加载失败</p>';
+        grid.innerHTML = `<p class="job-status-tip error">${t('js_template_fail')}</p>`;
     }
 }
 
@@ -164,10 +193,10 @@ async function loadUserProfile() {
 async function saveProfile() {
     const profile = readProfileFromForm();
     saveProfileLocal(profile);
-    setJobStatus('jobSaveStatus', '已保存到本地', 'success');
+    setJobStatus('jobSaveStatus', t('js_save_local'), 'success');
 
     if (!isLoggedIn()) {
-        setJobStatus('jobSaveStatus', '已保存到本地（登录后可同步云端）', 'success');
+        setJobStatus('jobSaveStatus', t('js_save_local_hint'), 'success');
         return;
     }
 
@@ -182,13 +211,13 @@ async function saveProfile() {
             }),
         });
         if (res.status === 401) {
-            setJobStatus('jobSaveStatus', '登录已过期，仅保存到本地', 'error');
+            setJobStatus('jobSaveStatus', t('js_save_expired'), 'error');
             return;
         }
         if (!res.ok) throw new Error('save failed');
-        setJobStatus('jobSaveStatus', '已同步到云端', 'success');
+        setJobStatus('jobSaveStatus', t('js_save_cloud'), 'success');
     } catch {
-        setJobStatus('jobSaveStatus', '云端同步失败，已保存到本地', 'error');
+        setJobStatus('jobSaveStatus', t('js_save_cloud_fail'), 'error');
     }
 }
 
@@ -197,7 +226,7 @@ function renderResumePreview(text) {
     if (!box) return;
     if (!text) {
         box.className = 'resume-preview empty';
-        box.innerHTML = '点击「AI 完善简历」生成专业简历';
+        box.innerHTML = t('job_resume_empty');
         return;
     }
     box.className = 'resume-preview';
@@ -207,22 +236,22 @@ function renderResumePreview(text) {
 async function generateResume() {
     const profile = readProfileFromForm();
     if (!profile.name && !profile.target_role && !profile.preset_resume) {
-        setJobStatus('jobResumeStatus', '请至少填写姓名、期望岗位或预设简历草稿', 'error');
+        setJobStatus('jobResumeStatus', t('js_need_resume_fields'), 'error');
         return;
     }
 
     const btn = document.getElementById('jobGenerateBtn');
     btn.disabled = true;
-    setJobStatus('jobResumeStatus', 'AI 正在完善简历，请稍候…');
+    setJobStatus('jobResumeStatus', t('js_generating'));
 
     try {
         const res = await fetch(`${config.API_BASE_URL}/ai/job/generate-resume`, {
             method: 'POST',
             headers: buildAuthHeaders(),
-            body: JSON.stringify({ profile, template_id: selectedTemplateId }),
+            body: JSON.stringify({ profile, template_id: selectedTemplateId, lang: typeof getLang === 'function' ? getLang() : 'zh' }),
         });
         if (res.status === 429) {
-            setJobStatus('jobResumeStatus', '免费次数已用完，请登录后继续使用', 'error');
+            setJobStatus('jobResumeStatus', t('js_gen_rate_limit'), 'error');
             return;
         }
         if (!res.ok) throw new Error('generate failed');
@@ -231,9 +260,9 @@ async function generateResume() {
         renderResumePreview(currentResume);
         saveProfileLocal(profile);
         updateStepTags(3);
-        setJobStatus('jobResumeStatus', '简历已生成', 'success');
+        setJobStatus('jobResumeStatus', t('js_resume_done'), 'success');
     } catch (err) {
-        setJobStatus('jobResumeStatus', '简历生成失败，请稍后重试', 'error');
+        setJobStatus('jobResumeStatus', t('js_resume_fail'), 'error');
         console.error(err);
     } finally {
         btn.disabled = false;
@@ -245,7 +274,7 @@ function renderJobCards(jobs) {
     if (!list) return;
 
     if (!jobs.length) {
-        list.innerHTML = '<p class="job-status-tip">暂无匹配岗位，请完善画像后重试</p>';
+        list.innerHTML = `<p class="job-status-tip">${t('js_no_jobs')}</p>`;
         return;
     }
 
@@ -254,7 +283,7 @@ function renderJobCards(jobs) {
             <div class="job-card-top">
                 <div class="job-card-title">
                     ${job.title}
-                    <span class="job-source-badge">${job.source || 'BOSS直聘'}</span>
+                    <span class="job-source-badge">${job.source || t('job_source_default')}</span>
                 </div>
                 <div class="job-card-salary">${job.salary}</div>
             </div>
@@ -268,7 +297,7 @@ function renderJobCards(jobs) {
                 ${(job.tags || []).map(tag => `<span class="job-tag">${tag}</span>`).join('')}
             </div>
             <div class="job-match">
-                <span class="job-match-score">匹配度 ${job.match_score}%</span>
+                <span class="job-match-score">${t('job_match_score')}${job.match_score}%</span>
                 <span class="job-match-reason">${job.match_reason || ''}</span>
             </div>
         </a>
@@ -278,13 +307,13 @@ function renderJobCards(jobs) {
 async function matchJobs() {
     const profile = readProfileFromForm();
     if (!profile.target_role && !profile.skills) {
-        setJobStatus('jobMatchStatus', '请填写期望岗位或技能标签', 'error');
+        setJobStatus('jobMatchStatus', t('js_need_match_fields'), 'error');
         return;
     }
 
     const btn = document.getElementById('jobMatchBtn');
     btn.disabled = true;
-    setJobStatus('jobMatchStatus', '正在匹配 BOSS 直聘岗位（虚拟数据）…');
+    setJobStatus('jobMatchStatus', t('js_matching'));
 
     try {
         const res = await fetch(`${config.API_BASE_URL}/ai/job/match`, {
@@ -296,16 +325,16 @@ async function matchJobs() {
             }),
         });
         if (res.status === 429) {
-            setJobStatus('jobMatchStatus', '免费次数已用完，请登录后继续使用', 'error');
+            setJobStatus('jobMatchStatus', t('js_match_rate_limit'), 'error');
             return;
         }
         if (!res.ok) throw new Error('match failed');
         const data = await res.json();
         renderJobCards(data.jobs || []);
         updateStepTags(4);
-        setJobStatus('jobMatchStatus', `已推荐 ${(data.jobs || []).length} 个对口岗位`, 'success');
+        setJobStatus('jobMatchStatus', `${t('js_match_done_1')}${(data.jobs || []).length}${t('js_match_done_2')}`, 'success');
     } catch (err) {
-        setJobStatus('jobMatchStatus', '岗位匹配失败，请稍后重试', 'error');
+        setJobStatus('jobMatchStatus', t('js_match_fail'), 'error');
         console.error(err);
     } finally {
         btn.disabled = false;
@@ -327,7 +356,7 @@ function enterJobHuntMode() {
     document.querySelectorAll('.history.title').forEach(el => el.classList.remove('active'));
     document.getElementById('jobHuntEntry')?.classList.add('active');
 
-    document.getElementById('chatSession').textContent = '找工作';
+    document.getElementById('chatSession').textContent = t('job_panel_title');
     document.querySelectorAll('#chatBox .message').forEach(el => el.remove());
     document.getElementById('emptyState')?.classList.add('hidden');
 
@@ -376,6 +405,16 @@ function initJobHunt() {
         currentResume = cached.resume_content || '';
     }
 }
+
+// 语言切换：重渲染表单（label/placeholder/下拉选项），并更新当前标题/预览
+document.addEventListener('langchange', () => {
+    renderProfileForm();
+    if (isJobHuntMode) {
+        const cs = document.getElementById('chatSession');
+        if (cs) cs.textContent = t('job_panel_title');
+        renderResumePreview(currentResume);
+    }
+});
 
 window.enterJobHuntMode = enterJobHuntMode;
 window.exitJobHuntMode = exitJobHuntMode;

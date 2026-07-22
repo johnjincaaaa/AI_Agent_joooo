@@ -14,12 +14,17 @@ searchBtn.addEventListener('click', () => {
     if (isNetEnabled) {
         searchBtn.classList.add('active');
         netStatus.classList.add('online');
-        netText.textContent = '已联网';
+        netText.textContent = t('net_on');
     } else {
         searchBtn.classList.remove('active');
         netStatus.classList.remove('online');
-        netText.textContent = '未联网';
+        netText.textContent = t('net_off');
     }
+});
+
+// 语言切换时，同步联网状态文案（静态 data-i18n 只处理默认“未联网”）
+document.addEventListener('langchange', () => {
+    netText.textContent = isNetEnabled ? t('net_on') : t('net_off');
 });
 
 

@@ -6,7 +6,7 @@ const modal = document.getElementById('loginModal');
 // 验证登录状态
 const isLogining = window.localStorage.getItem('token');
 if (isLogining) {
-    openBtn.textContent = '已登录';
+    openBtn.textContent = t('logged_in');
     // ✅ 核心：关闭按钮操作（禁用点击）
     openBtn.disabled = true;          // 禁用按钮（无法点击）
     openBtn.style.cursor = 'not-allowed'; // 鼠标变成禁止图标
@@ -18,8 +18,8 @@ if (isLogining) {
         console.log(r)
     });
 } else {
-    openBtn.textContent = '未登录';
-    showLoginExpiredModal('未登录,请登录！', 'error');
+    openBtn.textContent = t('not_logged_in');
+    showLoginExpiredModal(t('please_login'), 'error');
 }
 // 打开弹窗
 openBtn.onclick = () => {
@@ -39,8 +39,8 @@ document.querySelectorAll('.pwd-toggle-btn').forEach(btn => {
         const show = input.type === 'password';
         input.type = show ? 'text' : 'password';
         btn.classList.toggle('visible', show);
-        btn.setAttribute('aria-label', show ? '隐藏密码' : '显示密码');
-        btn.title = show ? '隐藏密码' : '显示密码';
+        btn.setAttribute('aria-label', show ? t('hide_pwd') : t('show_pwd'));
+        btn.title = show ? t('hide_pwd') : t('show_pwd');
     });
 });
 
@@ -68,11 +68,11 @@ document.getElementById('doLogin').onclick = async () => {
 
     // 2. 判空（空则中止）
     if (!username) {
-        alert('请输入用户名！');
+        alert(t('alert_need_username'));
         return;
     }
     if (!pwd) {
-        alert('请输入密码！');
+        alert(t('alert_need_pwd'));
         return;
     }
 
@@ -94,18 +94,18 @@ document.getElementById('doLogin').onclick = async () => {
             document.getElementById("userName").textContent = username;
 
             modal.style.display = 'none';
-            openBtn.textContent = '已登录';
+            openBtn.textContent = t('logged_in');
             window.location.reload();
             // 登录成功时初始化头像状态
             initUserProfile();
             // 登录成功时初始化历史会话记录
             await initHistory();
         } else {
-            alert('登录失败：' + (data.msg || '未知错误'));
+            alert(t('alert_login_fail') + (data.msg || t('unknown_error')));
         }
     } catch (err) {
         console.error(err);
-        alert('网络异常，登录请求失败！');
+        alert(t('alert_login_neterr'));
     }
 };
 
@@ -118,21 +118,21 @@ document.getElementById('doRegister').onclick = async () => {
 
     // 2. 判空（空则中止）
     if (!username) {
-        alert('请输入用户名！');
+        alert(t('alert_need_username'));
         return;
     }
     if (!pwd) {
-        alert('请输入密码！');
+        alert(t('alert_need_pwd'));
         return;
     }
     if (!repwd) {
-        alert('请确认密码！');
+        alert(t('alert_need_repwd'));
         return;
     }
 
     // 3. 两次密码不一致（中止）
     if (pwd !== repwd) {
-        alert('两次输入的密码不一致！');
+        alert(t('alert_pwd_mismatch'));
         return;
     }
 
@@ -148,14 +148,14 @@ document.getElementById('doRegister').onclick = async () => {
 
         // 5. 成功/失败判断
         if (data.code === 200) {
-            alert('注册成功！请登录');
+            alert(t('alert_reg_success'));
             tabs[0].click();
         } else {
-            alert('注册失败：' + (data.msg || '未知错误'));
+            alert(t('alert_reg_fail') + (data.msg || t('unknown_error')));
         }
     } catch (err) {
         console.error(err);
-        alert('网络异常，注册请求失败！');
+        alert(t('alert_reg_neterr'));
     }
 };
 
@@ -244,7 +244,7 @@ function initUserProfile() {
         avatarImg.src = "../static/a.png"; // 暂时先用默认头像
     } else {
         // 未登录状态：显示默认头像和“未登录”
-        userName.textContent = "未登录";
+        userName.textContent = t('not_logged_in');
         avatarImg.src = "/static/a.png";
     }
 }

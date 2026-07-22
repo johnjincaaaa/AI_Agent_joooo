@@ -42,7 +42,7 @@ function updateSkillsBtnLabel() {
     skillsBtn.classList.toggle('active', count > 0);
     const label = skillsBtn.querySelector('.skills-btn-label');
     if (label) {
-        label.textContent = count > 0 ? `技能 · ${count}` : '技能';
+        label.textContent = count > 0 ? `${t('skills_btn')} · ${count}` : t('skills_btn');
     }
 }
 
@@ -51,7 +51,7 @@ function renderSkillsList(skills) {
     skillsList.innerHTML = '';
 
     if (!skills.length) {
-        skillsList.innerHTML = '<div class="skills-empty">暂无可用技能</div>';
+        skillsList.innerHTML = `<div class="skills-empty">${t('skills_empty')}</div>`;
         return;
     }
 
@@ -89,27 +89,44 @@ function toggleSkill(skillId, itemEl) {
     updateSkillsBtnLabel();
 }
 
-const FALLBACK_SKILLS = [
-    {
-        id: 'image_parsing',
-        name: '图片解析',
-        description: '分析图片内容、尺寸、格式等属性',
-        icon: 'image',
-    },
-    {
-        id: 'document_parsing',
-        name: '文档解析',
-        description: '读取 PDF、Word、TXT 文件内容',
-        icon: 'document',
-    },
-];
+function buildFallbackSkills() {
+    return [
+        {
+            id: 'image_parsing',
+            name: t('skill_image_name'),
+            description: t('skill_image_desc'),
+            icon: 'image',
+        },
+        {
+            id: 'document_parsing',
+            name: t('skill_doc_name'),
+            description: t('skill_doc_desc'),
+            icon: 'document',
+        },
+    ];
+}
+
+// 已知内置技能的本地化映射（后端返回的这两个技能名也随语言切换）
+const SKILL_I18N = {
+    image_parsing: { name: 'skill_image_name', desc: 'skill_image_desc' },
+    document_parsing: { name: 'skill_doc_name', desc: 'skill_doc_desc' },
+};
+
+function localizeSkill(skill) {
+    const map = SKILL_I18N[skill.id];
+    if (!map) return skill;
+    return { ...skill, name: t(map.name), description: t(map.desc) };
+}
+
+// 记住最近一次技能目录，语言切换时重新渲染
+let lastSkills = [];
 
 function mergeSkills(apiSkills) {
     const map = new Map();
-    [...FALLBACK_SKILLS, ...(apiSkills || [])].forEach(skill => {
+    [...buildFallbackSkills(), ...(apiSkills || [])].forEach(skill => {
         map.set(skill.id, skill);
     });
-    return [...map.values()];
+    return [...map.values()].map(localizeSkill);
 }
 
 async function loadSkillsCatalog() {
@@ -117,10 +134,12 @@ async function loadSkillsCatalog() {
         const res = await fetch(`${config.API_BASE_URL}/ai/skills`);
         if (!res.ok) throw new Error('fetch skills failed');
         const data = await res.json();
-        renderSkillsList(mergeSkills(data.skills || []));
+        lastSkills = mergeSkills(data.skills || []);
+        renderSkillsList(lastSkills);
     } catch (err) {
         console.error('加载技能列表失败：', err);
-        renderSkillsList(FALLBACK_SKILLS);
+        lastSkills = buildFallbackSkills().map(localizeSkill);
+        renderSkillsList(lastSkills);
     }
     updateSkillsBtnLabel();
 }
@@ -154,6 +173,13 @@ if (skillsBtn && skillsDropdown) {
 
     loadSkillsCatalog();
 }
+
+// 语言切换时重新渲染技能名与按钮标签
+document.addEventListener('langchange', () => {
+    lastSkills = lastSkills.map(localizeSkill);
+    renderSkillsList(lastSkills);
+    updateSkillsBtnLabel();
+});
 
 window.getEnabledSkills = getEnabledSkills;
 window.enableSkill = enableSkill;

@@ -79,10 +79,10 @@ async function sendMessage() {
             clearPendingAttachments();
         } catch (uploadErr) {
             if (uploadErr.message === 'RATE_LIMIT') {
-                addMessage("未登录用户免费体验次数已用完，请注册或登录后继续使用", "ai");
-                showLoginExpiredModal("🔐 免费体验次数已用完，请注册或登录！", "error");
+                addMessage(t('rate_limit_msg'), "ai");
+                showLoginExpiredModal(t('rate_limit_modal'), "error");
             } else {
-                addMessage(uploadErr.message || "文件上传失败，请重试", "ai");
+                addMessage(uploadErr.message || t('upload_fail'), "ai");
             }
             return;
         }
@@ -119,7 +119,8 @@ async function sendMessage() {
                 open_online: isOnline,
                 enabled_skills: typeof getEnabledSkills === 'function' ? getEnabledSkills() : [],
                 image_paths: imagePaths,
-                document_paths: documentPaths
+                document_paths: documentPaths,
+                lang: typeof getLang === 'function' ? getLang() : 'zh'
             }),
             signal: signal
         });
@@ -127,13 +128,13 @@ async function sendMessage() {
         if (response.status === 429) {
             currentAiMessageDiv.remove();
             const errData = await response.json();
-            addMessage(parseApiErrorMessage(errData, "未登录用户免费体验次数已用完，请注册或登录后继续使用"), "ai");
-            showLoginExpiredModal("🔐 免费体验次数已用完，请注册或登录！", "error");
+            addMessage(parseApiErrorMessage(errData, t('rate_limit_msg')), "ai");
+            showLoginExpiredModal(t('rate_limit_modal'), "error");
             return;
         }
         if (!response.ok) {
             currentAiMessageDiv.remove();
-            addMessage("AI出错了，请检查API Key", "ai");
+            addMessage(t('ai_error_key'), "ai");
             return;
         }
 
@@ -176,7 +177,7 @@ async function sendMessage() {
             }
         }
 
-        if (chatSession.textContent.trim() === "新对话") {
+        if (chatSession.textContent.trim() === t('new_session')) {
 
             div = document.createElement("div");
             div.title = String(new Date().getTime());
@@ -206,7 +207,7 @@ async function sendMessage() {
                 renderHistoryChat(chatData);
                 document.getElementById('emptyState')?.classList.toggle('hidden', chatData.length > 0);
             });
-            if (chatSession.textContent.trim() !== "新对话") {
+            if (chatSession.textContent.trim() !== t('new_session')) {
                 const firstHistoryItem = sideBar.querySelector('.history.title');
                 if (firstHistoryItem) {
                     sideBar.insertBefore(div, firstHistoryItem);
@@ -286,7 +287,7 @@ async function sendMessage() {
             console.log("✅ 手动停止输出");
             return;
         }
-        addMessage("AI出错了，请检查API Key", "ai");
+        addMessage(t('ai_error_key'), "ai");
         console.error(err);
 
     } finally {
@@ -298,7 +299,7 @@ async function sendMessage() {
         isSending = false;
         sendMessage_ele.disabled = false;
         sendMessage_ele.textContent = "➤";
-        if (chatSession.textContent.trim() !== "新对话") {
+        if (chatSession.textContent.trim() !== t('new_session')) {
             window.localStorage.setItem(window.localStorage.getItem('thisSessionTime'), JSON.stringify(chatData));
             await postToDb(chatData, window.localStorage.getItem('thisSessionTime'), chatSession.textContent);
         }
@@ -322,13 +323,13 @@ async function generateTitleFromTwoRounds(dialogue) {
         })
     });
     if (res.status === 429) {
-        return '新对话';
+        return t('new_session');
     }
     if (res.status === 200) {
         let resJson = await res.json();
         return resJson.content;
     } else {
-        return '新对话'
+        return t('new_session')
     }
 
 }
@@ -420,7 +421,7 @@ function createNewSession() {
     document.querySelectorAll("#chatBox .message").forEach(el => el.remove());
     chatData = [];
     div = null;
-    chatSession.textContent = '新对话';
+    chatSession.textContent = t('new_session');
     document.getElementById('emptyState')?.classList.remove('hidden');
     const histories = document.querySelectorAll('.history');
     histories.forEach(h => {

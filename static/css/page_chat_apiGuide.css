@@ -1,4 +1,30 @@
 /* ==========================================================
+   语言切换按钮（logo 旁）
+========================================================== */
+.brand .brand-name {
+    flex: 1 1 auto;
+}
+.lang-toggle-btn {
+    flex-shrink: 0;
+    min-width: 34px;
+    padding: 3px 9px;
+    font-size: 12px;
+    font-weight: 700;
+    letter-spacing: 0.5px;
+    color: var(--text-secondary);
+    background: var(--bg-elevated);
+    border: 1px solid var(--border-strong);
+    border-radius: 100px;
+    cursor: pointer;
+    transition: color 0.2s ease, background 0.2s ease, border-color 0.2s ease;
+}
+.lang-toggle-btn:hover {
+    color: var(--accent);
+    border-color: var(--accent);
+    background: var(--accent-soft);
+}
+
+/* ==========================================================
    API 接入教程 · 按钮 + 弹窗（深色磨砂，与登录弹窗风格一致）
 ========================================================== */
 .guide-btn {

@@ -102,6 +102,7 @@ class ChatRequest(BaseModel):
     enabled_skills: List[str] = []  # 前端选中的技能 id 列表
     image_paths: List[str] = []  # 用户粘贴/上传图片的服务端路径
     document_paths: List[str] = []  # 用户上传文档的服务端路径
+    lang: str = "zh"  # 界面语言，AI 回复语言随之切换（zh / en）
 
 
 def augment_message_with_attachments(
@@ -175,6 +176,13 @@ def _save_upload_file(content: bytes, filename: str, suffix: str) -> Path:
     save_path = UPLOAD_DIR / save_name
     save_path.write_bytes(content)
     return save_path
+
+
+def build_system_prompt(lang: str = "zh") -> str:
+    """根据界面语言返回系统提示词，控制 AI 回复语言。"""
+    if (lang or "zh").lower().startswith("en"):
+        return "You are a helpful assistant. Always respond in English."
+    return SYSTEM_PROMPT
 
 
 def build_tool_list(open_online: bool, enabled_skills: Optional[List[str]] = None):
@@ -282,7 +290,7 @@ async def chat_stream(
 
     agent = create_agent(
         model=model,
-        system_prompt=SYSTEM_PROMPT,
+        system_prompt=build_system_prompt(chat_request.lang),
         tools=tool_list,
     )
 
@@ -367,7 +375,7 @@ def ai_chat(
     )
     agent = create_agent(
         model=model,
-        system_prompt=SYSTEM_PROMPT,
+        system_prompt=build_system_prompt(chat_request.lang),
         tools=tool_list,
     )
 
@@ -554,6 +562,7 @@ class JobProfileSaveRequest(BaseModel):
 class JobGenerateResumeRequest(BaseModel):
     profile: JobProfilePayload
     template_id: str = "classic"
+    lang: str = "zh"
 
 
 class JobMatchRequest(BaseModel):
@@ -628,7 +637,23 @@ def generate_job_resume(
     profile = request.profile.model_dump()
     preset = profile.get("preset_resume") or ""
 
-    prompt = f"""你是一名专业简历顾问。请根据以下个人画像和预设简历草稿，按「{template_name}」风格输出一份完整、专业、可直接投递的中文简历。
+    if (request.lang or "zh").lower().startswith("en"):
+        prompt = f"""You are a professional resume consultant. Based on the profile and draft below, produce a complete, professional, ready-to-submit English resume in the "{template_name}" style.
+
+Requirements:
+1. Use Markdown format with a clear structure (Basic Info, Objective, Education, Work/Project Experience, Skills, Summary)
+2. Polish, complete and quantify achievements based on the draft; do not fabricate experience that clearly contradicts the profile
+3. Keep the language concise and professional, suitable for job platforms
+4. Output only the resume body, no extra explanation
+
+[Profile]
+{json.dumps(profile, ensure_ascii=False, indent=2)}
+
+[Resume Draft]
+{preset or "(No draft, please generate from the profile)"}
+"""
+    else:
+        prompt = f"""你是一名专业简历顾问。请根据以下个人画像和预设简历草稿，按「{template_name}」风格输出一份完整、专业、可直接投递的中文简历。
 
 要求：
 1. 使用 Markdown 格式，结构清晰（基本信息、求职意向、教育背景、工作/项目经历、技能、自我评价）

@@ -17,8 +17,8 @@
 <body>
 
 <!-- 1. 右上角按钮组：接入教程 + 登录 -->
-<button class="guide-btn" id="openGuideBtn" title="如何接入 AI 大模型 API">接入教程</button>
-<button class="login-btn" id="openLoginBtn">登录</button>
+<button class="guide-btn" id="openGuideBtn" data-i18n="guide_btn" title="如何接入 AI 大模型 API">接入教程</button>
+<button class="login-btn" id="openLoginBtn" data-i18n="login">登录</button>
 
 <!-- API 接入教程弹窗 -->
 <div class="guide-modal" id="guideModal">
@@ -97,26 +97,26 @@ LLM_API_KEY=ollama</pre>
             <div class="modal-logo">
                 <img src="../static/a.png" alt="有料ai">
             </div>
-            <div class="modal-title">欢迎使用 有料ai</div>
-            <div class="modal-subtitle">登录后即可保存你的对话历史</div>
+            <div class="modal-title" data-i18n="modal_welcome">欢迎使用 有料ai</div>
+            <div class="modal-subtitle" data-i18n="modal_subtitle">登录后即可保存你的对话历史</div>
         </div>
 
         <!-- 选项卡：登录 / 注册 -->
         <div class="tab-box">
-            <span class="tab active" data-tab="login">登录</span>
-            <span class="tab" data-tab="register">注册</span>
+            <span class="tab active" data-tab="login" data-i18n="tab_login">登录</span>
+            <span class="tab" data-tab="register" data-i18n="tab_register">注册</span>
         </div>
 
         <!-- 登录表单 -->
         <div class="form-box show" id="loginForm">
             <div class="input-item">
-                <label for="login_username">用户名</label>
-                <input type="text" id="login_username" placeholder="请输入用户名">
+                <label for="login_username" data-i18n="label_username">用户名</label>
+                <input type="text" id="login_username" data-i18n-ph="ph_login_username" placeholder="请输入用户名">
             </div>
             <div class="input-item">
-                <label for="login_pwd">密码</label>
+                <label for="login_pwd" data-i18n="label_password">密码</label>
                 <div class="password-field">
-                    <input type="password" id="login_pwd" placeholder="请输入密码">
+                    <input type="password" id="login_pwd" data-i18n-ph="ph_login_pwd" placeholder="请输入密码">
                     <button type="button" class="pwd-toggle-btn" data-target="login_pwd" aria-label="显示密码" title="显示密码">
                         <svg class="icon-eye-open" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                             <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path>
@@ -130,19 +130,19 @@ LLM_API_KEY=ollama</pre>
                     </button>
                 </div>
             </div>
-            <button class="submit-btn" id="doLogin">立即登录</button>
+            <button class="submit-btn" id="doLogin" data-i18n="btn_do_login">立即登录</button>
         </div>
 
         <!-- 注册表单 -->
         <div class="form-box" id="registerForm">
             <div class="input-item">
-                <label for="reg_username">用户名</label>
-                <input type="text" id="reg_username" placeholder="请设置用户名">
+                <label for="reg_username" data-i18n="label_username">用户名</label>
+                <input type="text" id="reg_username" data-i18n-ph="ph_reg_username" placeholder="请设置用户名">
             </div>
             <div class="input-item">
-                <label for="reg_pwd">密码</label>
+                <label for="reg_pwd" data-i18n="label_password">密码</label>
                 <div class="password-field">
-                    <input type="password" id="reg_pwd" placeholder="请设置密码">
+                    <input type="password" id="reg_pwd" data-i18n-ph="ph_reg_pwd" placeholder="请设置密码">
                     <button type="button" class="pwd-toggle-btn" data-target="reg_pwd" aria-label="显示密码" title="显示密码">
                         <svg class="icon-eye-open" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                             <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path>
@@ -157,9 +157,9 @@ LLM_API_KEY=ollama</pre>
                 </div>
             </div>
             <div class="input-item">
-                <label for="reg_repwd">确认密码</label>
+                <label for="reg_repwd" data-i18n="label_repassword">确认密码</label>
                 <div class="password-field">
-                    <input type="password" id="reg_repwd" placeholder="请再次输入密码">
+                    <input type="password" id="reg_repwd" data-i18n-ph="ph_reg_repwd" placeholder="请再次输入密码">
                     <button type="button" class="pwd-toggle-btn" data-target="reg_repwd" aria-label="显示密码" title="显示密码">
                         <svg class="icon-eye-open" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                             <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path>
@@ -173,7 +173,7 @@ LLM_API_KEY=ollama</pre>
                     </button>
                 </div>
             </div>
-            <button class="submit-btn" id="doRegister">立即注册</button>
+            <button class="submit-btn" id="doRegister" data-i18n="btn_do_register">立即注册</button>
         </div>
     </div>
 </div>
@@ -184,17 +184,18 @@ LLM_API_KEY=ollama</pre>
         <div class="sidebar" id="sideBar">
             <div class="brand">
                 <span class="brand-mark"></span>
-                <span class="brand-name">有料ai</span>
+                <span class="brand-name" data-i18n="brand_name">有料ai</span>
+                <button class="lang-toggle-btn" id="langToggleBtn" data-i18n-title="lang_toggle_title" title="切换中/英文">EN</button>
             </div>
-            <div class="sidebar-section-label">找工作</div>
+            <div class="sidebar-section-label" data-i18n="sidebar_jobhunt_section">找工作</div>
             <div class="sidebar-nav-item" id="jobHuntEntry" title="简历制作与岗位推荐">
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                     <rect x="2" y="7" width="20" height="14" rx="2" ry="2"></rect>
                     <path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"></path>
                 </svg>
-                简历制作 · 岗位推荐
+                <span data-i18n="jobhunt_entry">简历制作 · 岗位推荐</span>
             </div>
-            <div class="history">历史会话</div>
+            <div class="history" data-i18n="history_label">历史会话</div>
             <!--
             <div title="1779986166533" class="history title">我是历史记录下的标签</div>
             -->
@@ -225,7 +226,7 @@ LLM_API_KEY=ollama</pre>
                         <polyline points="16 17 21 12 16 7"></polyline>
                         <line x1="21" y1="12" x2="9" y2="12"></line>
                     </svg>
-                    <span>退出登录</span>
+                    <span data-i18n="logout">退出登录</span>
                 </div>
             </div>
         </div>
@@ -235,7 +236,7 @@ LLM_API_KEY=ollama</pre>
     <div class="chat-whole">
         <div class="chat-box-title" id="chatBoxTitle">
             <div class="title-tools">
-                <button class="fold-btn" onclick="foldHistorySession()" title="折叠/展开侧边栏"
+                <button class="fold-btn" onclick="foldHistorySession()" data-i18n-title="fold_title" title="折叠/展开侧边栏"
                         aria-label="折叠/展开侧边栏">
                     <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
                          stroke-linecap="round">
@@ -245,7 +246,7 @@ LLM_API_KEY=ollama</pre>
                     </svg>
                 </button>
 
-                <button class="new-btn" onclick="createNewSession()" title="新建对话" aria-label="新建对话">
+                <button class="new-btn" onclick="createNewSession()" data-i18n-title="new_chat_title" title="新建对话" aria-label="新建对话">
                     <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
                          stroke-linecap="round">
                         <line x1="12" y1="5" x2="12" y2="19"></line>
@@ -253,7 +254,7 @@ LLM_API_KEY=ollama</pre>
                     </svg>
                 </button>
             </div>
-            <div class="chat-session" id="chatSession">新对话</div>
+            <div class="chat-session" id="chatSession" data-i18n="new_session">新对话</div>
         </div>
 
         <div class="chat-box" id="chatBox">
@@ -261,8 +262,8 @@ LLM_API_KEY=ollama</pre>
                 <div class="empty-logo">
                     <img src="../static/a.png" alt="有料ai">
                 </div>
-                <div class="empty-title">我是有料ai，有什么可以帮你？</div>
-                <div class="empty-desc">输入你的问题，开启一段新的对话</div>
+                <div class="empty-title" data-i18n="empty_title">我是有料ai，有什么可以帮你？</div>
+                <div class="empty-desc" data-i18n="empty_desc">输入你的问题，开启一段新的对话</div>
             </div>
             <!--        <div class="message user"></div>-->
             <!--        <div class="message ai"></div>-->
@@ -270,47 +271,47 @@ LLM_API_KEY=ollama</pre>
 
         <div class="job-hunt-panel hidden" id="jobHuntPanel">
             <div class="job-panel-header">
-                <h2>找工作</h2>
-                <p>完善个人画像 → 选择简历模板 → AI 生成简历 → 匹配 BOSS 直聘对口岗位（当前为虚拟数据）</p>
+                <h2 data-i18n="job_panel_title">找工作</h2>
+                <p data-i18n="job_panel_desc">完善个人画像 → 选择简历模板 → AI 生成简历 → 匹配 BOSS 直聘对口岗位（当前为虚拟数据）</p>
             </div>
 
             <div class="job-steps">
-                <span class="job-step-tag active">① 个人画像</span>
-                <span class="job-step-tag">② 简历模板</span>
-                <span class="job-step-tag">③ AI 简历</span>
-                <span class="job-step-tag">④ 岗位推荐</span>
+                <span class="job-step-tag active" data-i18n="job_step_1">① 个人画像</span>
+                <span class="job-step-tag" data-i18n="job_step_2">② 简历模板</span>
+                <span class="job-step-tag" data-i18n="job_step_3">③ AI 简历</span>
+                <span class="job-step-tag" data-i18n="job_step_4">④ 岗位推荐</span>
             </div>
 
             <section class="job-section">
-                <div class="job-section-title"><span class="num">1</span>个人画像</div>
+                <div class="job-section-title"><span class="num">1</span><span data-i18n="job_section_1">个人画像</span></div>
                 <div class="job-form-grid" id="jobProfileForm"></div>
                 <div class="job-actions">
-                    <button type="button" class="job-btn job-btn-secondary" id="jobSaveProfileBtn">保存画像</button>
+                    <button type="button" class="job-btn job-btn-secondary" id="jobSaveProfileBtn" data-i18n="job_save_profile">保存画像</button>
                 </div>
                 <div class="job-status-tip" id="jobSaveStatus"></div>
             </section>
 
             <section class="job-section">
-                <div class="job-section-title"><span class="num">2</span>挑选简历模板</div>
+                <div class="job-section-title"><span class="num">2</span><span data-i18n="job_section_2">挑选简历模板</span></div>
                 <div class="template-grid" id="jobTemplateGrid"></div>
             </section>
 
             <section class="job-section">
-                <div class="job-section-title"><span class="num">3</span>AI 完善简历</div>
-                <div class="resume-preview empty" id="jobResumePreview">点击「AI 完善简历」生成专业简历</div>
+                <div class="job-section-title"><span class="num">3</span><span data-i18n="job_section_3">AI 完善简历</span></div>
+                <div class="resume-preview empty" id="jobResumePreview" data-i18n="job_resume_empty">点击「AI 完善简历」生成专业简历</div>
                 <div class="job-actions">
-                    <button type="button" class="job-btn job-btn-primary" id="jobGenerateBtn">AI 完善简历</button>
+                    <button type="button" class="job-btn job-btn-primary" id="jobGenerateBtn" data-i18n="job_generate_btn">AI 完善简历</button>
                 </div>
                 <div class="job-status-tip" id="jobResumeStatus"></div>
             </section>
 
             <section class="job-section">
-                <div class="job-section-title"><span class="num">4</span>对口岗位推荐</div>
+                <div class="job-section-title"><span class="num">4</span><span data-i18n="job_section_4">对口岗位推荐</span></div>
                 <div class="job-list" id="jobRecommendList">
-                    <p class="job-status-tip">完成画像与简历后，点击匹配推荐岗位</p>
+                    <p class="job-status-tip" data-i18n="job_match_default">完成画像与简历后，点击匹配推荐岗位</p>
                 </div>
                 <div class="job-actions">
-                    <button type="button" class="job-btn job-btn-primary" id="jobMatchBtn">匹配推荐岗位</button>
+                    <button type="button" class="job-btn job-btn-primary" id="jobMatchBtn" data-i18n="job_match_btn">匹配推荐岗位</button>
                 </div>
                 <div class="job-status-tip" id="jobMatchStatus"></div>
             </section>
@@ -331,54 +332,54 @@ LLM_API_KEY=ollama</pre>
                 <!-- 嵌套输入框 + 按钮 -->
                 <div class="input-inner">
                     <label for="userInput" class="sr-only">输入你的问题</label>
-                    <textarea id="userInput" placeholder="输入问题，可粘贴图片/文档或点击附件上传..." autocomplete="off"></textarea>
-                    <button onclick="sendMessage()" id="sendMessage" class="button-send" aria-label="发送">➤</button>
+                    <textarea id="userInput" data-i18n-ph="input_placeholder" placeholder="输入问题，可粘贴图片/文档或点击附件上传..." autocomplete="off"></textarea>
+                    <button onclick="sendMessage()" id="sendMessage" class="button-send" data-i18n-title="send_title" aria-label="发送">➤</button>
                 </div>
 
                 <!-- 底部工具栏：智能搜索 + 技能 + 联网标识 -->
                 <div class="input-toolbar">
                     <div class="left-tools">
-                        <button class="tool-btn attach-btn" id="attachBtn" type="button" title="上传图片或文档">
+                        <button class="tool-btn attach-btn" id="attachBtn" type="button" data-i18n-title="attach_title" title="上传图片或文档">
                             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                                 <path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"></path>
                             </svg>
-                            附件
+                            <span data-i18n="attach_btn">附件</span>
                         </button>
                         <input type="file" id="fileInput" hidden multiple
                                accept=".pdf,.doc,.docx,.txt,image/jpeg,image/png,image/gif,image/webp,image/bmp">
                         <div class="skills-wrap" id="skillsWrap">
-                            <button class="tool-btn skills-btn" id="skillsBtn" type="button" data-tip="选择 AI 技能工具链">
+                            <button class="tool-btn skills-btn" id="skillsBtn" type="button" data-i18n-tip="skills_tip" data-tip="选择 AI 技能工具链">
                                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                                     <rect x="3" y="3" width="7" height="7" rx="1"></rect>
                                     <rect x="14" y="3" width="7" height="7" rx="1"></rect>
                                     <rect x="3" y="14" width="7" height="7" rx="1"></rect>
                                     <rect x="14" y="14" width="7" height="7" rx="1"></rect>
                                 </svg>
-                                <span class="skills-btn-label">技能</span>
+                                <span class="skills-btn-label" data-i18n="skills_btn">技能</span>
                             </button>
                             <div class="skills-dropdown" id="skillsDropdown">
-                                <div class="skills-dropdown-title">选择技能</div>
+                                <div class="skills-dropdown-title" data-i18n="skills_dropdown_title">选择技能</div>
                                 <div class="skills-list" id="skillsList"></div>
                             </div>
                         </div>
-                        <button class="tool-btn tooltip" id="searchBtn" data-tip="按需搜索网页">
+                        <button class="tool-btn tooltip" id="searchBtn" data-i18n-tip="online_tip" data-tip="按需搜索网页">
                             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor"
                                  stroke-width="2">
                                 <circle cx="11" cy="11" r="8"></circle>
                                 <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
                             </svg>
-                            智能联网
+                            <span data-i18n="online_btn">智能联网</span>
                         </button>
                     </div>
                     <div class="right-status">
-                        <div class="net-status" id="netStatus" title="智能体是否基于网络回答">
+                        <div class="net-status" id="netStatus" data-i18n-title="net_status_title" title="智能体是否基于网络回答">
                             <span class="net-dot"></span>
-                            <span class="net-text">未联网</span>
+                            <span class="net-text" data-i18n="net_off">未联网</span>
                         </div>
                     </div>
                 </div>
             </div>
-            <div class="input-tip">内容由 AI 生成，请注意甄别</div>
+            <div class="input-tip" data-i18n="input_tip">内容由 AI 生成，请注意甄别</div>
         </div>
 
 
@@ -386,8 +387,9 @@ LLM_API_KEY=ollama</pre>
 </div>
 
 
-<script src="../static/js/showLoginExpiredModal.js"></script>
 <script src="../static/js/config.js"></script>
+<script src="../static/js/i18n.js"></script>
+<script src="../static/js/showLoginExpiredModal.js"></script>
 <script src="../static/js/page_chat.js"></script>
 <script src="../static/js/LoginRegister.js"></script>
 <script src="../static/js/inputTool.js"></script>
