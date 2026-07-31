@@ -27,12 +27,13 @@ EXCLUDE_FILES = {
     "make_release.bat",
     "tools/tt.py",
     "tools/ttt.py",
+    ".gitignore",
     "欧锦财-Agent开发简历.md",
     "欧锦财-爬虫方向开发 .pdf",
 }
 
-# 需要排除的文件后缀
-EXCLUDE_SUFFIXES = (".pyc", ".db")
+# 需要排除的文件后缀（个人截图/图片素材等）
+EXCLUDE_SUFFIXES = (".pyc", ".db", ".jpg", ".jpeg")
 
 
 def should_skip_file(rel_path):
@@ -47,8 +48,13 @@ def should_skip_file(rel_path):
 def main():
     if os.path.exists(DEST):
         print("[提示] 检测到已存在的 release 目录，正在清空重建...")
-        shutil.rmtree(DEST)
-    os.makedirs(DEST)
+        try:
+            shutil.rmtree(DEST)
+        except OSError as e:
+            # release 里有文件被占用（如在编辑器/资源管理器中打开），
+            # 无法整目录删除时，退化为“逐文件覆盖同步”，不影响结果。
+            print("[提示] release 目录被占用，改为逐文件覆盖同步：%s" % e)
+    os.makedirs(DEST, exist_ok=True)
 
     copied = 0
     for cur_dir, dir_names, file_names in os.walk(ROOT):
