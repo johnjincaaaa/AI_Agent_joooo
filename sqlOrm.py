@@ -130,6 +130,25 @@ class DownloadClick(Base):
     created_at = Column(DateTime, default=datetime.now, index=True)
 
 
+# ======================
+# 签到记录表（用户留存）
+# ======================
+class CheckInRecord(Base):
+    __tablename__ = "checkin_records"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), index=True, nullable=False)
+    checkin_date = Column(String(10), nullable=False, index=True)  # YYYY-MM-DD
+    reward_amount = Column(Float, default=0.0, nullable=False)     # 本次签到奖励金额（元）
+    reward_days = Column(Integer, default=0, nullable=False)        # 本次签到奖励会员天数
+    streak_days = Column(Integer, default=1, nullable=False)        # 连续签到天数
+    created_at = Column(DateTime, default=datetime.now)
+
+    __table_args__ = (
+        UniqueConstraint("user_id", "checkin_date", name="uq_user_checkin_date"),
+    )
+
+
 # 配置默认值（seed 时仅补齐缺失的 key，不覆盖已有值）
 PROMO_CONFIG_DEFAULTS = {
     # 分享弹窗介绍文案
@@ -146,6 +165,18 @@ PROMO_CONFIG_DEFAULTS = {
     "tier_threshold": "5",
     "tier_bonus": "20",
     "tier_membership_days": "-1",   # -1 表示永久
+    # ===== 风控规则 =====
+    "risk_ip_daily_limit": "10",           # 同一 IP 每日最多计多少次有效推广（防刷）
+    "risk_withdraw_min": "10",             # 最低提现门槛（元）
+    "risk_reward_freeze_hours": "24",      # 推广奖励冻结时长（小时），冻结期间不可提现
+    "risk_new_user_withdraw_hours": "48",  # 新注册用户多少小时内不可提现
+    # ===== 签到奖励（用户留存） =====
+    "checkin_enabled": "1",                 # 签到功能开关
+    "checkin_reward_amount": "0.2",         # 每日签到基础奖励（元）
+    "checkin_reward_days": "1",             # 每日签到赠送会员天数
+    "checkin_streak_bonus_3": "0.5",        # 连续签到 3 天额外奖励
+    "checkin_streak_bonus_7": "2",          # 连续签到 7 天额外奖励
+    "checkin_streak_bonus_30": "10",        # 连续签到 30 天额外奖励
     # 开关
     "promo_enabled": "1",
     "input_promo_enabled": "1",

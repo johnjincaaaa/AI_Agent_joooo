@@ -272,7 +272,26 @@ async function sendMessage() {
 
     const currentAiMessageDiv = document.createElement("div");
     currentAiMessageDiv.className = "message ai";
+    // 删除按钮
+    const aiDelBtn = document.createElement("button");
+    aiDelBtn.className = "msg-delete-btn";
+    aiDelBtn.innerHTML = "×";
+    aiDelBtn.title = t('chat_delete');
+    aiDelBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        deleteSingleMessage(currentAiMessageDiv, chatData.length - 1);
+    });
+    currentAiMessageDiv.appendChild(aiDelBtn);
+    // AI 消息内容 div
+    const aiContentDiv = document.createElement("div");
+    aiContentDiv.className = "msg-content";
+    currentAiMessageDiv.appendChild(aiContentDiv);
     box.appendChild(currentAiMessageDiv);
+    // 打字指示器
+    const typingDiv = document.createElement("div");
+    typingDiv.className = "typing-indicator";
+    typingDiv.innerHTML = `<span class="typing-dot"></span><span class="typing-dot"></span><span class="typing-dot"></span><span class="typing-text" data-i18n="typing_indicator">${t('typing_indicator')}</span>`;
+    aiContentDiv.appendChild(typingDiv);
     let aiFullReply = "";
 
 
@@ -291,7 +310,8 @@ async function sendMessage() {
                 enabled_skills: typeof getEnabledSkills === 'function' ? getEnabledSkills() : [],
                 image_paths: imagePaths,
                 document_paths: documentPaths,
-                lang: typeof getLang === 'function' ? getLang() : 'zh'
+                lang: typeof getLang === 'function' ? getLang() : 'zh',
+                scene: currentScene
             }),
             signal: signal
         });
@@ -354,8 +374,12 @@ async function sendMessage() {
                 }
                 // 流式输出文字
                 aiFullReply += data;
-                currentAiMessageDiv.innerHTML = renderMarkdown(aiFullReply);
+                if (typingDiv && typingDiv.parentNode) {
+                    typingDiv.remove();
+                }
+                aiContentDiv.innerHTML = renderMarkdown(aiFullReply);
                 box.scrollTop = box.scrollHeight;
+                enhanceCodeBlocks(aiContentDiv);
             }
         }
 
@@ -369,9 +393,25 @@ async function sendMessage() {
 
             chatSession.textContent = aiGenerateContent;
             div.className = `history title active`;
-            div.textContent = aiGenerateContent;
+
+            // 会话名称 + 操作按钮
+            const nameSpan = document.createElement("span");
+            nameSpan.className = "history-name";
+            nameSpan.textContent = aiGenerateContent;
+            div.appendChild(nameSpan);
+
+            const moreBtn = document.createElement("button");
+            moreBtn.className = "history-more-btn";
+            moreBtn.innerHTML = "···";
+            moreBtn.title = t('chat_rename') + " / " + t('chat_delete');
+            moreBtn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                showHistoryMenu(div, div.title, aiGenerateContent, moreBtn);
+            });
+            div.appendChild(moreBtn);
+
             // 对历史会话操作：拉取数据库对话数据到对话框 && 清除class active 并激活点击历史对话
-            div.addEventListener('click', async function () {
+            nameSpan.addEventListener('click', async function () {
                 if (typeof exitJobHuntMode === 'function') exitJobHuntMode();
                 if (typeof exitWalletMode === 'function') exitWalletMode();
                 // 清空当前右边聊天记录,清空chatSession,调取数据库存入全部聊天记录，chatDate取全部聊天记录
@@ -475,8 +515,8 @@ async function sendMessage() {
 
     } finally {
         if (chatData.at(-1)?.role === "ai" && currentAiMessageDiv.isConnected) {
-            currentAiMessageDiv.innerHTML = renderMarkdown(chatData.at(-1).message);
-        } else if (currentAiMessageDiv.isConnected && !currentAiMessageDiv.textContent.trim()) {
+            aiContentDiv.innerHTML = renderMarkdown(chatData.at(-1).message);
+        } else if (currentAiMessageDiv.isConnected && !aiContentDiv.textContent.trim()) {
             currentAiMessageDiv.remove();
         }
         isSending = false;
@@ -526,17 +566,10 @@ async function generateTitleFromTwoRounds(dialogue) {
 function renderHistoryChat(messages) {
     const box = document.getElementById("chatBox");
 
-    messages.forEach(msg => {
-
+    messages.forEach((msg, i) => {
         const sender = msg.role === "user" ? "user" : "ai";
-        const div = document.createElement("div");
-        div.className = `message ${sender}`;
-        // div.textContent = msg.message;
-        div.innerHTML = renderMarkdown(msg.message);
-        box.appendChild(div);
+        addMessage(msg.message, sender, i);
     });
-
-    // box.scrollTop = box.scrollHeight;
 }
 
 
@@ -573,21 +606,195 @@ async function postToDb(chatData, createTime, sessionName) {
 }
 
 
+// 为消息中的代码块添加复制按钮 + 折叠展开 + 语言标签
+function enhanceCodeBlocks(container) {
+    if (!container) return;
+    const FOLD_THRESHOLD_LINES = 20;
+    const FOLD_THRESHOLD_HEIGHT = 400;
+
+    container.querySelectorAll('pre').forEach(pre => {
+        if (pre.querySelector('.code-toolbar')) return;
+        const code = pre.querySelector('code');
+        if (!code) return;
+
+        // 强制内联样式，确保不被 CSS 覆盖
+        pre.style.position = 'relative';
+        pre.style.paddingTop = '44px';
+        pre.style.overflow = 'visible';
+
+        // 提取语言
+        let lang = '';
+        const langMatch = code.className.match(/language-([\w+-]+)/);
+        if (langMatch) lang = langMatch[1];
+
+        // 工具栏容器
+        const toolbar = document.createElement('div');
+        toolbar.className = 'code-toolbar';
+
+        // 语言标签
+        if (lang) {
+            const langLabel = document.createElement('span');
+            langLabel.className = 'code-lang-label';
+            langLabel.textContent = lang.toUpperCase();
+            toolbar.appendChild(langLabel);
+        }
+
+        // 折叠/展开按钮
+        const codeText = code.innerText;
+        const lineCount = codeText.split('\n').length;
+        const showFoldBtn = lineCount > FOLD_THRESHOLD_LINES;
+
+        const foldBtn = document.createElement('button');
+        foldBtn.type = 'button';
+        foldBtn.className = 'code-fold-btn';
+        foldBtn.title = t('expand_code') || '展开/折叠';
+        foldBtn.innerHTML = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <polyline points="6 9 12 15 18 9"></polyline>
+        </svg>`;
+        foldBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            const isFolded = pre.classList.contains('code-folded');
+            if (isFolded) {
+                pre.classList.remove('code-folded');
+                pre.dataset.folded = 'false';
+                foldBtn.classList.remove('expanded');
+            } else {
+                pre.classList.add('code-folded');
+                pre.dataset.folded = 'true';
+                foldBtn.classList.add('expanded');
+            }
+        });
+        if (!showFoldBtn) foldBtn.style.display = 'none';
+        toolbar.appendChild(foldBtn);
+
+        // 复制按钮
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'code-copy-btn';
+        btn.setAttribute('data-i18n-tip', 'copy_code');
+        btn.title = t('copy_code');
+        btn.innerHTML = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+            <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+        </svg>`;
+        btn.addEventListener('click', async (e) => {
+            e.stopPropagation();
+            try {
+                await navigator.clipboard.writeText(code.innerText);
+                btn.classList.add('copied');
+                btn.title = t('copied');
+                setTimeout(() => {
+                    btn.classList.remove('copied');
+                    btn.title = t('copy_code');
+                }, 2000);
+            } catch (err) {
+                console.error('复制失败：', err);
+            }
+        });
+        toolbar.appendChild(btn);
+
+        pre.appendChild(toolbar);
+    });
+}
+
+// 全局暴露 + 定时扫描兜底（确保所有代码块都被处理）
+window.enhanceCodeBlocks = enhanceCodeBlocks;
+(function startCodeBlockWatcher() {
+    let lastCount = 0;
+    function scan() {
+        const pres = document.querySelectorAll('#chatBox pre, .msg-content pre');
+        if (pres.length !== lastCount) {
+            lastCount = pres.length;
+            pres.forEach(pre => {
+                if (!pre.querySelector('.code-toolbar')) {
+                    const code = pre.querySelector('code');
+                    if (code) {
+                        const container = pre.closest('.msg-content') || document.body;
+                        enhanceCodeBlocks(container);
+                    }
+                }
+            });
+        }
+    }
+    setInterval(scan, 1500);
+    setTimeout(scan, 500);
+})();
+
 // 添加消息到界面
-function addMessage(text, sender) {
+function addMessage(text, sender, index) {
     const box = document.getElementById("chatBox");
     const div = document.createElement("div");
     div.className = `message ${sender}`;
-    // div.textContent = text;
-    div.innerHTML = renderMarkdown(text);
+    if (typeof index === 'number') div.dataset.msgIndex = index;
+    // 删除按钮
+    const delBtn = document.createElement("button");
+    delBtn.className = "msg-delete-btn";
+    delBtn.innerHTML = "×";
+    delBtn.title = t('chat_delete');
+    delBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        deleteSingleMessage(div, index);
+    });
+    div.appendChild(delBtn);
+    // 消息内容
+    const contentDiv = document.createElement("div");
+    contentDiv.className = "msg-content";
+    contentDiv.innerHTML = renderMarkdown(text);
+    div.appendChild(contentDiv);
     box.appendChild(div);
     box.scrollTop = box.scrollHeight; // 自动滚动到底部
+    enhanceCodeBlocks(contentDiv);
 }
 
-// 回车发送
-document.getElementById("userInput").addEventListener("keypress", e => {
-    if (e.key === "Enter") {
-        sendMessage();
+// 删除单条消息
+function deleteSingleMessage(msgEl, index) {
+    if (!confirm(t('chat_delete_confirm'))) return;
+    if (typeof index === 'number' && chatData[index]) {
+        chatData.splice(index, 1);
+    }
+    msgEl.remove();
+    // 重新索引
+    document.querySelectorAll('#chatBox .message').forEach((el, i) => {
+        el.dataset.msgIndex = i;
+    });
+    // 保存
+    const sessionTime = localStorage.getItem('thisSessionTime');
+    if (sessionTime && isLoggedIn()) {
+        localStorage.setItem(sessionTime, JSON.stringify(chatData));
+        postToDb(chatData, sessionTime, document.getElementById('chatSession').textContent);
+    }
+    if (!chatData.length) {
+        document.getElementById('emptyState')?.classList.remove('hidden');
+    }
+}
+
+// Enter 发送，Ctrl+Enter / Shift+Enter 换行
+const userInput = document.getElementById("userInput");
+userInput.addEventListener("keydown", e => {
+    if (e.key === "Enter" && !e.isComposing) {
+        if (e.ctrlKey || e.shiftKey) {
+            // 换行：默认行为就是插入换行，不做特殊处理
+        } else {
+            e.preventDefault();
+            sendMessage();
+        }
+    }
+});
+
+// Esc 关闭所有打开的面板
+document.addEventListener("keydown", e => {
+    if (e.key === "Escape") {
+        // 关闭场景下拉菜单
+        closeSceneDropdown();
+        // 关闭快捷模板面板
+        document.getElementById('quickTemplates')?.classList.add('hidden');
+        // 关闭技能下拉菜单
+        document.getElementById('skillsDropdown')?.classList.remove('open');
+        // 关闭登录弹窗
+        const loginModal = document.getElementById('loginModal');
+        if (loginModal && loginModal.style.display !== 'none') {
+            closeLoginModal();
+        }
     }
 });
 
@@ -629,6 +836,17 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         });
     }
+    // 快捷模板面板收起按钮
+    document.getElementById('quickTemplatesClose')?.addEventListener('click', () => {
+        document.getElementById('quickTemplates')?.classList.add('hidden');
+    });
+    // 快捷模板搜索
+    document.getElementById('quickTemplatesSearch')?.addEventListener('input', (e) => {
+        if (!currentPanelTemplates.length || !currentPanelSceneId) return;
+        const kw = e.target.value.trim().toLowerCase();
+        const filtered = kw ? filterTemplates(currentPanelTemplates, kw) : currentPanelTemplates;
+        renderTemplatesContent(filtered, currentPanelSceneId);
+    });
 });
 
 function createNewSession() {
@@ -648,8 +866,658 @@ function createNewSession() {
     if (typeof clearPendingAttachments === 'function') {
         clearPendingAttachments();
     }
-    // 新建会话：重新展示横幅 + 填充输入框推广文案
+    // 新建会话：重置为通用模式
+    if (currentScene !== null) {
+        currentScene = null;
+        updateSceneButton();
+    }
+    // 新建会话：恢复输入框默认 placeholder（不填推广文案，避免与场景冲突）
+    const input = document.getElementById('userInput');
+    if (input) {
+        input.value = '';
+        delete input.dataset.promoFilled;
+        delete input.dataset.scenePh;
+        input.placeholder = t('input_placeholder');
+    }
+    // 新建会话：重新展示横幅
     if (typeof renderPromoBanner === 'function') renderPromoBanner();
-    if (typeof refillInputPromo === 'function') refillInputPromo();
 }
+
+// ==================== 场景模板 ====================
+let currentScene = null;  // 当前场景 id，null 表示通用模式
+let sceneList = [];
+
+const API_AI_SCENES = `${config.API_BASE_URL}/ai/scenes`;
+const API_AI_SCENE_TEMPLATES = (sceneId) => `${config.API_BASE_URL}/ai/scenes/${sceneId}/templates`;
+
+async function initScenes() {
+    try {
+        const res = await fetch(API_AI_SCENES);
+        if (res.ok) {
+            const data = await res.json();
+            sceneList = data.scenes || [];
+            renderSceneGrid();
+            updateSceneButton();  // 场景列表加载完后再更新按钮状态
+        }
+    } catch (e) {
+        console.warn('加载场景模板失败', e);
+    }
+}
+
+function getSceneName(sceneId) {
+    const s = sceneList.find(x => x.id === sceneId);
+    if (!s) return '';
+    const lang = typeof getLang === 'function' ? getLang() : 'zh';
+    return lang === 'en' ? s.name_en : s.name_zh;
+}
+
+function renderSceneGrid() {
+    const grid = document.getElementById('sceneGrid');
+    if (!grid || !sceneList.length) return;
+    const lang = typeof getLang === 'function' ? getLang() : 'zh';
+    grid.innerHTML = sceneList.map(s => `
+        <div class="scene-card" data-scene="${s.id}" title="${lang === 'en' ? s.name_en : s.name_zh}">
+            <div class="scene-card-icon">${s.icon}</div>
+            <div class="scene-card-name">${lang === 'en' ? s.name_en : s.name_zh}</div>
+            <div class="scene-card-desc">${t('scene_' + s.id + '_desc')}</div>
+        </div>
+    `).join('');
+
+    grid.querySelectorAll('.scene-card').forEach(card => {
+        card.addEventListener('click', () => {
+            const sceneId = card.dataset.scene;
+            setScene(sceneId);
+        });
+    });
+}
+
+function setScene(sceneId) {
+    currentScene = sceneId;
+    updateSceneButton();
+    // 更新快捷模板面板
+    updateQuickTemplatesPanel(sceneId);
+    // 更新输入框 placeholder
+    const input = document.getElementById('userInput');
+    if (input) {
+        if (sceneId) {
+            const name = getSceneName(sceneId);
+            if (name) {
+                input.placeholder = t('scene_current') + name;
+                // 用自定义属性标记"场景模式下的 placeholder"，避免 i18n 覆盖
+                input.dataset.scenePh = '1';
+            }
+        } else {
+            // 通用模式：清除标记，恢复 i18n 默认 placeholder
+            delete input.dataset.scenePh;
+            input.placeholder = t('input_placeholder');
+        }
+        // 如果输入框里只是推广文案，清掉它让 placeholder 显示
+        if (input.dataset.promoFilled === '1') {
+            input.value = '';
+            delete input.dataset.promoFilled;
+        }
+        input.focus();
+    }
+}
+
+// ==================== 快捷模板面板 ====================
+
+const templateCache = {};
+const TEMPLATE_FAV_KEY = 'template_favorites';
+const TEMPLATE_RECENT_KEY = 'template_recent';
+const MAX_RECENT = 8;
+
+function getFavorites() {
+    try { return JSON.parse(localStorage.getItem(TEMPLATE_FAV_KEY) || '[]'); }
+    catch (e) { return []; }
+}
+
+function saveFavorites(list) {
+    localStorage.setItem(TEMPLATE_FAV_KEY, JSON.stringify(list));
+}
+
+function isFavorite(sceneId, templateId) {
+    return getFavorites().some(x => x.sceneId === sceneId && x.templateId === templateId);
+}
+
+function toggleFavorite(sceneId, templateId) {
+    const favs = getFavorites();
+    const idx = favs.findIndex(x => x.sceneId === sceneId && x.templateId === templateId);
+    if (idx >= 0) {
+        favs.splice(idx, 1);
+    } else {
+        favs.push({ sceneId, templateId, time: Date.now() });
+    }
+    saveFavorites(favs);
+    return idx < 0;
+}
+
+function getRecent() {
+    try { return JSON.parse(localStorage.getItem(TEMPLATE_RECENT_KEY) || '[]'); }
+    catch (e) { return []; }
+}
+
+function saveRecent(list) {
+    localStorage.setItem(TEMPLATE_RECENT_KEY, JSON.stringify(list.slice(0, MAX_RECENT)));
+}
+
+function addRecent(sceneId, templateId) {
+    let recent = getRecent().filter(x => !(x.sceneId === sceneId && x.templateId === templateId));
+    recent.unshift({ sceneId, templateId, time: Date.now() });
+    saveRecent(recent);
+}
+
+function getTemplateName(tmpl) {
+    const lang = getLang();
+    return lang === 'zh' ? tmpl.name_zh : (tmpl.name_en || tmpl.name_zh);
+}
+
+function buildTemplateCard(sceneId, tmpl, showFavBtn = true) {
+    const fav = isFavorite(sceneId, tmpl.id);
+    const favTitle = fav ? t('template_favorite_remove') : t('template_favorite_add');
+    const favIcon = fav ? '★' : '☆';
+    return `
+        <div class="quick-template-card" data-template-id="${tmpl.id}" data-scene-id="${sceneId}">
+            ${showFavBtn ? `<button class="quick-template-fav ${fav ? 'active' : ''}" data-action="fav" title="${favTitle}">${favIcon}</button>` : ''}
+            <span class="quick-template-icon">${tmpl.icon}</span>
+            <span class="quick-template-name">${getTemplateName(tmpl)}</span>
+        </div>
+    `;
+}
+
+function renderSection(title, templates, sceneId) {
+    if (!templates || !templates.length) return '';
+    return `
+        <div class="quick-templates-section">
+            <div class="quick-templates-section-title">${title}</div>
+            <div class="quick-templates-grid">
+                ${templates.map(x => buildTemplateCard(sceneId, x)).join('')}
+            </div>
+        </div>
+    `;
+}
+
+let currentPanelSceneId = null;
+let currentPanelTemplates = [];
+
+function updateQuickTemplatesPanel(sceneId) {
+    const panel = document.getElementById('quickTemplates');
+    const titleEl = document.getElementById('quickTemplatesTitle');
+    const contentEl = document.getElementById('quickTemplatesContent');
+    const searchEl = document.getElementById('quickTemplatesSearch');
+    if (!panel || !contentEl) return;
+
+    currentPanelSceneId = sceneId;
+
+    if (!sceneId) {
+        panel.classList.add('hidden');
+        return;
+    }
+
+    const scene = sceneList.find(s => s.id === sceneId);
+    if (!scene || !scene.quick_templates || !scene.quick_templates.length) {
+        panel.classList.add('hidden');
+        return;
+    }
+
+    panel.classList.remove('hidden');
+    titleEl.textContent = `${scene.icon} ${getSceneName(sceneId)} · 快捷功能`;
+
+    currentPanelTemplates = scene.quick_templates.slice();
+    if (searchEl) searchEl.value = '';
+
+    renderTemplatesContent(currentPanelTemplates, sceneId);
+}
+
+function renderTemplatesContent(templates, sceneId) {
+    const contentEl = document.getElementById('quickTemplatesContent');
+    if (!contentEl) return;
+
+    const favIds = getFavorites().filter(x => x.sceneId === sceneId).map(x => x.templateId);
+    const recentIds = getRecent().filter(x => x.sceneId === sceneId).map(x => x.templateId);
+
+    const favTemplates = templates.filter(x => favIds.includes(x.id));
+    const recentTemplates = templates.filter(x => recentIds.includes(x.id) && !favIds.includes(x.id));
+    const otherTemplates = templates.filter(x => !favIds.includes(x.id) && !recentIds.includes(x.id));
+
+    let html = '';
+    html += renderSection(t('template_favorite'), favTemplates, sceneId);
+    html += renderSection(t('template_recent'), recentTemplates, sceneId);
+    if (otherTemplates.length) {
+        html += `<div class="quick-templates-section"><div class="quick-templates-grid">${otherTemplates.map(x => buildTemplateCard(sceneId, x)).join('')}</div></div>`;
+    }
+
+    if (!templates.length) {
+        html = `<div class="quick-templates-empty">${t('template_empty')}</div>`;
+    }
+
+    contentEl.innerHTML = html;
+    bindTemplateCardEvents(contentEl);
+}
+
+function bindTemplateCardEvents(container) {
+    container.querySelectorAll('.quick-template-card').forEach(card => {
+        const tid = card.dataset.templateId;
+        const sid = card.dataset.sceneId;
+
+        card.addEventListener('click', (e) => {
+            if (e.target.closest('[data-action="fav"]')) return;
+            fillTemplateToInput(sid, tid);
+        });
+
+        const favBtn = card.querySelector('[data-action="fav"]');
+        if (favBtn) {
+            favBtn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                const nowFav = toggleFavorite(sid, tid);
+                favBtn.textContent = nowFav ? '★' : '☆';
+                favBtn.classList.toggle('active', nowFav);
+                favBtn.title = nowFav ? t('template_favorite_remove') : t('template_favorite_add');
+                if (currentPanelTemplates && currentPanelSceneId) {
+                    const searchEl = document.getElementById('quickTemplatesSearch');
+                    const kw = (searchEl?.value || '').trim().toLowerCase();
+                    const filtered = kw ? filterTemplates(currentPanelTemplates, kw) : currentPanelTemplates;
+                    renderTemplatesContent(filtered, currentPanelSceneId);
+                }
+            });
+        }
+    });
+}
+
+function filterTemplates(templates, keyword) {
+    if (!keyword) return templates;
+    const kw = keyword.toLowerCase();
+    return templates.filter(x => {
+        const nameZh = (x.name_zh || '').toLowerCase();
+        const nameEn = (x.name_en || '').toLowerCase();
+        return nameZh.includes(kw) || nameEn.includes(kw);
+    });
+}
+
+async function fillTemplateToInput(sceneId, templateId) {
+    const input = document.getElementById('userInput');
+    if (!input) return;
+
+    addRecent(sceneId, templateId);
+    if (currentPanelSceneId === sceneId && currentPanelTemplates.length) {
+        const searchEl = document.getElementById('quickTemplatesSearch');
+        const kw = (searchEl?.value || '').trim().toLowerCase();
+        const filtered = kw ? filterTemplates(currentPanelTemplates, kw) : currentPanelTemplates;
+        renderTemplatesContent(filtered, sceneId);
+    }
+
+    input.value = '加载中...';
+
+    try {
+        if (!templateCache[sceneId]) {
+            const res = await fetch(API_AI_SCENE_TEMPLATES(sceneId), {headers: buildAuthHeaders()});
+            if (res.ok) {
+                const data = await res.json();
+                templateCache[sceneId] = data.templates || [];
+            }
+        }
+
+        const templates = templateCache[sceneId] || [];
+        const t = templates.find(x => x.id === templateId);
+        if (t) {
+            const lang = getLang();
+            input.value = lang === 'zh' ? t.prompt_zh : (t.prompt_en || t.prompt_zh);
+        }
+    } catch (e) {
+        console.warn('加载模板失败', e);
+        input.value = '';
+    }
+
+    input.focus();
+    setTimeout(() => { input.selectionStart = input.selectionEnd = input.value.length; }, 10);
+}
+
+function updateSceneButton() {
+    const btn = document.getElementById('sceneToggleBtn');
+    const icon = document.getElementById('sceneIcon');
+    if (!btn) return;
+    if (currentScene) {
+        const s = sceneList.find(x => x.id === currentScene);
+        if (s) {
+            icon.textContent = s.icon;
+            btn.title = t('scene_current') + getSceneName(currentScene);
+            btn.classList.add('active');
+            btn.setAttribute('aria-expanded', 'true');
+        }
+    } else {
+        icon.textContent = '✨';
+        btn.title = t('scene_general');
+        btn.classList.remove('active');
+        btn.setAttribute('aria-expanded', 'false');
+    }
+}
+
+function renderSceneDropdown() {
+    const dd = document.getElementById('sceneDropdown');
+    if (!dd) return;
+    const lang = getLang();
+    let html = `
+        <div class="scene-dropdown-item ${!currentScene ? 'active' : ''}" data-scene-id="">
+            <span class="scene-dd-icon">✨</span>
+            <span class="scene-dd-name">${t('scene_general')}</span>
+            ${!currentScene ? '<span class="scene-dd-check">✓</span>' : ''}
+        </div>
+    `;
+    html += sceneList.map(s => `
+        <div class="scene-dropdown-item ${currentScene === s.id ? 'active' : ''}" data-scene-id="${s.id}">
+            <span class="scene-dd-icon">${s.icon}</span>
+            <span class="scene-dd-name">${lang === 'en' ? s.name_en : s.name_zh}</span>
+            ${currentScene === s.id ? '<span class="scene-dd-check">✓</span>' : ''}
+        </div>
+    `).join('');
+    dd.innerHTML = html;
+
+    dd.querySelectorAll('.scene-dropdown-item').forEach(item => {
+        item.addEventListener('click', () => {
+            const sid = item.dataset.sceneId || null;
+            setScene(sid);
+            closeSceneDropdown();
+        });
+    });
+}
+
+function openSceneDropdown() {
+    const dd = document.getElementById('sceneDropdown');
+    const btn = document.getElementById('sceneToggleBtn');
+    if (!dd || !btn) return;
+    renderSceneDropdown();
+    dd.classList.remove('hidden');
+    btn.setAttribute('aria-expanded', 'true');
+}
+
+function closeSceneDropdown() {
+    const dd = document.getElementById('sceneDropdown');
+    const btn = document.getElementById('sceneToggleBtn');
+    if (!dd) return;
+    dd.classList.add('hidden');
+    if (btn) btn.setAttribute('aria-expanded', currentScene ? 'true' : 'false');
+}
+
+function toggleSceneDropdown(e) {
+    if (e) {
+        e.stopPropagation();
+        e.preventDefault();
+    }
+    const dd = document.getElementById('sceneDropdown');
+    if (!dd) return;
+    if (dd.classList.contains('hidden')) {
+        openSceneDropdown();
+    } else {
+        closeSceneDropdown();
+    }
+}
+
+// ==================== 对话管理：清空/重命名/删除 ====================
+const API_CHAT_RENAME = `${config.API_BASE_URL}/ai/chat/rename`;
+const API_CHAT_DELETE = `${config.API_BASE_URL}/ai/chat/delete`;
+
+function clearCurrentChat() {
+    if (!chatData || !chatData.length) return;
+    if (!confirm(t('chat_clear_confirm'))) return;
+    document.querySelectorAll("#chatBox .message").forEach(el => el.remove());
+    chatData = [];
+    document.getElementById('emptyState')?.classList.remove('hidden');
+    // 保存到本地和数据库
+    const sessionTime = localStorage.getItem('thisSessionTime');
+    if (sessionTime && isLoggedIn()) {
+        localStorage.setItem(sessionTime, JSON.stringify([]));
+        postToDb([], sessionTime, document.getElementById('chatSession').textContent);
+    }
+}
+
+async function renameSession(sessionTime, oldName) {
+    if (!isLoggedIn()) {
+        alert(t('chat_need_login'));
+        return;
+    }
+    const newName = prompt(t('chat_rename_placeholder'), oldName || '');
+    if (newName === null) return;
+    const trimmed = newName.trim();
+    if (!trimmed) return;
+
+    try {
+        const res = await fetch(API_CHAT_RENAME, {
+            method: 'POST',
+            headers: buildAuthHeaders(),
+            body: JSON.stringify({
+                session_time: parseInt(sessionTime, 10),
+                session_name: trimmed
+            })
+        });
+        if (res.ok) {
+            // 更新侧边栏显示
+            const el = document.querySelector(`.history.title[title="${sessionTime}"]`);
+            if (el) el.textContent = trimmed;
+            // 如果是当前会话，也更新顶部
+            const currentTime = localStorage.getItem('thisSessionTime');
+            if (String(currentTime) === String(sessionTime)) {
+                document.getElementById('chatSession').textContent = trimmed;
+            }
+            // 更新 localStorage
+            localStorage.setItem(sessionTime + '_name', trimmed);
+        }
+    } catch (e) {
+        console.warn('重命名失败', e);
+    }
+}
+
+async function deleteSession(sessionTime, el) {
+    if (!isLoggedIn()) {
+        alert(t('chat_need_login'));
+        return;
+    }
+    if (!confirm(t('chat_delete_confirm'))) return;
+
+    try {
+        const res = await fetch(`${API_CHAT_DELETE}?session_time=${sessionTime}`, {
+            method: 'DELETE',
+            headers: buildAuthHeaders()
+        });
+        if (res.ok) {
+            // 从侧边栏移除
+            if (el) el.remove();
+            localStorage.removeItem(sessionTime);
+            localStorage.removeItem(sessionTime + '_name');
+            // 如果删除的是当前会话，清空聊天区
+            const currentTime = localStorage.getItem('thisSessionTime');
+            if (String(currentTime) === String(sessionTime)) {
+                createNewSession();
+            }
+        }
+    } catch (e) {
+        console.warn('删除失败', e);
+    }
+}
+
+// 显示历史会话操作菜单（重命名/删除）
+function showHistoryMenu(container, sessionTime, sessionName, anchorEl) {
+    // 移除已有的菜单
+    document.querySelectorAll('.history-menu').forEach(m => m.remove());
+
+    const menu = document.createElement("div");
+    menu.className = "history-menu";
+    menu.innerHTML = `
+        <div class="history-menu-item" data-action="rename">${t('chat_rename')}</div>
+        <div class="history-menu-item danger" data-action="delete">${t('chat_delete')}</div>
+    `;
+
+    // 定位到按钮旁边
+    document.body.appendChild(menu);
+    const rect = anchorEl.getBoundingClientRect();
+    menu.style.top = (rect.bottom + window.scrollY + 4) + "px";
+    menu.style.right = (window.innerWidth - rect.right - window.scrollX) + "px";
+
+    // 处理点击
+    menu.querySelector('[data-action="rename"]').addEventListener('click', (e) => {
+        e.stopPropagation();
+        menu.remove();
+        renameSession(sessionTime, sessionName);
+    });
+    menu.querySelector('[data-action="delete"]').addEventListener('click', (e) => {
+        e.stopPropagation();
+        menu.remove();
+        deleteSession(sessionTime, container);
+    });
+
+    // 点击其他地方关闭菜单
+    setTimeout(() => {
+        document.addEventListener('click', function closeMenu(e) {
+            if (!menu.contains(e.target) && e.target !== anchorEl) {
+                menu.remove();
+                document.removeEventListener('click', closeMenu);
+            }
+        });
+    }, 10);
+}
+
+// 给已有的历史会话条目添加 ... 按钮
+function enhanceExistingHistoryItems() {
+    const sideBar = document.getElementById('sideBar');
+    if (!sideBar) return;
+    sideBar.querySelectorAll('.history.title').forEach(item => {
+        if (item.querySelector('.history-more-btn')) return; // 已添加过
+        const sessionTime = item.title;
+        const sessionName = item.textContent;
+
+        // 把内容包到 span 里
+        const nameSpan = document.createElement("span");
+        nameSpan.className = "history-name";
+        nameSpan.textContent = sessionName;
+        item.innerHTML = "";
+        item.appendChild(nameSpan);
+
+        // 添加 ... 按钮
+        const moreBtn = document.createElement("button");
+        moreBtn.className = "history-more-btn";
+        moreBtn.innerHTML = "···";
+        moreBtn.title = t('chat_rename') + " / " + t('chat_delete');
+        moreBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            showHistoryMenu(item, sessionTime, sessionName, moreBtn);
+        });
+        item.appendChild(moreBtn);
+
+        // 给名称加点击事件
+        nameSpan.addEventListener('click', async function () {
+            if (typeof exitJobHuntMode === 'function') exitJobHuntMode();
+            if (typeof exitWalletMode === 'function') exitWalletMode();
+            document.getElementById("chatBox").querySelectorAll(".message").forEach(el => el.remove());
+            const histories = document.querySelectorAll('.history');
+            histories.forEach(h => { h.classList.remove('active') });
+            item.classList.add('active');
+            const session_time = item.title;
+            window.localStorage.setItem('thisSessionTime', session_time);
+            const messageList = JSON.parse(window.localStorage.getItem(session_time) || '[]');
+            chatData = messageList;
+            document.getElementById('chatSession').textContent = item.querySelector('.history-name')?.textContent || sessionName;
+            renderHistoryChat(chatData);
+            document.getElementById('emptyState')?.classList.toggle('hidden', chatData.length > 0);
+        });
+    });
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+    initScenes();
+    enhanceExistingHistoryItems();
+    updateSceneButton();  // 初始化场景按钮状态
+
+    // 场景切换按钮
+    const sceneBtn = document.getElementById('sceneToggleBtn');
+    if (sceneBtn) {
+        sceneBtn.addEventListener('click', toggleSceneDropdown);
+    }
+    // 智能联网按钮切换
+    const searchBtn = document.getElementById('searchBtn');
+    if (searchBtn) {
+        searchBtn.addEventListener('click', () => {
+            searchBtn.classList.toggle('active');
+            const isActive = searchBtn.classList.contains('active');
+            // 更新联网状态显示
+            const netStatus = document.getElementById('netStatus');
+            if (netStatus) {
+                const netText = netStatus.querySelector('.net-text');
+                if (isActive) {
+                    netStatus.classList.add('online');
+                    if (netText) netText.textContent = t('net_on') || '已联网';
+                } else {
+                    netStatus.classList.remove('online');
+                    if (netText) netText.textContent = t('net_off') || '未联网';
+                }
+            }
+        });
+    }
+    // 点击外部关闭场景下拉菜单
+    document.addEventListener('click', (e) => {
+        const wrap = document.getElementById('sceneDropdownWrap');
+        if (wrap && !wrap.contains(e.target)) {
+            closeSceneDropdown();
+        }
+        // 点击外部关闭快捷模板面板
+        const qt = document.getElementById('quickTemplates');
+        if (qt && !qt.classList.contains('hidden')) {
+            const sceneBtn = document.getElementById('sceneToggleBtn');
+            if (!qt.contains(e.target) && !sceneBtn.contains(e.target)) {
+                qt.classList.add('hidden');
+            }
+        }
+    });
+
+    // 语言切换时重新渲染场景卡片
+    document.addEventListener('langchange', () => {
+        renderSceneGrid();
+        updateSceneButton();
+    });
+
+    // 检测到新的历史条目时，给它加 ... 按钮
+    const sideBar = document.getElementById('sideBar');
+    if (sideBar) {
+        const observer = new MutationObserver(() => {
+            enhanceExistingHistoryItems();
+        });
+        observer.observe(sideBar, { childList: true });
+    }
+
+    // 拖拽上传文件
+    const chatArea = document.querySelector('.right-side') || document.getElementById('chatBox')?.parentElement;
+    const dropOverlay = document.createElement('div');
+    dropOverlay.className = 'drag-drop-overlay';
+    dropOverlay.innerHTML = `<div class="drag-drop-content"><svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="17 8 12 3 7 8"></polyline><line x1="12" y1="3" x2="12" y2="15"></line></svg><span data-i18n="drag_drop_hint">${t('drag_drop_hint')}</span></div>`;
+    document.body.appendChild(dropOverlay);
+
+    if (chatArea) {
+        ['dragenter', 'dragover'].forEach(evt => {
+            chatArea.addEventListener(evt, (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                dropOverlay.classList.add('active');
+            });
+        });
+        ['dragleave', 'drop'].forEach(evt => {
+            chatArea.addEventListener(evt, (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                if (evt === 'dragleave' && chatArea.contains(e.relatedTarget)) return;
+                dropOverlay.classList.remove('active');
+            });
+        });
+        chatArea.addEventListener('drop', (e) => {
+            e.preventDefault();
+            const files = e.dataTransfer?.files;
+            if (files && files.length) {
+                const fileInput = document.getElementById('fileInput');
+                if (fileInput) {
+                    const dt = new DataTransfer();
+                    for (const f of files) dt.items.add(f);
+                    fileInput.files = dt.files;
+                    fileInput.dispatchEvent(new Event('change', { bubbles: true }));
+                }
+            }
+        });
+    }
+});
 

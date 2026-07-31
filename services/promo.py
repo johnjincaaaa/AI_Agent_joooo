@@ -17,7 +17,7 @@ from sqlalchemy.orm import Session
 
 from sqlOrm import (
     User, ReferralEvent, PromoConfig, PROMO_CONFIG_DEFAULTS,
-    PageVisit, DownloadClick, WithdrawRequest,
+    PageVisit, DownloadClick, WithdrawRequest, CheckInRecord,
 )
 
 # 永久会员用一个远期日期表示（仅记录，应用当前无会员门槛）
@@ -135,6 +135,18 @@ def track_download(db: Session, ref_code: str, fingerprint: str, ip: str,
     tier_threshold = _to_int(cfg.get("tier_threshold"), 5)
     tier_bonus = _to_float(cfg.get("tier_bonus"), 20.0)
     tier_days = _to_int(cfg.get("tier_membership_days"), -1)
+
+    # ===== 风控 1：同一 IP 每日推广次数上限 =====
+    ip_daily_limit = _to_int(cfg.get("risk_ip_daily_limit"), 10)
+    if ip and ip_daily_limit > 0:
+        today_start = _today_start()
+        from sqlalchemy import func
+        ip_today_count = db.query(func.count(ReferralEvent.id)).filter(
+            ReferralEvent.visitor_ip == ip,
+            ReferralEvent.created_at >= today_start,
+        ).scalar() or 0
+        if ip_today_count >= ip_daily_limit:
+            return TrackResult(ok=True, awarded=False, reason="ip_daily_limit")
 
     visitor_key = make_visitor_key(fingerprint, ip)
 
@@ -278,3 +290,188 @@ def get_trend(db: Session, days: int = 7) -> list:
             "pv": pv, "uv": uv, "download": dl, "referral": rf,
         })
     return result
+
+
+# ---------------- 签到（用户留存） ----------------
+
+class CheckInResult:
+    def __init__(self, ok: bool, checked: bool = False, reason: str = "",
+                 reward_amount: float = 0.0, reward_days: int = 0,
+                 streak_days: int = 1, total_amount: float = 0.0,
+                 consecutive_bonus: float = 0.0):
+        self.ok = ok
+        self.checked = checked
+        self.reason = reason
+        self.reward_amount = reward_amount
+        self.reward_days = reward_days
+        self.streak_days = streak_days
+        self.total_amount = total_amount
+        self.consecutive_bonus = consecutive_bonus
+
+    def to_dict(self):
+        return {
+            "ok": self.ok,
+            "checked": self.checked,
+            "reason": self.reason,
+            "reward_amount": self.reward_amount,
+            "reward_days": self.reward_days,
+            "streak_days": self.streak_days,
+            "total_amount": round(self.total_amount, 2),
+            "consecutive_bonus": self.consecutive_bonus,
+        }
+
+
+def _get_checkin_date() -> str:
+    return datetime.now().strftime("%Y-%m-%d")
+
+
+def _get_yesterday_date() -> str:
+    return (datetime.now() - timedelta(days=1)).strftime("%Y-%m-%d")
+
+
+def get_checkin_status(db: Session, user: User) -> dict:
+    """获取用户签到状态：今日是否已签、连续签到天数、累计签到次数等。"""
+    today = _get_checkin_date()
+    cfg = get_config_map(db)
+    enabled = _is_on(cfg.get("checkin_enabled"))
+
+    today_record = db.query(CheckInRecord).filter(
+        CheckInRecord.user_id == user.id,
+        CheckInRecord.checkin_date == today,
+    ).first()
+
+    # 计算连续签到天数
+    streak = 0
+    yesterday = _get_yesterday_date()
+    yesterday_record = db.query(CheckInRecord).filter(
+        CheckInRecord.user_id == user.id,
+        CheckInRecord.checkin_date == yesterday,
+    ).first()
+    if yesterday_record:
+        streak = yesterday_record.streak_days
+    if today_record:
+        streak = today_record.streak_days
+
+    total_count = db.query(CheckInRecord.id).filter(
+        CheckInRecord.user_id == user.id).count() or 0
+
+    return {
+        "enabled": enabled,
+        "checked_today": today_record is not None,
+        "streak_days": streak,
+        "total_checkins": total_count,
+        "today_date": today,
+    }
+
+
+def do_checkin(db: Session, user: User) -> CheckInResult:
+    """执行签到，发放奖励。"""
+    cfg = get_config_map(db)
+    if not _is_on(cfg.get("checkin_enabled")):
+        return CheckInResult(ok=False, reason="checkin_disabled")
+
+    today = _get_checkin_date()
+
+    # 今日是否已签
+    existing = db.query(CheckInRecord).filter(
+        CheckInRecord.user_id == user.id,
+        CheckInRecord.checkin_date == today,
+    ).first()
+    if existing:
+        status = get_checkin_status(db, user)
+        return CheckInResult(ok=True, checked=True, reason="already_checked",
+                             streak_days=existing.streak_days,
+                             total_amount=user.balance_usd or 0.0)
+
+    # 计算连续签到天数
+    yesterday = _get_yesterday_date()
+    yesterday_record = db.query(CheckInRecord).filter(
+        CheckInRecord.user_id == user.id,
+        CheckInRecord.checkin_date == yesterday,
+    ).first()
+    streak_days = (yesterday_record.streak_days if yesterday_record else 0) + 1
+
+    # 基础奖励
+    reward_amount = _to_float(cfg.get("checkin_reward_amount"), 0.2)
+    reward_days = _to_int(cfg.get("checkin_reward_days"), 1)
+
+    # 连续签到阶梯奖励
+    consecutive_bonus = 0.0
+    if streak_days >= 30:
+        consecutive_bonus = _to_float(cfg.get("checkin_streak_bonus_30"), 10.0)
+    elif streak_days >= 7:
+        consecutive_bonus = _to_float(cfg.get("checkin_streak_bonus_7"), 2.0)
+    elif streak_days >= 3:
+        consecutive_bonus = _to_float(cfg.get("checkin_streak_bonus_3"), 0.5)
+
+    total_reward = reward_amount + consecutive_bonus
+
+    # 写签到记录
+    record = CheckInRecord(
+        user_id=user.id,
+        checkin_date=today,
+        reward_amount=total_reward,
+        reward_days=reward_days,
+        streak_days=streak_days,
+    )
+    db.add(record)
+
+    # 发放奖励
+    user.balance_usd = (user.balance_usd or 0.0) + total_reward
+
+    # 赠送会员天数
+    if reward_days > 0:
+        base_time = user.membership_expire_at
+        if not base_time or base_time < datetime.now():
+            base_time = datetime.now()
+        user.membership_expire_at = base_time + timedelta(days=reward_days)
+
+    db.commit()
+    return CheckInResult(ok=True, checked=True, reason="success",
+                         reward_amount=reward_amount, reward_days=reward_days,
+                         streak_days=streak_days, total_amount=user.balance_usd or 0.0,
+                         consecutive_bonus=consecutive_bonus)
+
+
+# ---------------- 提现风控 ----------------
+
+def get_withdraw_available(db: Session, user: User) -> dict:
+    """计算用户可提现金额及风控限制。"""
+    cfg = get_config_map(db)
+    min_withdraw = _to_float(cfg.get("risk_withdraw_min"), 10.0)
+    freeze_hours = _to_int(cfg.get("risk_reward_freeze_hours"), 24)
+    new_user_hours = _to_int(cfg.get("risk_new_user_withdraw_hours"), 48)
+
+    balance = float(user.balance_usd or 0.0)
+    reasons = []
+
+    # 风控 1：最低提现门槛
+    if balance < min_withdraw:
+        reasons.append(f"余额不足 ¥{min_withdraw}")
+
+    # 风控 2：新注册用户限制
+    if user.register_time:
+        hours_since_register = (datetime.now() - user.register_time).total_seconds() / 3600
+        if hours_since_register < new_user_hours:
+            remaining = int(new_user_hours - hours_since_register)
+            reasons.append(f"新用户需注册满 {new_user_hours} 小时后可提现（还剩 {remaining} 小时）")
+
+    # 风控 3：推广奖励冻结期（检查最近的推广奖励是否在冻结期内）
+    # 如果有在冻结期内的推广奖励，这部分金额不可提现（简化：整体延迟可提现时间）
+    # 这里简化处理：如果有近 freeze_hours 内的推广记录，给出提示
+    if freeze_hours > 0:
+        recent_referrals = db.query(ReferralEvent).filter(
+            ReferralEvent.referrer_id == user.id,
+            ReferralEvent.created_at >= datetime.now() - timedelta(hours=freeze_hours),
+        ).count() or 0
+        if recent_referrals > 0:
+            reasons.append(f"最近 {freeze_hours} 小时内有 {recent_referrals} 笔推广奖励在审核中，审核通过后可提现")
+
+    can_withdraw = len(reasons) == 0 and balance >= min_withdraw
+
+    return {
+        "balance": round(balance, 2),
+        "min_withdraw": min_withdraw,
+        "can_withdraw": can_withdraw,
+        "reasons": reasons,
+    }

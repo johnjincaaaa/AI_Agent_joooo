@@ -51,6 +51,31 @@ const LANG = {
         empty_title: '我是 有料 AI，有什么可以帮你？',
         empty_desc: '输入你的问题，开启一段新的对话',
 
+        // 场景模板
+        scene_section: '选择场景，快速开始',
+        scene_chat: '日常闲聊',
+        scene_chat_desc: '轻松聊天，陪伴解闷',
+        scene_office: '办公文案',
+        scene_office_desc: '周报/总结/邮件/演讲稿',
+        scene_study: '学习答疑',
+        scene_study_desc: '作业辅导/知识讲解',
+        scene_life: '生活解惑',
+        scene_life_desc: '情感/建议/攻略推荐',
+        scene_general: '通用模式',
+        scene_current: '当前场景：',
+
+        // 对话管理
+        chat_rename: '重命名',
+        chat_delete: '删除',
+        chat_clear: '清空对话',
+        chat_clear_confirm: '确定要清空当前对话吗？此操作不可撤销。',
+        chat_delete_confirm: '确定要删除这个会话吗？此操作不可撤销。',
+        chat_rename_placeholder: '请输入新的会话名称',
+        chat_rename_ok: '已重命名',
+        chat_delete_ok: '已删除',
+        chat_clear_ok: '已清空',
+        chat_need_login: '登录后才能管理对话历史',
+
         // 输入区
         input_placeholder: '输入问题，可粘贴图片/文档或点击附件上传...',
         attach_btn: '附件',
@@ -218,6 +243,85 @@ const LANG = {
         js_match_done_2: ' 个对口岗位',
         job_match_score: '匹配度 ',
         job_source_default: 'BOSS直聘',
+
+        // 简历漏洞检测
+        job_step_5: '⑤ 简历体检',
+        job_step_6: '⑥ 模拟面试',
+        job_section_5: 'AI 简历漏洞检测',
+        job_section_5_desc: '6 大维度全面扫描简历问题，获取针对性优化建议',
+        job_audit_btn: '开始检测',
+        job_audit_analyzing: 'AI 正在分析简历...',
+        job_audit_score: '简历评分',
+        job_audit_summary: '总体评价',
+        job_audit_issues: '发现问题',
+        job_audit_severity_high: '高风险',
+        job_audit_severity_medium: '中风险',
+        job_audit_severity_low: '低风险',
+        job_audit_category_content: '内容完整性',
+        job_audit_category_format: '格式与结构',
+        job_audit_category_keyword: '关键词优化',
+        job_audit_category_tone: '专业语气',
+        job_audit_category_experience: '经历呈现',
+        job_audit_category_redflag: '风险信号',
+        job_audit_suggestion: '优化建议',
+        job_audit_fail: '检测失败，请稍后重试',
+        job_audit_need_resume: '请先生成或填写简历内容',
+
+        // 模拟面试
+        job_section_6: 'AI 模拟面试',
+        job_section_6_desc: '多轮渐进式面试，实时点评答题表现，助你快速提升',
+        job_interview_start_btn: '开始模拟面试',
+        job_interview_next_btn: '提交回答，下一题',
+        job_interview_restart_btn: '重新开始',
+        job_interview_round: '第 {n} 轮',
+        job_interview_type_general: '开场介绍',
+        job_interview_type_technical: '技术面试',
+        job_interview_type_behavioral: '行为面试',
+        job_interview_type_case: '案例分析',
+        job_interview_tips: '答题技巧',
+        job_interview_feedback: '上一轮回答点评',
+        job_interview_feedback_relevance: '切题程度',
+        job_interview_feedback_clarity: '清晰度',
+        job_interview_feedback_examples: '实例支撑',
+        job_interview_feedback_communication: '表达专业性',
+        job_interview_feedback_comment: '综合点评',
+        job_interview_input_ph: '请输入你的回答...',
+        job_interview_processing: 'AI 正在点评并生成下一题...',
+        job_interview_need_answer: '请先输入你的回答',
+
+        // 快捷模板
+        template_recent: '最近使用',
+        template_favorite: '我的收藏',
+        template_favorite_add: '收藏',
+        template_favorite_remove: '取消收藏',
+        template_search_ph: '搜索模板...',
+        template_empty: '暂无模板',
+        template_recent_empty: '暂无最近使用',
+        template_favorite_empty: '暂无收藏',
+
+        // 签到
+        checkin_title: '每日签到',
+        checkin_btn: '立即签到',
+        checkin_btn_done: '今日已签到',
+        checkin_streak: '连续签到 {n} 天',
+        checkin_total: '累计签到 {n} 次',
+        checkin_reward: '获得 ¥{amount} + {days} 天会员',
+        checkin_bonus: '连续 {n} 天额外奖励 ¥{bonus}',
+        checkin_fail: '签到失败，请稍后重试',
+
+        // 提现风控
+        wallet_available: '可提现金额',
+        wallet_cannot_withdraw: '暂不可提现',
+        wallet_min_withdraw: '最低提现 ¥{n}',
+        wallet_new_user_wait: '新用户需注册满 {h} 小时可提现（还剩 {r} 小时）',
+        wallet_reward_freeze: '最近 {h} 小时内有 {n} 笔推广奖励在审核中',
+
+        // 用户体验
+        typing_indicator: 'AI 正在思考',
+        copy_code: '复制代码',
+        copied: '已复制',
+        drag_drop_hint: '释放以文件上传',
+        shortcut_send: 'Enter 发送，Ctrl+Enter 换行',
     },
     en: {
         brand_name: 'Youliao AI',
@@ -255,6 +359,31 @@ const LANG = {
 
         empty_title: "I'm Youliao AI. How can I help?",
         empty_desc: 'Type your question to start a new conversation',
+
+        // 场景模板
+        scene_section: 'Choose a scene to get started',
+        scene_chat: 'Casual Chat',
+        scene_chat_desc: 'Relaxed conversation, friendly chat',
+        scene_office: 'Office Writing',
+        scene_office_desc: 'Reports/summaries/emails/speeches',
+        scene_study: 'Study Q&A',
+        scene_study_desc: 'Homework help/knowledge explanation',
+        scene_life: 'Life Advice',
+        scene_life_desc: 'Emotions/tips/recommendations',
+        scene_general: 'General Mode',
+        scene_current: 'Current scene: ',
+
+        // 对话管理
+        chat_rename: 'Rename',
+        chat_delete: 'Delete',
+        chat_clear: 'Clear Chat',
+        chat_clear_confirm: 'Are you sure you want to clear the current chat? This cannot be undone.',
+        chat_delete_confirm: 'Are you sure you want to delete this conversation? This cannot be undone.',
+        chat_rename_placeholder: 'Enter a new conversation name',
+        chat_rename_ok: 'Renamed',
+        chat_delete_ok: 'Deleted',
+        chat_clear_ok: 'Cleared',
+        chat_need_login: 'Sign in to manage chat history',
 
         input_placeholder: 'Type a message, paste an image/document, or click to attach…',
         attach_btn: 'Attach',
@@ -412,6 +541,75 @@ const LANG = {
         js_match_done_2: ' matching jobs',
         job_match_score: 'Match ',
         job_source_default: 'Jobs',
+
+        // Resume audit
+        job_step_5: '⑤ Resume Audit',
+        job_step_6: '⑥ Mock Interview',
+        job_section_5: 'AI Resume Audit',
+        job_section_5_desc: '6-dimension comprehensive scan to identify resume issues and get targeted suggestions',
+        job_audit_btn: 'Start Audit',
+        job_audit_analyzing: 'AI is analyzing your resume...',
+        job_audit_score: 'Resume Score',
+        job_audit_summary: 'Overall Assessment',
+        job_audit_issues: 'Issues Found',
+        job_audit_severity_high: 'High Priority',
+        job_audit_severity_medium: 'Medium Priority',
+        job_audit_severity_low: 'Low Priority',
+        job_audit_category_content: 'Content Completeness',
+        job_audit_category_format: 'Format & Structure',
+        job_audit_category_keyword: 'Keyword Optimization',
+        job_audit_category_tone: 'Professional Tone',
+        job_audit_category_experience: 'Experience Presentation',
+        job_audit_category_redflag: 'Red Flags',
+        job_audit_suggestion: 'Suggestion',
+        job_audit_fail: 'Audit failed, please try again',
+        job_audit_need_resume: 'Please generate or fill in your resume first',
+
+        // Mock interview
+        job_section_6: 'AI Mock Interview',
+        job_section_6_desc: 'Multi-round progressive interview with real-time feedback to help you improve fast',
+        job_interview_start_btn: 'Start Interview',
+        job_interview_next_btn: 'Submit Answer & Next',
+        job_interview_restart_btn: 'Restart',
+        job_interview_round: 'Round {n}',
+        job_interview_type_general: 'Opening',
+        job_interview_type_technical: 'Technical',
+        job_interview_type_behavioral: 'Behavioral',
+        job_interview_type_case: 'Case Study',
+        job_interview_tips: 'Tips',
+        job_interview_feedback: 'Last Round Feedback',
+        job_interview_feedback_relevance: 'Relevance',
+        job_interview_feedback_clarity: 'Clarity',
+        job_interview_feedback_examples: 'Examples',
+        job_interview_feedback_communication: 'Communication',
+        job_interview_feedback_comment: 'Overall Comment',
+        job_interview_input_ph: 'Type your answer here...',
+        job_interview_processing: 'AI is evaluating and generating the next question...',
+        job_interview_need_answer: 'Please type your answer first',
+
+        // Check-in
+        checkin_title: 'Daily Check-in',
+        checkin_btn: 'Check In',
+        checkin_btn_done: 'Checked In Today',
+        checkin_streak: '{n} day streak',
+        checkin_total: '{n} total check-ins',
+        checkin_reward: 'Earned ¥{amount} + {days} days membership',
+        checkin_bonus: '{n}-day streak bonus ¥{bonus}',
+        checkin_fail: 'Check-in failed, please try again',
+
+        // Withdraw risk
+        wallet_available: 'Available to withdraw',
+        wallet_cannot_withdraw: 'Cannot withdraw now',
+        wallet_min_withdraw: 'Minimum ¥{n} to withdraw',
+        wallet_new_user_wait: 'New users need to wait {h}h after registration ({r}h left)',
+        wallet_reward_freeze: '{n} referral rewards in the last {h}h are under review',
+
+        // UX
+        typing_indicator: 'AI is thinking',
+        copy_code: 'Copy code',
+        copied: 'Copied',
+        drag_drop_hint: 'Drop files to upload',
+        shortcut_send: 'Enter to send, Ctrl+Enter for new line',
     },
 };
 
@@ -435,8 +633,9 @@ function applyStaticI18n() {
     document.querySelectorAll('[data-i18n]').forEach(el => {
         el.textContent = t(el.getAttribute('data-i18n'));
     });
-    // placeholder
+    // placeholder（跳过场景模式下的输入框，由场景逻辑自行处理）
     document.querySelectorAll('[data-i18n-ph]').forEach(el => {
+        if (el.dataset && el.dataset.scenePh === '1') return;
         el.setAttribute('placeholder', t(el.getAttribute('data-i18n-ph')));
     });
     // title 属性

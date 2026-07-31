@@ -200,6 +200,95 @@
     color: #ff6b6b;
 }
 
+/* ========= 签到卡片 ========= */
+.checkin-card {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    background: var(--bg-elevated);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    padding: 16px 20px;
+    margin-bottom: 8px;
+}
+
+.checkin-info {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.checkin-streak {
+    font-size: 16px;
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+.checkin-total {
+    font-size: 13px;
+    color: var(--text-muted);
+}
+
+.wallet-btn-disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+/* ========= 提现可提金额与风控提示 ========= */
+.wallet-withdraw-info {
+    background: var(--bg-elevated);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    padding: 14px 18px;
+    margin-bottom: 12px;
+}
+
+.wallet-available-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 8px;
+}
+
+.wallet-available-row > span:first-child {
+    color: var(--text-muted);
+    font-size: 13px;
+}
+
+.wallet-available-amount {
+    font-size: 18px;
+    font-weight: 700;
+    color: #2fae6a;
+}
+
+.wallet-risk-tips {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.wallet-risk-ok {
+    color: #2fae6a;
+    font-size: 13px;
+}
+
+.wallet-risk-warn {
+    color: #f0a02a;
+    font-size: 12px;
+    line-height: 1.5;
+}
+
+@media (max-width: 768px) {
+    .checkin-card {
+        flex-direction: column;
+        align-items: flex-start;
+    }
+    .checkin-card .wallet-btn {
+        width: 100%;
+    }
+}
+
 @media (max-width: 768px) {
     .wallet-panel { padding: 18px 14px 40px; }
     .wallet-cards { gap: 10px; }

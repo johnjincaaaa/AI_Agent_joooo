@@ -1,5 +1,5 @@
 /* ==========================================================
-   右侧悬浮图标 · 在线客服 + 下载 App
+   右侧悬浮小球 · 鼠标停留(PC) / 点击(手机) 展开菜单
    链接在 static/js/config.js 中自定义，留空则对应图标隐藏
 ========================================================== */
 .float-dock {
@@ -10,7 +10,71 @@
     z-index: 9997;
     display: flex;
     flex-direction: column;
-    gap: 14px;
+    align-items: flex-end;
+    gap: 12px;
+}
+
+/* 悬浮小球 */
+.float-ball {
+    width: 56px;
+    height: 56px;
+    border-radius: 50%;
+    border: 2px solid rgba(255, 255, 255, 0.2);
+    background: linear-gradient(135deg, var(--accent), var(--accent-hover));
+    color: #fff;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    box-shadow: 0 8px 28px rgba(76, 141, 255, 0.5), 0 0 0 4px rgba(76, 141, 255, 0.12);
+    transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+    padding: 0;
+}
+.float-ball:hover {
+    transform: scale(1.08) rotate(8deg);
+    box-shadow: 0 12px 36px rgba(76, 141, 255, 0.6), 0 0 0 6px rgba(76, 141, 255, 0.15);
+}
+.float-ball:active {
+    transform: scale(0.96);
+}
+
+/* 菜单容器：默认隐藏 */
+.float-menu {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    opacity: 0;
+    visibility: hidden;
+    transform: translateX(12px) scale(0.92);
+    transform-origin: right center;
+    transition: all 0.22s cubic-bezier(0.4, 0, 0.2, 1);
+    pointer-events: none;
+}
+
+/* PC端：hover 展开 */
+@media (hover: hover) and (pointer: fine) {
+    .float-dock:hover .float-menu,
+    .float-dock:focus-within .float-menu {
+        opacity: 1;
+        visibility: visible;
+        transform: translateX(0) scale(1);
+        pointer-events: auto;
+    }
+    .float-dock:hover .float-ball {
+        transform: scale(1.08) rotate(8deg);
+        box-shadow: 0 12px 36px rgba(76, 141, 255, 0.6), 0 0 0 6px rgba(76, 141, 255, 0.15);
+    }
+}
+
+/* 移动端：通过 open 类展开 */
+.float-dock.open .float-menu {
+    opacity: 1;
+    visibility: visible;
+    transform: translateX(0) scale(1);
+    pointer-events: auto;
+}
+.float-dock.open .float-ball {
+    transform: rotate(90deg);
 }
 
 .float-dock-item {
@@ -184,14 +248,35 @@
 
 /* ----------------------- 移动端适配 ----------------------- */
 @media (max-width: 768px) {
-    /* 移到顶部右侧、横向排列：既在“上面”，又不遮挡底部输入框/发送键 */
     .float-dock {
-        top: 62px;        /* 让开高 56px 的顶部标题栏 */
+        top: 62px;
         right: 10px;
         bottom: auto;
         transform: none;
+        flex-direction: column-reverse;
+        align-items: flex-end;
+        gap: 10px;
+    }
+    .float-ball {
+        width: 48px;
+        height: 48px;
+        box-shadow: 0 6px 22px rgba(76, 141, 255, 0.5), 0 0 0 3px rgba(76, 141, 255, 0.12);
+    }
+    .float-ball svg {
+        width: 20px;
+        height: 20px;
+    }
+    .float-menu {
         flex-direction: row;
         gap: 8px;
+        transform: translateY(-8px) scale(0.92);
+        transform-origin: bottom right;
+    }
+    .float-dock.open .float-menu {
+        opacity: 1;
+        visibility: visible;
+        transform: translateY(0) scale(1);
+        pointer-events: auto;
     }
     .float-dock-item {
         width: 46px;

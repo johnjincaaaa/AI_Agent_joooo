@@ -5,6 +5,9 @@
 
     const API_WALLET = () => `${config.API_BASE_URL}/ai/promo/wallet`;
     const API_WITHDRAW = () => `${config.API_BASE_URL}/ai/promo/withdraw`;
+    const API_CHECKIN_STATUS = () => `${config.API_BASE_URL}/ai/promo/checkin-status`;
+    const API_CHECKIN = () => `${config.API_BASE_URL}/ai/promo/checkin`;
+    const API_WITHDRAW_AVAILABLE = () => `${config.API_BASE_URL}/ai/promo/withdraw-available`;
 
     function isLoggedIn() {
         const token = localStorage.getItem("token");
@@ -67,6 +70,96 @@
                 renderRecords(data.records);
             })
             .catch(() => {});
+    }
+
+    function loadCheckinStatus() {
+        const streakEl = document.getElementById("checkinStreak");
+        const totalEl = document.getElementById("checkinTotal");
+        const btn = document.getElementById("checkinBtn");
+        fetch(API_CHECKIN_STATUS(), {headers: buildAuthHeaders()})
+            .then(r => r.ok ? r.json() : null)
+            .then(data => {
+                if (!data) return;
+                if (streakEl) streakEl.textContent = t("checkin_streak").replace("{n}", data.streak_days || 0);
+                if (totalEl) totalEl.textContent = t("checkin_total").replace("{n}", data.total_checkins || 0);
+                if (btn) {
+                    if (data.checked_today) {
+                        btn.textContent = t("checkin_btn_done");
+                        btn.disabled = true;
+                        btn.classList.add("wallet-btn-disabled");
+                    } else {
+                        btn.textContent = t("checkin_btn");
+                        btn.disabled = false;
+                        btn.classList.remove("wallet-btn-disabled");
+                    }
+                }
+            })
+            .catch(() => {});
+    }
+
+    function loadWithdrawAvailable() {
+        const availEl = document.getElementById("walletAvailableAmount");
+        const riskTipsEl = document.getElementById("walletRiskTips");
+        fetch(API_WITHDRAW_AVAILABLE(), {headers: buildAuthHeaders()})
+            .then(r => r.ok ? r.json() : null)
+            .then(data => {
+                if (!data) return;
+                if (availEl) availEl.textContent = `¥${(data.balance || 0).toFixed(2)}`;
+                if (riskTipsEl) {
+                    if (data.can_withdraw) {
+                        riskTipsEl.innerHTML = `<span class="wallet-risk-ok">${t("wallet_available")}: ¥${(data.balance || 0).toFixed(2)}</span>`;
+                    } else {
+                        riskTipsEl.innerHTML = (data.reasons || []).map(r =>
+                            `<span class="wallet-risk-warn">⚠ ${r}</span>`
+                        ).join("");
+                    }
+                }
+            })
+            .catch(() => {});
+    }
+
+    function doCheckin() {
+        const statusEl = document.getElementById("checkinStatus");
+        const btn = document.getElementById("checkinBtn");
+        if (btn) btn.disabled = true;
+        fetch(API_CHECKIN(), {
+            method: "POST",
+            headers: buildAuthHeaders(),
+        })
+            .then(async r => {
+                const data = await r.json().catch(() => ({}));
+                if (r.ok && data.ok) {
+                    let msg = t("checkin_reward")
+                        .replace("{amount}", (data.reward_amount || 0).toFixed(2))
+                        .replace("{days}", data.reward_days || 0);
+                    if (data.consecutive_bonus) {
+                        msg += "，" + t("checkin_bonus")
+                            .replace("{n}", data.streak_days || 0)
+                            .replace("{bonus}", data.consecutive_bonus.toFixed(2));
+                    }
+                    if (statusEl) {
+                        statusEl.textContent = msg;
+                        statusEl.className = "wallet-status-tip wallet-status-ok";
+                    }
+                    loadWallet();
+                    loadCheckinStatus();
+                } else {
+                    const msg = data.msg || t("checkin_fail");
+                    if (statusEl) {
+                        statusEl.textContent = msg;
+                        statusEl.className = "wallet-status-tip wallet-status-error";
+                    }
+                }
+            })
+            .catch(() => {
+                if (statusEl) {
+                    statusEl.textContent = t("checkin_fail");
+                    statusEl.className = "wallet-status-tip wallet-status-error";
+                }
+            })
+            .finally(() => {
+                if (btn) btn.disabled = false;
+            });
     }
 
     function submitWithdraw() {
@@ -140,6 +233,8 @@
         document.getElementById("scrollBottomBtn")?.classList.add("hidden");
 
         loadWallet();
+        loadCheckinStatus();
+        loadWithdrawAvailable();
     }
 
     function exitWalletMode() {
@@ -159,6 +254,7 @@
     function initWallet() {
         document.getElementById("walletEntry")?.addEventListener("click", enterWalletMode);
         document.getElementById("walletWithdrawBtn")?.addEventListener("click", submitWithdraw);
+        document.getElementById("checkinBtn")?.addEventListener("click", doCheckin);
     }
 
     // 暴露给其它模块（jobHunt/新建会话时可调用退出）

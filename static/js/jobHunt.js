@@ -417,6 +417,234 @@ document.addEventListener('langchange', () => {
     }
 });
 
+// ==================== 简历漏洞检测 ====================
+
+const SEVERITY_LABEL = {
+    high: 'job_audit_severity_high',
+    medium: 'job_audit_severity_medium',
+    low: 'job_audit_severity_low',
+};
+
+function renderAuditResult(audit) {
+    const box = document.getElementById('jobAuditResult');
+    if (!box) return;
+    if (!audit) {
+        box.innerHTML = `<p class="job-status-tip">${t('job_audit_fail')}</p>`;
+        return;
+    }
+
+    const issues = audit.issues || [];
+    const scoreColor = audit.score >= 80 ? '#4ade80' : audit.score >= 60 ? '#fbbf24' : '#f87171';
+
+    box.innerHTML = `
+        <div class="audit-score-card">
+            <div class="audit-score-ring">
+                <svg viewBox="0 0 120 120">
+                    <circle cx="60" cy="60" r="54" fill="none" stroke="var(--border)" stroke-width="10"/>
+                    <circle cx="60" cy="60" r="54" fill="none" stroke="${scoreColor}" stroke-width="10"
+                        stroke-dasharray="${audit.score * 3.39} 339" transform="rotate(-90 60 60)"/>
+                </svg>
+                <div class="audit-score-text">
+                    <span class="score-num">${audit.score}</span>
+                    <span class="score-label">${t('job_audit_score')}</span>
+                </div>
+            </div>
+            <div class="audit-summary">
+                <h4>${t('job_audit_summary')}</h4>
+                <p>${audit.overall_summary || ''}</p>
+            </div>
+        </div>
+        <div class="audit-issues">
+            <h4>${t('job_audit_issues')} (${issues.length})</h4>
+            ${issues.length ? issues.map(issue => `
+                <div class="audit-issue severity-${issue.severity || 'low'}">
+                    <div class="audit-issue-head">
+                        <span class="audit-category">${issue.category || ''}</span>
+                        <span class="audit-severity">${t(SEVERITY_LABEL[issue.severity] || 'job_audit_severity_low')}</span>
+                    </div>
+                    <div class="audit-issue-body">
+                        <p class="audit-issue-text">${issue.issue || ''}</p>
+                        <p class="audit-suggestion"><strong>${t('job_audit_suggestion')}：</strong>${issue.suggestion || ''}</p>
+                    </div>
+                </div>
+            `).join('') : `<p class="job-status-tip success">${t('js_resume_done')}</p>`}
+        </div>
+    `;
+}
+
+async function auditResume() {
+    const profile = readProfileFromForm();
+    const resume = currentResume || profile.preset_resume || '';
+    if (!resume && !profile.name && !profile.target_role) {
+        setJobStatus('jobAuditStatus', t('job_audit_need_resume'), 'error');
+        return;
+    }
+
+    const btn = document.getElementById('jobAuditBtn');
+    btn.disabled = true;
+    setJobStatus('jobAuditStatus', t('job_audit_analyzing'));
+
+    try {
+        const res = await fetch(`${config.API_BASE_URL}/ai/job/resume-audit`, {
+            method: 'POST',
+            headers: buildAuthHeaders(),
+            body: JSON.stringify({
+                profile,
+                resume_content: resume,
+            }),
+        });
+        if (!res.ok) throw new Error('audit failed');
+        const data = await res.json();
+        renderAuditResult(data.audit);
+        updateStepTags(5);
+        setJobStatus('jobAuditStatus', '', 'success');
+    } catch (err) {
+        setJobStatus('jobAuditStatus', t('job_audit_fail'), 'error');
+        console.error(err);
+    } finally {
+        btn.disabled = false;
+    }
+}
+
+// ==================== 模拟面试 ====================
+
+let interviewRound = 0;
+let interviewHistory = [];
+
+const INTERVIEW_TYPE_LABEL = {
+    general: 'job_interview_type_general',
+    technical: 'job_interview_type_technical',
+    behavioral: 'job_interview_type_behavioral',
+    case: 'job_interview_type_case',
+};
+
+function renderInterviewArea(data) {
+    const area = document.getElementById('jobInterviewArea');
+    if (!area) return;
+
+    const roundLabel = t('job_interview_round').replace('{n}', interviewRound);
+    const typeLabel = t(INTERVIEW_TYPE_LABEL[data.question_type] || 'job_interview_type_general');
+
+    let feedbackHtml = '';
+    if (data.feedback && interviewRound > 1) {
+        const fb = data.feedback;
+        feedbackHtml = `
+            <div class="interview-feedback">
+                <h5>${t('job_interview_feedback')}</h5>
+                <div class="feedback-scores">
+                    <div class="feedback-score-item">
+                        <span>${t('job_interview_feedback_relevance')}</span>
+                        <div class="feedback-bar"><div class="feedback-bar-fill" style="width:${(fb.relevance || 0) * 10}%"></div></div>
+                        <span>${fb.relevance || 0}/10</span>
+                    </div>
+                    <div class="feedback-score-item">
+                        <span>${t('job_interview_feedback_clarity')}</span>
+                        <div class="feedback-bar"><div class="feedback-bar-fill" style="width:${(fb.clarity || 0) * 10}%"></div></div>
+                        <span>${fb.clarity || 0}/10</span>
+                    </div>
+                    <div class="feedback-score-item">
+                        <span>${t('job_interview_feedback_examples')}</span>
+                        <div class="feedback-bar"><div class="feedback-bar-fill" style="width:${(fb.examples || 0) * 10}%"></div></div>
+                        <span>${fb.examples || 0}/10</span>
+                    </div>
+                    <div class="feedback-score-item">
+                        <span>${t('job_interview_feedback_communication')}</span>
+                        <div class="feedback-bar"><div class="feedback-bar-fill" style="width:${(fb.communication || 0) * 10}%"></div></div>
+                        <span>${fb.communication || 0}/10</span>
+                    </div>
+                </div>
+                <p class="feedback-comment"><strong>${t('job_interview_feedback_comment')}：</strong>${fb.comment || ''}</p>
+            </div>
+        `;
+    }
+
+    area.innerHTML = `
+        ${feedbackHtml}
+        <div class="interview-round-header">
+            <span class="interview-round-tag">${roundLabel}</span>
+            <span class="interview-type-tag">${typeLabel}</span>
+        </div>
+        <div class="interview-question">
+            <p>${data.question || ''}</p>
+        </div>
+        ${data.tips ? `<p class="interview-tips">💡 ${t('job_interview_tips')}：${data.tips}</p>` : ''}
+        <textarea class="interview-answer-input" id="interviewAnswerInput"
+            placeholder="${t('job_interview_input_ph')}" rows="5"></textarea>
+    `;
+}
+
+async function startInterview() {
+    interviewRound = 1;
+    interviewHistory = [];
+    await doInterviewRound(1, '', 'general');
+}
+
+async function submitInterviewAnswer() {
+    const input = document.getElementById('interviewAnswerInput');
+    const answer = input ? input.value.trim() : '';
+    if (!answer) {
+        setJobStatus('jobInterviewStatus', t('job_interview_need_answer'), 'error');
+        return;
+    }
+    interviewRound++;
+    let nextType = 'general';
+    if (interviewRound <= 3) nextType = 'technical';
+    else if (interviewRound <= 5) nextType = 'behavioral';
+    else nextType = 'case';
+    await doInterviewRound(interviewRound, answer, nextType);
+}
+
+async function doInterviewRound(round, lastAnswer, itype) {
+    const profile = readProfileFromForm();
+    const resume = currentResume || profile.preset_resume || '';
+
+    const startBtn = document.getElementById('jobInterviewStartBtn');
+    const nextBtn = document.getElementById('jobInterviewNextBtn');
+    const restartBtn = document.getElementById('jobInterviewRestartBtn');
+
+    nextBtn.disabled = true;
+    setJobStatus('jobInterviewStatus', t('job_interview_processing'));
+
+    try {
+        const res = await fetch(`${config.API_BASE_URL}/ai/job/mock-interview`, {
+            method: 'POST',
+            headers: buildAuthHeaders(),
+            body: JSON.stringify({
+                profile,
+                resume_content: resume,
+                round,
+                last_answer: lastAnswer,
+                interview_type: itype,
+            }),
+        });
+        if (!res.ok) throw new Error('interview failed');
+        const data = await res.json();
+        interviewHistory.push(data.interview);
+        renderInterviewArea(data.interview);
+
+        // 切换按钮显示
+        startBtn.classList.add('hidden');
+        nextBtn.classList.remove('hidden');
+        restartBtn.classList.remove('hidden');
+        nextBtn.disabled = false;
+        updateStepTags(6);
+        setJobStatus('jobInterviewStatus', '', '');
+    } catch (err) {
+        setJobStatus('jobInterviewStatus', t('job_audit_fail'), 'error');
+        nextBtn.disabled = false;
+        console.error(err);
+    }
+}
+
+function initJobHuntAdvanced() {
+    document.getElementById('jobAuditBtn')?.addEventListener('click', auditResume);
+    document.getElementById('jobInterviewStartBtn')?.addEventListener('click', startInterview);
+    document.getElementById('jobInterviewNextBtn')?.addEventListener('click', submitInterviewAnswer);
+    document.getElementById('jobInterviewRestartBtn')?.addEventListener('click', startInterview);
+}
+
+document.addEventListener('DOMContentLoaded', initJobHuntAdvanced);
+
 window.enterJobHuntMode = enterJobHuntMode;
 window.exitJobHuntMode = exitJobHuntMode;
 window.isJobHuntMode = () => isJobHuntMode;

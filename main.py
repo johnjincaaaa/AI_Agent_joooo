@@ -128,6 +128,7 @@ class ChatRequest(BaseModel):
     image_paths: List[str] = []  # 用户粘贴/上传图片的服务端路径
     document_paths: List[str] = []  # 用户上传文档的服务端路径
     lang: str = "zh"  # 界面语言，AI 回复语言随之切换（zh / en）
+    scene: Optional[str] = None  # 场景模板 id（chat / office / study / life），None 表示通用模式
 
 
 def augment_message_with_attachments(
@@ -203,9 +204,17 @@ def _save_upload_file(content: bytes, filename: str, suffix: str) -> Path:
     return save_path
 
 
-def build_system_prompt(lang: str = "zh") -> str:
-    """根据界面语言返回系统提示词，控制 AI 回复语言。"""
-    if (lang or "zh").lower().startswith("en"):
+def build_system_prompt(lang: str = "zh", scene: Optional[str] = None) -> str:
+    """根据界面语言和场景模板返回系统提示词，控制 AI 回复语言和风格。"""
+    is_en = (lang or "zh").lower().startswith("en")
+
+    # 如果指定了场景模板，优先使用场景对应的系统提示词
+    if scene and scene in config.SCENE_PRESETS:
+        preset = config.SCENE_PRESETS[scene]
+        return preset["system_prompt_en"] if is_en else preset["system_prompt_zh"]
+
+    # 默认通用模式
+    if is_en:
         return "You are a helpful assistant. Always respond in English."
     return SYSTEM_PROMPT
 
@@ -221,6 +230,90 @@ def build_tool_list(open_online: bool, enabled_skills: Optional[List[str]] = Non
 @app.get("/ai/skills", summary="获取可用技能列表")
 def list_skills():
     return {"code": 200, "skills": get_skill_catalog()}
+
+
+@app.get("/ai/skills/market", summary="获取技能市场列表")
+def list_skill_market():
+    """返回技能市场所有技能（已安装+市场可安装）。"""
+    from tools.skills_registry import get_all_skills
+    return {"code": 200, **get_all_skills()}
+
+
+@app.post("/ai/skills/preview", summary="预览技能包（解析zip）")
+async def preview_skill_package(file: UploadFile = File(...)):
+    """上传技能包 zip，预览技能信息（不安装）。"""
+    try:
+        contents = await file.read()
+        from tools.skill_package_manager import parse_skill_zip
+        result = parse_skill_zip(contents)
+        return {"code": 200 if result["valid"] else 400, **result}
+    except Exception as e:
+        return {"code": 500, "error": f"上传失败: {str(e)}"}
+
+
+@app.post("/ai/skills/install", summary="安装技能包")
+async def install_skill_package(file: UploadFile = File(...)):
+    """上传并安装技能包 zip。"""
+    try:
+        contents = await file.read()
+        from tools.skill_package_manager import install_skill
+        result = install_skill(contents)
+        if result["success"]:
+            return {"code": 200, "skill": result["skill"]}
+        return {"code": 400, "error": result["error"]}
+    except Exception as e:
+        return {"code": 500, "error": f"安装失败: {str(e)}"}
+
+
+@app.get("/ai/skills/installed", summary="获取已安装的自定义技能列表")
+def list_installed_skills_api():
+    """返回所有已安装的自定义技能（通过 zip 导入的）。"""
+    from tools.skill_package_manager import list_installed_skills
+    return {"code": 200, "skills": list_installed_skills()}
+
+
+@app.delete("/ai/skills/installed/{skill_id}", summary="卸载已安装的自定义技能")
+def uninstall_skill_api(skill_id: str):
+    """卸载指定的已安装技能。"""
+    from tools.skill_package_manager import uninstall_skill
+    if uninstall_skill(skill_id):
+        return {"code": 200, "message": "卸载成功"}
+    return {"code": 404, "error": "技能不存在"}
+
+
+@app.get("/ai/scenes", summary="获取大众场景模板列表（含快捷模板）")
+def list_scenes():
+    """返回四大大众场景模板：日常闲聊、办公文案、学习答疑、生活解惑，含每个场景的快捷模板。"""
+    scenes = []
+    for key, preset in config.SCENE_PRESETS.items():
+        scene = {
+            "id": preset["id"],
+            "name_zh": preset["name_zh"],
+            "name_en": preset["name_en"],
+            "icon": preset["icon"],
+        }
+        if "quick_templates" in preset:
+            scene["quick_templates"] = [
+                {
+                    "id": t["id"],
+                    "name_zh": t["name_zh"],
+                    "name_en": t["name_en"],
+                    "icon": t["icon"],
+                }
+                for t in preset["quick_templates"]
+            ]
+        scenes.append(scene)
+    return {"code": 200, "scenes": scenes}
+
+
+@app.get("/ai/scenes/{scene_id}/templates", summary="获取指定场景的快捷模板详情")
+def get_scene_templates(scene_id: str):
+    """返回指定场景的所有快捷模板（含完整 prompt）。"""
+    preset = config.SCENE_PRESETS.get(scene_id)
+    if not preset:
+        raise HTTPException(status_code=404, detail="Scene not found")
+    templates = preset.get("quick_templates", [])
+    return {"code": 200, "templates": templates}
 
 
 @app.post("/ai/upload-image", summary="上传聊天图片")
@@ -311,10 +404,10 @@ async def chat_stream(
     """SSE流式输出 + 最终返回完整对话历史"""
     remaining = ensure_chat_access(http_request, user_id)
 
-    # 1. 构建历史（和原来完全一样）
+    # 1. 构建历史（动态记忆：默认 50 轮上下文）
     full_history = chat_request.history.copy()
     full_history.append(ChatMessage(role='user', message=chat_request.newMessage))
-    ai_context = full_history[-20:]
+    ai_context = full_history[-50:]
 
     # 2. 初始化模型（和原来完全一样）
     model = init_chat_model(
@@ -331,9 +424,25 @@ async def chat_stream(
     )
     tool_list = build_tool_list(chat_request.open_online, enabled_skills)
 
+    # 合并提示词技能的系统提示词
+    from tools.skills_registry import get_prompt_skill_system_prompt
+    from tools.skill_package_manager import get_installed_skill_system_prompt
+    base_system_prompt = build_system_prompt(chat_request.lang, chat_request.scene)
+    skill_prompts = []
+    for sid in enabled_skills:
+        sp = get_prompt_skill_system_prompt(sid)
+        if not sp:
+            sp = get_installed_skill_system_prompt(sid)
+        if sp:
+            skill_prompts.append(sp)
+    if skill_prompts:
+        final_system_prompt = base_system_prompt + "\n\n---\n\n".join(skill_prompts)
+    else:
+        final_system_prompt = base_system_prompt
+
     agent = create_agent(
         model=model,
-        system_prompt=build_system_prompt(chat_request.lang),
+        system_prompt=final_system_prompt,
         tools=tool_list,
     )
 
@@ -398,9 +507,9 @@ def ai_chat(
     full_history = chat_request.history.copy()
     full_history.append(ChatMessage(role='user', message=chat_request.newMessage))
     # ==========================================
-    # 2. 【关键】只取最后 20 条给 AI
+    # 2. 【关键】只取最后 50 条给 AI（动态记忆）
     # ==========================================
-    ai_context = full_history[-20:]  # 取最后20条！
+    ai_context = full_history[-50:]  # 取最后50条！
 
     # ==========================================
     # 3. 把 ai_context 传给 AI
@@ -413,17 +522,35 @@ def ai_chat(
         temperature=temperature,
         # num_gpu=-1
     )
+    resolved_skills = resolve_enabled_skills(
+        chat_request.enabled_skills,
+        chat_request.image_paths,
+        chat_request.document_paths,
+    )
     tool_list = build_tool_list(
         chat_request.open_online,
-        resolve_enabled_skills(
-            chat_request.enabled_skills,
-            chat_request.image_paths,
-            chat_request.document_paths,
-        ),
+        resolved_skills,
     )
+
+    # 合并提示词技能的系统提示词
+    from tools.skills_registry import get_prompt_skill_system_prompt
+    from tools.skill_package_manager import get_installed_skill_system_prompt
+    base_system_prompt = build_system_prompt(chat_request.lang, chat_request.scene)
+    skill_prompts = []
+    for sid in resolved_skills:
+        sp = get_prompt_skill_system_prompt(sid)
+        if not sp:
+            sp = get_installed_skill_system_prompt(sid)
+        if sp:
+            skill_prompts.append(sp)
+    if skill_prompts:
+        final_system_prompt = base_system_prompt + "\n\n---\n\n".join(skill_prompts)
+    else:
+        final_system_prompt = base_system_prompt
+
     agent = create_agent(
         model=model,
-        system_prompt=build_system_prompt(chat_request.lang),
+        system_prompt=final_system_prompt,
         tools=tool_list,
     )
 
@@ -580,6 +707,397 @@ def ai_history(
                 status_code=500,
                 detail={"code": 500, "msg": f"异常：{str(error)}"}
             )
+
+
+# ------------------- 接口：重命名会话 -------------------
+class ChatRenameRequest(BaseModel):
+    session_time: int
+    session_name: str
+
+
+@app.post('/ai/chat/rename', summary='重命名会话')
+def ai_chat_rename(
+        request: ChatRenameRequest,
+        db: Session = Depends(get_db),
+        user_id: int = Depends(verify_token)
+):
+    session = db.query(ChatSession).filter(
+        ChatSession.user_id == user_id,
+        ChatSession.session_time == request.session_time
+    ).first()
+    if not session:
+        raise HTTPException(status_code=404, detail={"code": 404, "msg": "会话不存在"})
+    session.session_name = request.session_name.strip()[:100] or session.session_name
+    db.commit()
+    return {"code": 200, "msg": "已重命名"}
+
+
+# ------------------- 接口：删除会话 -------------------
+@app.delete('/ai/chat/delete', summary='删除会话')
+def ai_chat_delete(
+        session_time: int = Query(..., description="会话时间戳"),
+        db: Session = Depends(get_db),
+        user_id: int = Depends(verify_token)
+):
+    session = db.query(ChatSession).filter(
+        ChatSession.user_id == user_id,
+        ChatSession.session_time == session_time
+    ).first()
+    if not session:
+        raise HTTPException(status_code=404, detail={"code": 404, "msg": "会话不存在"})
+    db.delete(session)
+    db.commit()
+    return {"code": 200, "msg": "已删除"}
+
+
+# ------------------- 无代码工作流 -------------------
+class WorkflowNode(BaseModel):
+    id: str
+    type: str  # start / end / ai_chat / code / condition / template / user_input / loop / merge
+    x: float
+    y: float
+    data: dict = {}
+
+class WorkflowEdge(BaseModel):
+    id: str
+    source: str
+    target: str
+
+class WorkflowPayload(BaseModel):
+    name: str = "未命名工作流"
+    nodes: List[WorkflowNode] = []
+    edges: List[WorkflowEdge] = []
+    initial_input: str = ""  # 初始输入
+
+
+@app.get("/workflow", summary="无代码工作流编辑器")
+def workflow_page(request: Request):
+    return templates.TemplateResponse(name="workflow.html", request=request)
+
+
+@app.get("/ai/workflows", summary="获取工作流列表")
+def get_workflows(user_id: int = Depends(verify_token)):
+    return {"code": 200, "workflows": []}
+
+
+def _topo_sort(nodes_dict, edges):
+    """拓扑排序，返回节点ID顺序列表"""
+    in_degree = {nid: 0 for nid in nodes_dict}
+    adj = {nid: [] for nid in nodes_dict}
+    for e in edges:
+        src, tgt = e.source, e.target
+        if src in nodes_dict and tgt in nodes_dict:
+            adj[src].append(tgt)
+            in_degree[tgt] = in_degree.get(tgt, 0) + 1
+    queue = [nid for nid, d in in_degree.items() if d == 0]
+    result = []
+    while queue:
+        nid = queue.pop(0)
+        result.append(nid)
+        for tgt in adj[nid]:
+            in_degree[tgt] -= 1
+            if in_degree[tgt] == 0:
+                queue.append(tgt)
+    return result
+
+
+def _get_out_edges(node_id, edges):
+    """获取节点的所有出边"""
+    return [e for e in edges if e.source == node_id]
+
+
+@app.post("/ai/workflow/run", summary="执行工作流")
+async def run_workflow(
+    payload: WorkflowPayload,
+    user_id: Optional[int] = Depends(get_optional_user_id),
+):
+    nodes = payload.nodes
+    edges = payload.edges
+    initial_input = payload.initial_input or ""
+
+    if not nodes:
+        raise HTTPException(status_code=400, detail={"code": 400, "msg": "工作流为空"})
+
+    nodes_dict = {n.id: n for n in nodes}
+    start_nodes = [n for n in nodes if n.type == "start"]
+    end_nodes = [n for n in nodes if n.type == "end"]
+
+    if not start_nodes:
+        raise HTTPException(status_code=400, detail={"code": 400, "msg": "缺少开始节点"})
+
+    # 执行日志
+    execution_log = []
+    # 每个节点的输出
+    node_outputs = {}
+    # 已执行节点集合
+    executed = set()
+    # merge 节点的待合并输入：{node_id: {source_id: output}}
+    merge_pending = {}
+
+    def log(node_id, status, msg="", output=None):
+        entry = {"node_id": node_id, "status": status, "message": msg}
+        if output is not None:
+            entry["output"] = output
+        execution_log.append(entry)
+        node_outputs[node_id] = output
+
+    def _get_upstream_outputs(node_id):
+        """获取某节点所有上游的输出列表"""
+        outs = []
+        for e in edges:
+            if e.target == node_id and e.source in node_outputs:
+                outs.append(node_outputs[e.source])
+        return outs
+
+    def _get_in_degree(node_id):
+        """获取某节点的入度（上游节点数）"""
+        return sum(1 for e in edges if e.target == node_id)
+
+    def _enqueue_downstream(node_id, queue, extra_input=None):
+        """把下游节点加入队列；extra_input 用于 loop 循环时传递每次迭代的值"""
+        for e in _get_out_edges(node_id, edges):
+            tgt = e.target
+            tgt_node = nodes_dict.get(tgt)
+            if not tgt_node:
+                continue
+            # merge 节点：需要等待所有上游完成
+            if tgt_node.type == "merge":
+                if tgt not in merge_pending:
+                    merge_pending[tgt] = {}
+                # 记录这次的来源输出
+                src_output = extra_input if extra_input is not None else node_outputs.get(node_id)
+                merge_pending[tgt][node_id] = src_output
+                # 检查是否所有上游都到齐
+                in_deg = _get_in_degree(tgt)
+                if len(merge_pending[tgt]) >= in_deg:
+                    queue.append(tgt)
+            else:
+                if extra_input is not None:
+                    # 把额外输入暂存到 node_outputs 中供下游读取
+                    node_outputs[node_id] = extra_input
+                if tgt not in executed:
+                    queue.append(tgt)
+
+    # ========== 开始执行 ==========
+    start_id = start_nodes[0].id
+    node_outputs[start_id] = initial_input
+    log(start_id, "success", "开始执行", initial_input)
+    executed.add(start_id)
+
+    queue = []
+    _enqueue_downstream(start_id, queue)
+
+    max_steps = 200
+    step = 0
+
+    while queue and step < max_steps:
+        step += 1
+        node_id = queue.pop(0)
+        node = nodes_dict.get(node_id)
+        if not node:
+            continue
+
+        # 如果已经执行过且不是 loop（loop 允许多次执行），跳过
+        if node_id in executed and node.type != "loop":
+            continue
+
+        # 获取上游输入
+        upstream_outputs = _get_upstream_outputs(node_id)
+
+        # merge 节点：合并输入
+        if node.type == "merge":
+            data = node.data or {}
+            strategy = data.get("strategy", "concat")
+            pending = merge_pending.get(node_id, {})
+            all_inputs = list(pending.values()) if pending else upstream_outputs
+
+            if strategy == "last":
+                merged = all_inputs[-1] if all_inputs else ""
+                msg = f"合并完成（取最新，共 {len(all_inputs)} 个输入）"
+            elif strategy == "first":
+                merged = all_inputs[0] if all_inputs else ""
+                msg = f"合并完成（取最早，共 {len(all_inputs)} 个输入）"
+            else:  # concat
+                merged = "\n\n---\n\n".join([str(x) for x in all_inputs if x is not None])
+                msg = f"合并完成（拼接，共 {len(all_inputs)} 个输入）"
+
+            log(node_id, "success", msg, merged)
+            executed.add(node_id)
+            _enqueue_downstream(node_id, queue)
+            continue
+
+        # 取当前输入
+        current_input = upstream_outputs[-1] if upstream_outputs else ""
+
+        out_edges = _get_out_edges(node_id, edges)
+
+        if node.type == "end":
+            log(node_id, "success", "执行结束", current_input)
+            executed.add(node_id)
+            break
+
+        if node.type == "ai_chat":
+            data = node.data or {}
+            sys_prompt = data.get("systemPrompt", "")
+            temperature = float(data.get("temperature", 0.7))
+            log(node_id, "running", "AI 处理中...")
+            try:
+                model = init_chat_model(
+                    model=MODEL, model_provider="openai",
+                    base_url=DASHSCOPE_URL, api_key=DASHSCOPE_API_KEY,
+                    temperature=temperature,
+                )
+                agent = create_agent(
+                    model=model,
+                    system_prompt=sys_prompt or "你是有料AI，一位专业的AI助手。",
+                    tools=[],
+                )
+                messages = [{"role": "user", "content": current_input}]
+                result = agent.invoke({"messages": messages})
+                ai_reply = result["messages"][-1].content
+                log(node_id, "success", f"AI 回复完成（{len(ai_reply)}字）", ai_reply)
+                current_input = ai_reply
+            except Exception as err:
+                log(node_id, "error", f"AI 调用失败: {str(err)}", current_input)
+
+        elif node.type == "code":
+            data = node.data or {}
+            code_text = (data.get("code", "") or "").strip()
+            log(node_id, "running", "代码执行中...")
+            try:
+                from tools.tool_code_sandbox import run_python_code
+                code_result = run_python_code(code_text, input_data=current_input)
+                if code_result.get("success"):
+                    output_text = code_result.get("output", "")
+                    result_val = code_result.get("result")
+                    display = output_text
+                    if result_val is not None:
+                        display = (display + "\nresult = " + str(result_val)).strip()
+                    log(node_id, "success", f"代码执行成功", display or "(无输出)")
+                    # 优先用 result 变量的值作为下游输入，其次用 print 输出
+                    if result_val is not None:
+                        current_input = str(result_val)
+                    else:
+                        current_input = output_text
+                else:
+                    err_msg = code_result.get("error", "未知错误")
+                    out_msg = code_result.get("output", "")
+                    full_msg = (out_msg + "\n" + err_msg).strip()
+                    log(node_id, "error", f"代码执行失败: {err_msg}", full_msg)
+            except Exception as err:
+                log(node_id, "error", f"沙箱调用失败: {str(err)}", current_input)
+
+        elif node.type == "template":
+            data = node.data or {}
+            scene = data.get("scene", "")
+            scene_map = {"chat": "日常闲聊", "office": "办公文案", "study": "学习答疑", "life": "生活解惑"}
+            scene_name = scene_map.get(scene, "通用模式")
+            log(node_id, "success", f"已应用场景：{scene_name}", current_input)
+
+        elif node.type == "condition":
+            data = node.data or {}
+            expr = (data.get("expression", "") or "").strip()
+            cond_result = False
+            try:
+                safe_dict = {"input": current_input, "len": len, "True": True, "False": False}
+                if expr:
+                    cond_result = bool(eval(expr, {"__builtins__": {}}, safe_dict))
+                else:
+                    cond_result = bool(current_input)
+            except Exception:
+                cond_result = False
+            log(node_id, "success", f"条件结果：{'满足' if cond_result else '不满足'}", current_input)
+            if len(out_edges) >= 2:
+                target = out_edges[0].target if cond_result else out_edges[1].target
+                if target not in executed:
+                    queue.append(target)
+                executed.add(node_id)
+                continue
+
+        elif node.type == "loop":
+            data = node.data or {}
+            mode = data.get("mode", "count")  # count / list
+            # 判断是否首次执行
+            if node_id not in executed:
+                # 首次执行：准备迭代数据
+                if mode == "list":
+                    list_raw = data.get("list", "") or ""
+                    items = [x.strip() for x in list_raw.split(",") if x.strip()]
+                    if not items:
+                        items = [current_input]
+                else:  # count
+                    cnt = int(data.get("count", 1) or 1)
+                    items = [current_input] * max(1, cnt)
+
+                # 保存循环状态到 node_outputs（用特殊结构）
+                loop_state = {"items": items, "index": 0, "results": []}
+                node_outputs[node_id + "__loop_state"] = loop_state
+                log(node_id, "running", f"开始循环（共 {len(items)} 次）")
+                executed.add(node_id)
+
+                # 执行第一次迭代
+                first_item = items[0]
+                log(node_id + f"#iter_0", "success", f"第 1 次迭代输入", first_item)
+                _enqueue_downstream(node_id, queue, extra_input=first_item)
+                continue
+            else:
+                # 继续循环：获取循环状态
+                loop_state = node_outputs.get(node_id + "__loop_state")
+                if not loop_state:
+                    executed.add(node_id)
+                    continue
+                items = loop_state["items"]
+                idx = loop_state["index"]
+
+                # 保存这次迭代的结果（上游输出）
+                if current_input:
+                    loop_state["results"].append(current_input)
+
+                idx += 1
+                if idx < len(items):
+                    # 继续下一次迭代
+                    loop_state["index"] = idx
+                    next_item = items[idx]
+                    log(node_id + f"#iter_{idx}", "success", f"第 {idx + 1} 次迭代输入", next_item)
+                    _enqueue_downstream(node_id, queue, extra_input=next_item)
+                    continue
+                else:
+                    # 循环结束，合并结果
+                    results = loop_state["results"]
+                    final = "\n\n---\n\n".join([str(r) for r in results if r is not None])
+                    log(node_id, "success", f"循环完成（{len(results)} 次）", final)
+                    current_input = final
+
+        elif node.type == "user_input":
+            data = node.data or {}
+            ph = data.get("placeholder", "请输入...")
+            log(node_id, "waiting", f"等待用户输入：{ph}", current_input)
+            executed.add(node_id)
+            return {
+                "code": 202,
+                "msg": "需要用户输入",
+                "waiting_node_id": node_id,
+                "execution_log": execution_log,
+                "node_outputs": node_outputs,
+            }
+
+        executed.add(node_id)
+        _enqueue_downstream(node_id, queue)
+
+    # 返回执行结果
+    final_output = None
+    if end_nodes:
+        final_output = node_outputs.get(end_nodes[0].id, current_input if 'current_input' in dir() else "")
+    else:
+        final_output = current_input if 'current_input' in dir() else ""
+
+    return {
+        "code": 200,
+        "msg": "执行完成",
+        "execution_log": execution_log,
+        "node_outputs": node_outputs,
+        "final_output": final_output,
+    }
 
 
 # ==================== 找工作：简历 + 岗位推荐 ====================
@@ -756,6 +1274,302 @@ def match_job_recommendations(
     return {"code": 200, "jobs": jobs, "source": "mock"}
 
 
+# ===================== 简历漏洞检测 =====================
+
+class ResumeAuditRequest(BaseModel):
+    profile: JobProfilePayload
+    resume_content: str = ""
+
+
+@app.post("/ai/job/resume-audit", summary="AI 简历漏洞检测")
+def resume_audit(
+        request: ResumeAuditRequest,
+        http_request: Request,
+        user_id: Optional[int] = Depends(get_optional_user_id),
+):
+    """对简历进行多维度漏洞检测，返回问题列表和优化建议。"""
+    ensure_chat_access(http_request, user_id)
+    profile = request.profile.model_dump()
+    resume = request.resume_content or profile.get("preset_resume") or ""
+
+    lang = (profile.get("lang") or "zh").lower()
+    if lang.startswith("en"):
+        prompt = f"""You are a senior HR and resume consultant. Conduct a thorough audit of the resume below and identify ALL potential issues across these dimensions:
+
+1. **Content Completeness** - Missing sections, sparse information, lack of quantifiable results
+2. **Format & Structure** - Poor organization, inconsistent formatting, length issues
+3. **Keyword Optimization** - Missing industry keywords, ATS-unfriendly language
+4. **Professional Tone** - Casual language, vague statements, clichés
+5. **Experience Presentation** - Poor action verbs, lack of STAR method, no metrics
+6. **Red Flags** - Employment gaps unexplained, job-hopping patterns, irrelevant content
+
+For each issue found, provide:
+- **category**: one of the 6 dimensions above
+- **severity**: "high" / "medium" / "low"
+- **issue**: specific description of the problem
+- **suggestion**: concrete, actionable fix
+
+Also provide an overall **score** (0-100) and an **overall_summary** (2-3 sentences).
+
+Return ONLY a JSON object in this exact format:
+{{
+    "score": 75,
+    "overall_summary": "...",
+    "issues": [
+        {{"category": "...", "severity": "...", "issue": "...", "suggestion": "..."}}
+    ]
+}}
+
+[Profile]
+{json.dumps(profile, ensure_ascii=False, indent=2)}
+
+[Resume]
+{resume or "(No resume provided - audit based on profile only)"}
+"""
+    else:
+        prompt = f"""你是一位资深 HR 和简历顾问。请对以下简历进行全面漏洞检测，从以下 6 个维度找出所有潜在问题：
+
+1. **内容完整性** - 模块缺失、信息量不足、缺乏量化成果
+2. **格式与结构** - 排版混乱、格式不统一、篇幅不合理
+3. **关键词优化** - 缺少行业关键词、表述不利于 ATS 系统识别
+4. **专业语气** - 口语化严重、表述模糊、套话空话
+5. **经历呈现** - 缺乏行动动词、未用 STAR 法则、无数据支撑
+6. **风险信号** - 空窗期未说明、跳槽频繁、无关信息过多
+
+对每个问题，请提供：
+- **category**：所属维度（6 个之一）
+- **severity**：严重程度 "high" / "medium" / "low"
+- **issue**：具体问题描述
+- **suggestion**：可落地的修改建议
+
+最后给出整体 **score**（0-100 分）和 **overall_summary**（2-3 句话）。
+
+请只返回 JSON，格式如下：
+{{
+    "score": 75,
+    "overall_summary": "...",
+    "issues": [
+        {{"category": "...", "severity": "...", "issue": "...", "suggestion": "..."}}
+    ]
+}}
+
+【个人画像】
+{json.dumps(profile, ensure_ascii=False, indent=2)}
+
+【简历内容】
+{resume or "（无简历内容 - 仅根据画像检测）"}
+"""
+
+    model = init_chat_model(
+        model=MODEL,
+        model_provider="openai",
+        base_url=DASHSCOPE_URL,
+        api_key=DASHSCOPE_API_KEY,
+        temperature=0.5,
+    )
+    result = model.invoke([HumanMessage(content=prompt)])
+    raw = result.content if hasattr(result, "content") else str(result)
+
+    # 尝试解析 JSON
+    try:
+        # 清理可能的 markdown 代码块标记
+        cleaned = raw.strip()
+        if cleaned.startswith("```"):
+            cleaned = cleaned.strip("`")
+            if cleaned.lower().startswith("json"):
+                cleaned = cleaned[4:].strip()
+        audit_data = json.loads(cleaned)
+    except (json.JSONDecodeError, Exception) as e:
+        # 兜底：返回基础检测结果
+        audit_data = {
+            "score": 60,
+            "overall_summary": "简历解析完成，建议补充更多细节和量化成果。" if not lang.startswith("en") else "Resume parsed, suggest adding more details and quantifiable achievements.",
+            "issues": [
+                {"category": "内容完整性", "severity": "medium",
+                 "issue": "简历细节不足" if not lang.startswith("en") else "Insufficient resume details",
+                 "suggestion": "请补充工作经历中的具体项目、成果数据和技术细节" if not lang.startswith("en") else "Please add specific projects, metrics and technical details in work experience"}
+            ]
+        }
+
+    return {"code": 200, "audit": audit_data}
+
+
+# ===================== 模拟面试 =====================
+
+class MockInterviewRequest(BaseModel):
+    profile: JobProfilePayload
+    resume_content: str = ""
+    round: int = 1  # 第几个问题（1=开场自我介绍，2+=技术/行为问题）
+    last_answer: str = ""  # 上一轮用户的回答
+    interview_type: str = "general"  # general / technical / behavioral
+
+
+@app.post("/ai/job/mock-interview", summary="AI 模拟面试")
+def mock_interview(
+        request: MockInterviewRequest,
+        http_request: Request,
+        user_id: Optional[int] = Depends(get_optional_user_id),
+):
+    """模拟面试：根据画像和简历，逐轮生成面试问题并对回答进行点评。"""
+    ensure_chat_access(http_request, user_id)
+    profile = request.profile.model_dump()
+    resume = request.resume_content or profile.get("preset_resume") or ""
+    target_role = profile.get("target_role") or profile.get("skills") or "软件开发"
+    interview_round = request.round
+    last_answer = request.last_answer or ""
+    itype = request.interview_type
+
+    lang = (profile.get("lang") or "zh").lower()
+    is_en = lang.startswith("en")
+
+    if interview_round == 1:
+        # 第一轮：开场 + 自我介绍要求
+        if is_en:
+            prompt = f"""You are a professional interviewer for the position of "{target_role}".
+
+This is Round 1 - Opening. Please:
+1. Greet the candidate warmly
+2. Briefly introduce yourself as the interviewer
+3. Ask them to start with a self-introduction (1-2 minutes)
+
+Consider the candidate's profile:
+{json.dumps(profile, ensure_ascii=False, indent=2)}
+
+Return ONLY a JSON object:
+{{
+    "question": "...",
+    "round": 1,
+    "interviewer_intro": "...",
+    "tips": "1-2 minutes, focus on highlights relevant to the role"
+}}
+"""
+        else:
+            prompt = f"""你是一名「{target_role}」岗位的专业面试官。
+
+当前是第 1 轮 - 开场。请：
+1. 友好地问候候选人
+2. 简单介绍自己（面试官身份）
+3. 请候选人做一个 1-2 分钟的自我介绍
+
+候选人画像参考：
+{json.dumps(profile, ensure_ascii=False, indent=2)}
+
+请只返回 JSON：
+{{
+    "question": "...",
+    "round": 1,
+    "interviewer_intro": "...",
+    "tips": "1-2分钟，重点突出与岗位相关的亮点"
+}}
+"""
+    else:
+        # 后续轮次：点评上一轮回答 + 提出新问题
+        if is_en:
+            prompt = f"""You are a professional interviewer for "{target_role}".
+
+Previous context:
+- Candidate Profile: {json.dumps(profile, ensure_ascii=False, indent=2)}
+- Resume: {resume[:1000]}
+- Interview Round: {interview_round}
+- Interview Type: {itype}
+- Candidate's Last Answer: {last_answer[:2000]}
+
+Please:
+1. **Evaluate** the last answer on these criteria (score each 0-10):
+   - Relevance to the question
+   - Clarity and structure
+   - Use of specific examples/data
+   - Professional communication
+
+2. **Provide feedback** (1-2 sentences): What was good, what to improve.
+
+3. **Ask the NEXT question** appropriate for round {interview_round}:
+   - Round 2-3: Technical questions related to {target_role} skills
+   - Round 4-5: Behavioral/STAR questions (conflict, leadership, failure, achievement)
+   - Round 6+: Domain-specific deep dive or case questions
+
+Return ONLY a JSON object:
+{{
+    "feedback": {{"relevance": 8, "clarity": 7, "examples": 6, "communication": 8, "comment": "..."}},
+    "question": "...",
+    "round": {interview_round},
+    "question_type": "technical/behavioral/case",
+    "tips": "..."
+}}
+"""
+        else:
+            prompt = f"""你是一名「{target_role}」岗位的专业面试官。
+
+背景信息：
+- 候选人画像：{json.dumps(profile, ensure_ascii=False, indent=2)}
+- 简历：{resume[:1000]}
+- 当前轮次：第 {interview_round} 轮
+- 面试类型：{itype}
+- 候选人上一轮回答：{last_answer[:2000]}
+
+请完成：
+1. **点评上一轮回答**，从以下维度评分（每项 0-10 分）：
+   - 切题程度
+   - 清晰度与条理性
+   - 实例/数据支撑
+   - 表达专业性
+
+2. **给出反馈**（1-2 句话）：回答好在哪里，哪些地方可以改进。
+
+3. **提出下一个问题**，适合第 {interview_round} 轮：
+   - 第 2-3 轮：与「{target_role}」技能相关的技术问题
+   - 第 4-5 轮：行为面试题（STAR 法则）—— 冲突处理、领导力、失败经历、成就感等
+   - 第 6 轮以后：深度专业问题或案例分析题
+
+请只返回 JSON：
+{{
+    "feedback": {{"relevance": 8, "clarity": 7, "examples": 6, "communication": 8, "comment": "..."}},
+    "question": "...",
+    "round": {interview_round},
+    "question_type": "technical/behavioral/case",
+    "tips": "..."
+}}
+"""
+
+    model = init_chat_model(
+        model=MODEL,
+        model_provider="openai",
+        base_url=DASHSCOPE_URL,
+        api_key=DASHSCOPE_API_KEY,
+        temperature=0.7,
+    )
+    result = model.invoke([HumanMessage(content=prompt)])
+    raw = result.content if hasattr(result, "content") else str(result)
+
+    try:
+        cleaned = raw.strip()
+        if cleaned.startswith("```"):
+            cleaned = cleaned.strip("`")
+            if cleaned.lower().startswith("json"):
+                cleaned = cleaned[4:].strip()
+        interview_data = json.loads(cleaned)
+    except (json.JSONDecodeError, Exception) as e:
+        # 兜底
+        if is_en:
+            interview_data = {
+                "question": "Thank you. Now let's move to the next question. Tell me about a challenging project you worked on.",
+                "round": interview_round,
+                "feedback": {"relevance": 7, "clarity": 7, "examples": 6, "communication": 7, "comment": "Good answer, could add more specific examples."},
+                "question_type": "behavioral",
+                "tips": "Use STAR method: Situation, Task, Action, Result",
+            }
+        else:
+            interview_data = {
+                "question": "谢谢分享。我们来看看下一个问题——请讲一个你做过的有挑战性的项目。",
+                "round": interview_round,
+                "feedback": {"relevance": 7, "clarity": 7, "examples": 6, "communication": 7, "comment": "回答不错，可以补充更多具体实例和数据。"},
+                "question_type": "behavioral",
+                "tips": "建议使用 STAR 法则：情境、任务、行动、结果",
+            }
+
+    return {"code": 200, "interview": interview_data}
+
+
 # ==================== 推广拉新 / 钱包 ====================
 
 class TrackDownloadRequest(BaseModel):
@@ -849,6 +1663,42 @@ def promo_wallet(
     }
 
 
+@app.get("/ai/promo/checkin-status", summary="获取我的签到状态")
+def promo_checkin_status(
+        db: Session = Depends(get_db),
+        user_id: int = Depends(verify_token),
+):
+    user = db.query(User).filter(User.id == user_id).first()
+    if not user:
+        raise HTTPException(status_code=404, detail={"code": 404, "msg": "用户不存在"})
+    return {"code": 200, **promo.get_checkin_status(db, user)}
+
+
+@app.post("/ai/promo/checkin", summary="签到领奖励")
+def promo_checkin(
+        db: Session = Depends(get_db),
+        user_id: int = Depends(verify_token),
+):
+    user = db.query(User).filter(User.id == user_id).first()
+    if not user:
+        raise HTTPException(status_code=404, detail={"code": 404, "msg": "用户不存在"})
+    result = promo.do_checkin(db, user)
+    if not result.ok:
+        raise HTTPException(status_code=400, detail={"code": 400, "msg": "签到功能已关闭"})
+    return {"code": 200, **result.to_dict()}
+
+
+@app.get("/ai/promo/withdraw-available", summary="查询可提现金额（含风控校验）")
+def promo_withdraw_available(
+        db: Session = Depends(get_db),
+        user_id: int = Depends(verify_token),
+):
+    user = db.query(User).filter(User.id == user_id).first()
+    if not user:
+        raise HTTPException(status_code=404, detail={"code": 404, "msg": "用户不存在"})
+    return {"code": 200, **promo.get_withdraw_available(db, user)}
+
+
 @app.post("/ai/promo/withdraw", summary="提交提现申请（提现全部余额）")
 def promo_withdraw(
         request: WithdrawSubmitRequest,
@@ -863,7 +1713,13 @@ def promo_withdraw(
     if not user:
         raise HTTPException(status_code=404, detail={"code": 404, "msg": "用户不存在"})
 
-    balance = round(user.balance_usd or 0.0, 2)
+    # ===== 提现风控校验 =====
+    withdraw_info = promo.get_withdraw_available(db, user)
+    if not withdraw_info["can_withdraw"]:
+        reasons = "；".join(withdraw_info["reasons"]) or "暂不可提现"
+        raise HTTPException(status_code=400, detail={"code": 400, "msg": reasons})
+
+    balance = withdraw_info["balance"]
     if balance <= 0:
         raise HTTPException(status_code=400, detail={"code": 400, "msg": "余额不足，无法提现"})
 

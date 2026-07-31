@@ -157,6 +157,29 @@
         const shareBtn = document.getElementById("floatShareBtn");
         if (shareBtn) shareBtn.addEventListener("click", openShareModal);
 
+        // 悬浮小球：移动端点击展开/收起
+        const floatBall = document.getElementById("floatBall");
+        const floatDock = document.getElementById("floatDock");
+        if (floatBall && floatDock) {
+            // 判断是否为触屏设备（移动端）
+            const isTouchDevice = ("ontouchstart" in window) || (navigator.maxTouchPoints > 0);
+            if (isTouchDevice) {
+                floatBall.addEventListener("click", (e) => {
+                    e.stopPropagation();
+                    floatDock.classList.toggle("open");
+                    const expanded = floatDock.classList.contains("open");
+                    floatBall.setAttribute("aria-expanded", expanded ? "true" : "false");
+                });
+                // 点击外部关闭
+                document.addEventListener("click", (e) => {
+                    if (!floatDock.contains(e.target)) {
+                        floatDock.classList.remove("open");
+                        floatBall.setAttribute("aria-expanded", "false");
+                    }
+                });
+            }
+        }
+
         // 弹窗交互
         const closeBtn = document.getElementById("closeShareBtn");
         const overlay = document.getElementById("shareOverlay");
