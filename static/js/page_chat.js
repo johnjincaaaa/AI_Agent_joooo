@@ -37,10 +37,173 @@ let div;
 // 流式控制：用于中止请求
 let abortController = null;
 
+// ==================== 免费体验次数（未登录用户）====================
+const API_AI_QUOTA = `${config.API_BASE_URL}/ai/quota`;
+// null 表示已登录/未知（不限流）；数字表示今日剩余次数
+let anonRemaining = null;
+
+function isLoggedIn() {
+    const token = localStorage.getItem("token");
+    return !!(token && token !== "null");
+}
+
+// 刷新底部「今日还剩 N 次」提示
+function renderQuotaTip() {
+    const tip = document.getElementById("quotaTip");
+    if (!tip) return;
+    if (isLoggedIn() || anonRemaining === null) {
+        tip.hidden = true;
+        return;
+    }
+    tip.hidden = false;
+    if (anonRemaining <= 0) {
+        tip.textContent = t('rate_limit_msg');
+        tip.classList.add('quota-tip-warn');
+    } else {
+        tip.textContent = t('quota_remaining_1') + anonRemaining + t('quota_remaining_2');
+        tip.classList.toggle('quota-tip-warn', anonRemaining <= 3);
+    }
+}
+
+// 弹出「注册成为会员 + 在线客服」引导弹窗
+function showRegisterPrompt() {
+    if (typeof showLoginExpiredModal === 'function') {
+        showLoginExpiredModal(t('rate_limit_modal'), 'error', {
+            goRegister: true,
+            showService: true,
+            subtitle: t('rate_limit_sub'),
+        });
+    }
+}
+
+// 页面加载时拉取一次剩余次数（仅未登录用户展示）
+async function initQuota() {
+    if (isLoggedIn()) {
+        anonRemaining = null;
+        renderQuotaTip();
+        return;
+    }
+    try {
+        const res = await fetch(API_AI_QUOTA, {headers: buildAuthHeaders()});
+        if (res.ok) {
+            const data = await res.json();
+            anonRemaining = data.logged_in ? null : data.remaining;
+        }
+    } catch (e) {
+        console.warn("获取免费次数失败", e);
+    }
+    renderQuotaTip();
+}
+
+document.addEventListener('DOMContentLoaded', initQuota);
+document.addEventListener('langchange', renderQuotaTip);
+
+
+// ==================== 推广文案（横幅 + 输入框）====================
+const API_PROMO_CONFIG = `${config.API_BASE_URL}/ai/promo/config`;
+// 后台配置：{promo_enabled, input_promo_enabled, banner_promo:{zh,en}, input_promo:{zh,en}}
+let promoConfig = null;
+
+// 当前输入框里的文案是否是"自动填充的推广文案"（用于判断是否该在用户操作时清空）
+function getInputPromoText() {
+    if (!promoConfig || !promoConfig.input_promo) return '';
+    const lang = typeof getLang === 'function' ? getLang() : 'zh';
+    return promoConfig.input_promo[lang] || promoConfig.input_promo.zh || '';
+}
+
+function getBannerText() {
+    if (!promoConfig || !promoConfig.banner_promo) return '';
+    const lang = typeof getLang === 'function' ? getLang() : 'zh';
+    return promoConfig.banner_promo[lang] || promoConfig.banner_promo.zh || '';
+}
+
+// 渲染空状态推广横幅
+function renderPromoBanner() {
+    const banner = document.getElementById('promoBanner');
+    if (!banner) return;
+    const text = getBannerText();
+    if (promoConfig && promoConfig.promo_enabled && text) {
+        banner.textContent = text;
+        banner.hidden = false;
+    } else {
+        banner.hidden = true;
+    }
+}
+
+// 若输入框为空且开关开启，则填入推广文案并打标记
+function fillInputPromoIfEmpty() {
+    const input = document.getElementById('userInput');
+    if (!input) return;
+    if (!promoConfig || !promoConfig.input_promo_enabled) return;
+    const text = getInputPromoText();
+    if (!text) return;
+    // 仅在输入框为空、或当前内容正是上一次填充的推广文案时才填
+    if (input.value.trim() === '' || input.dataset.promoFilled === '1') {
+        input.value = text;
+        input.dataset.promoFilled = '1';
+        input.dispatchEvent(new Event('input'));
+    }
+}
+
+// 用户开始真正输入时，清掉自动填充的推广文案
+function clearInputPromoOnUserAction() {
+    const input = document.getElementById('userInput');
+    if (!input) return;
+    if (input.dataset.promoFilled === '1') {
+        input.value = '';
+        delete input.dataset.promoFilled;
+        input.dispatchEvent(new Event('input'));
+    }
+}
+
+// 发送前判断：当前内容是否只是未清除的推广文案（视为空，不发给AI）
+function inputIsOnlyPromo(content) {
+    const input = document.getElementById('userInput');
+    return input && input.dataset.promoFilled === '1' && content === getInputPromoText().trim();
+}
+
+async function initPromo() {
+    try {
+        const res = await fetch(API_PROMO_CONFIG);
+        if (res.ok) {
+            promoConfig = await res.json();
+        }
+    } catch (e) {
+        console.warn('获取推广配置失败', e);
+    }
+    renderPromoBanner();
+    fillInputPromoIfEmpty();
+
+    const input = document.getElementById('userInput');
+    if (input) {
+        // 用户聚焦或按键即清除推广占位文案（focus 用一次性，避免每次聚焦都清）
+        input.addEventListener('focus', clearInputPromoOnUserAction, {once: false});
+        input.addEventListener('beforeinput', clearInputPromoOnUserAction);
+    }
+}
+
+document.addEventListener('DOMContentLoaded', initPromo);
+document.addEventListener('langchange', () => {
+    renderPromoBanner();
+    // 语言切换时，如果输入框仍是自动填充的推广文案，则切换成新语言版本
+    const input = document.getElementById('userInput');
+    if (input && input.dataset.promoFilled === '1') {
+        input.value = getInputPromoText();
+        input.dispatchEvent(new Event('input'));
+    }
+});
+
+// 供 createNewSession 调用：新建会话后重新填充输入框推广文案
+window.refillInputPromo = fillInputPromoIfEmpty;
+
 
 async function sendMessage() {
     const input = document.getElementById("userInput");
-    const content = input.value.trim();
+    let content = input.value.trim();
+    // 若内容只是未清除的推广占位文案，视为未输入
+    if (typeof inputIsOnlyPromo === 'function' && inputIsOnlyPromo(content)) {
+        content = '';
+    }
     const chatSession = document.getElementById('chatSession');
     const sideBar = document.getElementById('sideBar');
     const sendMessage_ele = document.getElementById("sendMessage");
@@ -66,6 +229,12 @@ async function sendMessage() {
         return;
     }
 
+    // 未登录且今日免费次数已用完：禁止发送，弹注册/客服引导
+    if (!isLoggedIn() && anonRemaining !== null && anonRemaining <= 0) {
+        showRegisterPrompt();
+        return;
+    }
+
     let displayMessage = content;
     let imagePaths = [];
     let documentPaths = [];
@@ -80,7 +249,9 @@ async function sendMessage() {
         } catch (uploadErr) {
             if (uploadErr.message === 'RATE_LIMIT') {
                 addMessage(t('rate_limit_msg'), "ai");
-                showLoginExpiredModal(t('rate_limit_modal'), "error");
+                anonRemaining = 0;
+                renderQuotaTip();
+                showRegisterPrompt();
             } else {
                 addMessage(uploadErr.message || t('upload_fail'), "ai");
             }
@@ -129,13 +300,24 @@ async function sendMessage() {
             currentAiMessageDiv.remove();
             const errData = await response.json();
             addMessage(parseApiErrorMessage(errData, t('rate_limit_msg')), "ai");
-            showLoginExpiredModal(t('rate_limit_modal'), "error");
+            anonRemaining = 0;
+            renderQuotaTip();
+            showRegisterPrompt();
             return;
         }
         if (!response.ok) {
             currentAiMessageDiv.remove();
             addMessage(t('ai_error_key'), "ai");
             return;
+        }
+
+        // 未登录用户：从响应头同步今日剩余次数
+        if (!isLoggedIn()) {
+            const remainHeader = response.headers.get("X-Anon-Remaining");
+            if (remainHeader !== null) {
+                anonRemaining = parseInt(remainHeader, 10);
+                renderQuotaTip();
+            }
         }
 
         const decoder = new TextDecoder("utf-8");
@@ -191,6 +373,7 @@ async function sendMessage() {
             // 对历史会话操作：拉取数据库对话数据到对话框 && 清除class active 并激活点击历史对话
             div.addEventListener('click', async function () {
                 if (typeof exitJobHuntMode === 'function') exitJobHuntMode();
+                if (typeof exitWalletMode === 'function') exitWalletMode();
                 // 清空当前右边聊天记录,清空chatSession,调取数据库存入全部聊天记录，chatDate取全部聊天记录
                 document.getElementById("chatBox").querySelectorAll(".message").forEach(el => el.remove());
                 const histories = document.querySelectorAll('.history');
@@ -308,6 +491,10 @@ async function sendMessage() {
 
 // 根据前两轮对话生成 8～12 字标题
 async function generateTitleFromTwoRounds(dialogue) {
+    // 未登录用户不保存历史，且标题生成会额外消耗免费次数，这里直接跳过
+    if (!isLoggedIn()) {
+        return t('new_session');
+    }
 
     // AI 生成标题
     const res = await fetch(`${API_AI_CHAT}?temperature=1.5`, {
@@ -406,16 +593,47 @@ document.getElementById("userInput").addEventListener("keypress", e => {
 
 // 折叠和添加会话按钮
 function foldHistorySession() {
+    const appShell = document.querySelector('.app-shell');
+    const backdrop = document.getElementById('sidebarBackdrop');
+    // 移动端（<=768px）：侧边栏为覆盖式抽屉，切换抽屉开合 + 遮罩
+    if (window.matchMedia('(max-width: 768px)').matches) {
+        const open = appShell.classList.toggle('sidebar-open');
+        if (backdrop) backdrop.classList.toggle('show', open);
+        return;
+    }
+    // 桌面端：原有折叠逻辑
     const sideBar = document.getElementById('sideBar');
     const userprofile = document.getElementById('userProfile');
-    // 切换侧边栏（假设 sideBar 是侧边栏元素，需确保已正确获取）
     sideBar.classList.toggle('hidden');
-    // 切换用户信息栏
     userprofile.classList.toggle('hidden');
 }
 
+// 移动端：点击遮罩关闭侧边栏抽屉
+document.addEventListener('DOMContentLoaded', () => {
+    const backdrop = document.getElementById('sidebarBackdrop');
+    const appShell = document.querySelector('.app-shell');
+    function closeMobileDrawer() {
+        appShell?.classList.remove('sidebar-open');
+        backdrop?.classList.remove('show');
+    }
+    if (backdrop && appShell) {
+        backdrop.addEventListener('click', closeMobileDrawer);
+    }
+    // 移动端点击历史会话/找工作入口后自动收起抽屉
+    const sideBar = document.getElementById('sideBar');
+    if (sideBar) {
+        sideBar.addEventListener('click', (e) => {
+            if (!window.matchMedia('(max-width: 768px)').matches) return;
+            if (e.target.closest('.history.title') || e.target.closest('#jobHuntEntry')) {
+                closeMobileDrawer();
+            }
+        });
+    }
+});
+
 function createNewSession() {
     if (typeof exitJobHuntMode === 'function') exitJobHuntMode();
+    if (typeof exitWalletMode === 'function') exitWalletMode();
     const chatSession = document.getElementById('chatSession');
     // 清除所有 class="message" 的子元素 并清空缓存
     document.querySelectorAll("#chatBox .message").forEach(el => el.remove());
@@ -430,6 +648,8 @@ function createNewSession() {
     if (typeof clearPendingAttachments === 'function') {
         clearPendingAttachments();
     }
-
+    // 新建会话：重新展示横幅 + 填充输入框推广文案
+    if (typeof renderPromoBanner === 'function') renderPromoBanner();
+    if (typeof refillInputPromo === 'function') refillInputPromo();
 }
 

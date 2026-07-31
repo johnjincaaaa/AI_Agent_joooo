@@ -1,9 +1,4 @@
-.idea
-.env
-__pycache__/
-*.pyc
-uploads/
-.venv/
-app.db
-*.db
-release/
+/.env
+/.venv
+/.app.db
+/.idea
