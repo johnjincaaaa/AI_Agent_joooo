@@ -1,4 +1,4 @@
-// ============================================
+﻿// ============================================
 // 无代码工作流编辑器
 // ============================================
 
@@ -547,7 +547,7 @@ const WORKFLOW_TEMPLATES = [
         icon: '💬',
         build: () => {
             const s = { id: uid('node'), type: 'start', x: 80, y: 150, data: { name: '开始' } };
-            const a = { id: uid('node'), type: 'ai_chat', x: 320, y: 150, data: { name: 'AI 对话', systemPrompt: '你是有料AI，一位专业的AI助手。', temperature: 0.7 } };
+            const a = { id: uid('node'), type: 'ai_chat', x: 320, y: 150, data: { name: 'AI 对话', systemPrompt: '你是Jingent AI，一位专业的AI助手。', temperature: 0.7 } };
             const e = { id: uid('node'), type: 'end', x: 580, y: 150, data: { name: '结束' } };
             return {
                 name: '简单 AI 对话',

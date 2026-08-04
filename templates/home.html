@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>首页 - Jingent AI</title>
+    <link rel="icon" href="../static/a.png" type="image/png">
+    <script>
+        (function () {
+            try {
+                var saved = localStorage.getItem('jingent_colormode') || localStorage.getItem('app_theme');
+                if (saved === 'light') {
+                    document.documentElement.setAttribute('data-theme', 'light');
+                    document.documentElement.setAttribute('data-color-mode', 'light');
+                } else if (saved === 'dark') {
+                    document.documentElement.setAttribute('data-color-mode', 'dark');
+                }
+            } catch (e) {}
+        })();
+    </script>
+    <link rel="stylesheet" href="../static/css/page_home.css?v={{ ASSET_VERSION }}">
+</head>
+<body>
+    <!-- 顶部栏由 theme-bar.js 自动注入 -->
+
+    <!-- 主体内容 -->
+    <main class="home-main">
+        <div class="hero">
+            <h1 class="hero-title" data-i18n="home_hero_title">高性能 · AI 工作台</h1>
+            <p class="hero-subtitle" data-i18n="home_hero_subtitle">一站式 AI 对话、工作流编排、岗位匹配</p>
+        </div>
+
+        <div class="feature-grid">
+            <a href="/chat" class="feature-card">
+                <div class="card-num">01</div>
+                <div class="card-content">
+                    <div class="card-icon">
+                        <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path>
+                        </svg>
+                    </div>
+                    <div class="card-info">
+                        <div class="card-title" data-i18n="home_card_1_title">AI 对话</div>
+                        <div class="card-desc" data-i18n="home_card_1_desc">智能聊天 · 多模型支持 · 代码增强</div>
+                    </div>
+                </div>
+            </a>
+
+            <a href="/workflow" class="feature-card">
+                <div class="card-num">02</div>
+                <div class="card-content">
+                    <div class="card-icon">
+                        <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                            <rect x="3" y="3" width="7" height="7"></rect>
+                            <rect x="14" y="3" width="7" height="7"></rect>
+                            <rect x="14" y="14" width="7" height="7"></rect>
+                            <rect x="3" y="14" width="7" height="7"></rect>
+                        </svg>
+                    </div>
+                    <div class="card-info">
+                        <div class="card-title" data-i18n="home_card_2_title">无代码工作流</div>
+                        <div class="card-desc" data-i18n="home_card_2_desc">可视化编排 · 自动化一切</div>
+                    </div>
+                </div>
+            </a>
+
+            <a href="/chat?mode=job" class="feature-card">
+                <div class="card-num">03</div>
+                <div class="card-content">
+                    <div class="card-icon">
+                        <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                            <rect x="2" y="7" width="20" height="14" rx="2" ry="2"></rect>
+                            <path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"></path>
+                        </svg>
+                    </div>
+                    <div class="card-info">
+                        <div class="card-title" data-i18n="home_card_3_title">岗位推荐</div>
+                        <div class="card-desc" data-i18n="home_card_3_desc">AI 智能匹配 · 精准职业推荐</div>
+                    </div>
+                </div>
+            </a>
+
+            <a href="/chat" class="feature-card">
+                <div class="card-num">04</div>
+                <div class="card-content">
+                    <div class="card-icon">
+                        <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                            <circle cx="11" cy="11" r="8"></circle>
+                            <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+                        </svg>
+                    </div>
+                    <div class="card-info">
+                        <div class="card-title" data-i18n="home_card_4_title">技能市场</div>
+                        <div class="card-desc" data-i18n="home_card_4_desc">一键安装 · 扩展能力</div>
+                    </div>
+                </div>
+            </a>
+        </div>
+
+        <footer class="home-footer">
+            <span>© 2026 Jingent AI</span>
+        </footer>
+    </main>
+
+    <script src="../static/js/i18n.js?v={{ ASSET_VERSION }}"></script>
+    <script src="../static/js/theme-bar.js?v={{ ASSET_VERSION }}"></script>
+</body>
+</html>

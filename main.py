@@ -1,4 +1,4 @@
-from sqlalchemy.orm import Session
+﻿from sqlalchemy.orm import Session
 import uvicorn
 from fastapi import FastAPI, Request, Depends, HTTPException, Query, status, UploadFile, File
 from fastapi.middleware.cors import CORSMiddleware
@@ -39,7 +39,7 @@ except ModuleNotFoundError as e:
 
 # 初始化 FastAPI 应用
 app = FastAPI(
-    title="有料 AI",
+    title="Jingent AI",
     description="一个致力于取悦自我的ai应用",
     version="1.0",
 
@@ -82,7 +82,11 @@ app.add_middleware(
 
 # ------------------- 聊天页 -------------------
 # 根路径 "/" 和 "/chat" 都进聊天页，这样域名不带 /chat 也能直接访问
-@app.get("/", summary="首页（等同聊天页）", include_in_schema=False)
+@app.get("/", summary="首页", include_in_schema=False)
+def home_page(request: Request):
+    return templates.TemplateResponse(name="home.html", request=request)
+
+
 @app.get("/chat", summary="聊天页",
          description="启动入口，返回html")
 def chat_page(request: Request, db: Session = Depends(get_db)):
@@ -949,7 +953,7 @@ async def run_workflow(
                 )
                 agent = create_agent(
                     model=model,
-                    system_prompt=sys_prompt or "你是有料AI，一位专业的AI助手。",
+                    system_prompt=sys_prompt or "你是Jingent AI，一位专业的AI助手。",
                     tools=[],
                 )
                 messages = [{"role": "user", "content": current_input}]
@@ -1911,6 +1915,228 @@ def admin_set_config(
     return {"code": 200, "msg": "已保存", "updated": updated}
 
 
+# ================= 手机号注册 + 验证码 =================
+import random
+import time as _time_mod
+
+# 内存存储验证码：{phone: {"code": "123456", "expire": 时间戳}}
+_sms_codes: dict = {}
+
+def _gen_verify_code() -> str:
+    return "".join(random.choices("0123456789", k=6))
+
+def _is_valid_phone(phone: str) -> bool:
+    return bool(phone and phone.isdigit() and len(phone) == 11 and phone.startswith("1"))
+
+
+class SendCodeForm(BaseModel):
+    phone: str
+
+
+@app.post('/sms/send-code', summary='发送手机验证码')
+def send_sms_code(form: SendCodeForm):
+    phone = form.phone.strip()
+    if not _is_valid_phone(phone):
+        return {"code": 400, "msg": "手机号格式不正确"}
+    # 防止频繁发送：60秒内只能发一次
+    now = _time_mod.time()
+    cached = _sms_codes.get(phone)
+    if cached and now - cached.get("sent_at", 0) < 60:
+        return {"code": 429, "msg": "发送太频繁，请稍后再试"}
+    code = _gen_verify_code()
+    _sms_codes[phone] = {
+        "code": code,
+        "expire": now + 300,  # 5分钟有效
+        "sent_at": now,
+    }
+    # 这里以后接入真实短信网关。当前为开发方便，直接把验证码返回给前端。
+    # 生产环境请删除 debug_code 字段。
+    return {"code": 200, "msg": "验证码已发送", "debug_code": code}
+
+
+class RegisterByPhoneForm(BaseModel):
+    phone: str
+    code: str
+    password: str
+    confirm_password: str
+
+
+@app.post('/register/phone', summary='手机号注册')
+def register_by_phone(
+    form: RegisterByPhoneForm,
+    db: Session = Depends(get_db),
+):
+    phone = form.phone.strip()
+    if not _is_valid_phone(phone):
+        return {"code": 400, "msg": "手机号格式不正确"}
+    if len(form.password) < 6:
+        return {"code": 400, "msg": "密码至少6位"}
+    if form.password != form.confirm_password:
+        return {"code": 400, "msg": "两次密码不一致"}
+
+    # 校验验证码
+    cached = _sms_codes.get(phone)
+    now = _time_mod.time()
+    if not cached or cached.get("expire", 0) < now:
+        return {"code": 400, "msg": "验证码已过期，请重新获取"}
+    if cached.get("code") != form.code.strip():
+        return {"code": 400, "msg": "验证码错误"}
+
+    # 检查手机号是否已注册
+    exist = db.query(User).filter(User.phone == phone).first()
+    if exist:
+        return {"code": 400, "msg": "该手机号已注册"}
+
+    # 生成默认用户名 Jingent_xxxxxx
+    import uuid as _uuid
+    suffix = _uuid.uuid4().hex[:6].lower()
+    default_username = f"Jingent_{suffix}"
+    # 确保唯一
+    while db.query(User).filter(User.username == default_username).first():
+        suffix = _uuid.uuid4().hex[:6].lower()
+        default_username = f"Jingent_{suffix}"
+
+    new_user = User(
+        username=default_username,
+        phone=phone,
+        nickname=default_username,
+        password=hash_password(form.password),
+    )
+    db.add(new_user)
+    db.commit()
+    db.refresh(new_user)
+
+    # 注册成功，清除验证码
+    _sms_codes.pop(phone, None)
+
+    token = create_access_token({'user_id': new_user.id})
+    return {
+        "code": 200,
+        "msg": "注册成功",
+        "token": token,
+        "user_id": new_user.id,
+        "username": new_user.username,
+        "nickname": new_user.nickname,
+    }
+
+
+# ================ 用户信息 ================
+class UpdateNicknameForm(BaseModel):
+    nickname: str
+
+
+@app.get('/user/info', summary='获取当前用户信息')
+def get_user_info(
+    user_id: Optional[int] = Depends(get_optional_user_id),
+    db: Session = Depends(get_db),
+):
+    if not user_id:
+        return {"code": 401, "msg": "未登录"}
+    user = db.query(User).filter(User.id == user_id).first()
+    if not user:
+        return {"code": 404, "msg": "用户不存在"}
+    return {
+        "code": 200,
+        "data": {
+            "user_id": user.id,
+            "username": user.username,
+            "nickname": user.nickname or user.username,
+            "phone": user.phone,
+            "register_time": user.register_time.isoformat() if user.register_time else None,
+        }
+    }
+
+
+@app.post('/user/nickname', summary='修改用户昵称')
+def update_nickname(
+    form: UpdateNicknameForm,
+    user_id: Optional[int] = Depends(get_optional_user_id),
+    db: Session = Depends(get_db),
+):
+    if not user_id:
+        return {"code": 401, "msg": "未登录"}
+    nickname = form.nickname.strip()
+    if not nickname:
+        return {"code": 400, "msg": "昵称不能为空"}
+    if len(nickname) > 20:
+        return {"code": 400, "msg": "昵称长度不能超过20个字符"}
+    user = db.query(User).filter(User.id == user_id).first()
+    if not user:
+        return {"code": 404, "msg": "用户不存在"}
+    user.nickname = nickname
+    db.commit()
+    return {"code": 200, "msg": "昵称修改成功", "nickname": nickname}
+
+
+class UpdatePasswordForm(BaseModel):
+    old_password: str
+    new_password: str
+    confirm_password: str
+
+
+@app.post('/user/password', summary='修改密码')
+def update_password(
+    form: UpdatePasswordForm,
+    user_id: Optional[int] = Depends(get_optional_user_id),
+    db: Session = Depends(get_db),
+):
+    if not user_id:
+        return {"code": 401, "msg": "未登录"}
+    if len(form.new_password) < 6:
+        return {"code": 400, "msg": "新密码至少6位"}
+    if form.new_password != form.confirm_password:
+        return {"code": 400, "msg": "两次新密码不一致"}
+    user = db.query(User).filter(User.id == user_id).first()
+    if not user:
+        return {"code": 404, "msg": "用户不存在"}
+    if not verify_password(form.old_password, user.password):
+        return {"code": 400, "msg": "原密码错误"}
+    user.password = hash_password(form.new_password)
+    db.commit()
+    return {"code": 200, "msg": "密码修改成功"}
+
+
+# ------------------- 接口：短信验证码登录 ------------------
+class SmsLoginForm(BaseModel):
+    phone: str
+    code: str
+
+
+@app.post('/login/sms', summary='短信验证码登录')
+def login_by_sms(
+        form: SmsLoginForm,
+        db: Session = Depends(get_db),
+):
+    phone = form.phone.strip()
+    if not _is_valid_phone(phone):
+        return {"code": 400, "msg": "手机号格式不正确"}
+
+    # 校验验证码
+    cached = _sms_codes.get(phone)
+    now = _time_mod.time()
+    if not cached or cached.get("expire", 0) < now:
+        return {"code": 400, "msg": "验证码已过期，请重新获取"}
+    if cached.get("code") != form.code.strip():
+        return {"code": 400, "msg": "验证码错误"}
+
+    # 根据手机号查用户
+    existing_user = db.query(User).filter(User.phone == phone).first()
+    if not existing_user:
+        return {"code": 404, "msg": "该手机号未注册，请先注册"}
+
+    # 登录成功，清除验证码
+    _sms_codes.pop(phone, None)
+
+    token: str = create_access_token({'user_id': existing_user.id})
+    return {
+        "code": 200,
+        "msg": "登录成功",
+        "token": token,
+        "user_id": existing_user.id,
+        "username": existing_user.nickname or existing_user.username,
+    }
+
+
 # ------------------- 接口：登录 ------------------
 class LoginForm(BaseModel):
     username: str
@@ -1923,8 +2149,9 @@ def login(
         db: Session = Depends(get_db),
 
 ):
+    # 支持用户名或手机号登录
     existing_user = db.query(User).filter(
-        User.username == form.username,
+        (User.username == form.username) | (User.phone == form.username),
     ).first()
     if existing_user and verify_password(form.password, existing_user.password):
         if needs_rehash(existing_user.password):
@@ -1936,6 +2163,7 @@ def login(
             "msg": "登录成功",
             "token": token,
             "user_id": existing_user.id,
+            "username": existing_user.nickname or existing_user.username,
         }
     else:
         return {

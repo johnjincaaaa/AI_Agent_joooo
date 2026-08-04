@@ -29,7 +29,9 @@ document.addEventListener('langchange', () => {
 
 
 // 输入框自动高度扩展逻辑
-const userInput = document.getElementById('userInput');
+if (typeof userInput === 'undefined') {
+    var userInput = document.getElementById('userInput');
+}
 
 // 监听输入事件，实时调整高度
 userInput.addEventListener('input', function () {

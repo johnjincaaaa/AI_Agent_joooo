@@ -263,3 +263,150 @@
 @media (max-width: 480px) {
     .modal-content { width: calc(100% - 40px); }
 }
+
+/* ============== 验证码输入框 ============== */
+.code-field {
+    display: flex;
+    gap: 10px;
+    align-items: stretch;
+}
+.code-field input {
+    flex: 1;
+    min-width: 0;
+    padding: 13px 16px;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 12px;
+    font-size: 15px;
+    color: var(--modal-title);
+    background: var(--field-bg);
+    transition: all 0.25s ease;
+    box-sizing: border-box;
+    text-align: left;
+}
+.code-field input::placeholder { color: #6b7280; }
+.code-field input:focus {
+    border-color: #4c8dff;
+    box-shadow: 0 0 0 3px rgba(76, 141, 255, 0.18);
+    outline: none;
+    background: rgba(13, 15, 19, 0.9);
+}
+.send-code-btn {
+    flex-shrink: 0;
+    padding: 0 16px;
+    background: linear-gradient(135deg, #3b7bf0, #4c8dff);
+    color: #fff;
+    border: none;
+    border-radius: 12px;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    white-space: nowrap;
+    transition: all 0.25s ease;
+}
+.send-code-btn:hover { filter: brightness(1.08); }
+.send-code-btn:disabled { cursor: not-allowed; filter: grayscale(0.3); }
+
+/* ============== 系统设置弹窗 ============== */
+.settings-modal {
+    display: none;
+    position: fixed;
+    top: 0; left: 0;
+    width: 100%; height: 100%;
+    z-index: 9999;
+}
+.settings-modal .modal-overlay {
+    width: 100%; height: 100%;
+    background: var(--modal-overlay);
+    backdrop-filter: blur(14px);
+    -webkit-backdrop-filter: blur(14px);
+}
+.settings-content {
+    width: 420px;
+    animation: modalSlideUp 0.4s cubic-bezier(0.25, 1, 0.5, 1) forwards;
+}
+
+.settings-tabs {
+    display: flex;
+    justify-content: center;
+    gap: 32px;
+    margin-bottom: 20px;
+    padding-bottom: 12px;
+    border-bottom: 1px solid rgba(255,255,255,0.06);
+}
+.settings-tab {
+    font-size: 14px;
+    cursor: pointer;
+    padding: 4px 0;
+    color: #8a909c;
+    transition: all 0.25s ease;
+    position: relative;
+    user-select: none;
+}
+.settings-tab.active {
+    color: #4c8dff;
+    font-weight: 600;
+}
+.settings-tab.active::after {
+    content: '';
+    position: absolute;
+    bottom: -13px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 50%;
+    height: 3px;
+    background: #4c8dff;
+    border-radius: 3px;
+}
+.settings-pane { display: none; }
+.settings-pane.show {
+    display: block;
+    animation: formFadeIn 0.35s ease forwards;
+}
+
+/* ============== 登录表单切换样式 ============== */
+.login-type-switch {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    gap: 14px;
+    margin-bottom: 20px;
+    padding-bottom: 14px;
+    border-bottom: 1px solid rgba(255,255,255,0.06);
+}
+.login-type {
+    font-size: 14px;
+    cursor: pointer;
+    color: #8a909c;
+    transition: all 0.25s ease;
+    user-select: none;
+    padding: 4px 2px;
+}
+.login-type.active {
+    color: #4c8dff;
+    font-weight: 600;
+}
+.login-type-divider {
+    color: rgba(255,255,255,0.15);
+    font-size: 14px;
+}
+
+.field-label-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 6px;
+}
+.field-label-row label {
+    margin-bottom: 0;
+}
+.secret-switch {
+    font-size: 12px;
+    color: #4c8dff;
+    cursor: pointer;
+    user-select: none;
+    transition: all 0.2s ease;
+}
+.secret-switch:hover {
+    color: #6ba3ff;
+    text-decoration: underline;
+}

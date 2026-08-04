@@ -2,18 +2,22 @@
 <html lang="zh-CN">
 <head>
     <meta charset="UTF-8">
-    <title>有料 AI - 无代码工作流</title>
+    <title>Jingent AI - 无代码工作流</title>
     <script>
         (function () {
             try {
-                var saved = localStorage.getItem('app_theme');
-                if (saved === 'light' || saved === 'dark') {
-                    document.documentElement.setAttribute('data-theme', saved);
+                var saved = localStorage.getItem('jingent_colormode') || localStorage.getItem('app_theme');
+                if (saved === 'light') {
+                    document.documentElement.setAttribute('data-theme', 'light');
+                    document.documentElement.setAttribute('data-color-mode', 'light');
+                } else if (saved === 'dark') {
+                    document.documentElement.setAttribute('data-color-mode', 'dark');
                 }
             } catch (e) {}
         })();
     </script>
     <link rel="stylesheet" href="../static/css/page_chat.css?v={{ ASSET_VERSION }}">
+    <link rel="stylesheet" href="../static/css/page_home.css?v={{ ASSET_VERSION }}">
     <link rel="stylesheet" href="../static/css/page_workflow.css?v={{ ASSET_VERSION }}">
     <link rel="icon" href="../static/a.ico" type="image/x-icon">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -175,6 +179,7 @@
 <div class="wf-tip" id="wfTip"></div>
 
 <script src="../static/js/config.js?v={{ ASSET_VERSION }}"></script>
+<script src="../static/js/theme-bar.js?v={{ ASSET_VERSION }}"></script>
 <script src="../static/js/theme.js?v={{ ASSET_VERSION }}"></script>
 <script src="../static/js/i18n.js?v={{ ASSET_VERSION }}"></script>
 <script src="../static/js/workflow.js?v={{ ASSET_VERSION }}"></script>

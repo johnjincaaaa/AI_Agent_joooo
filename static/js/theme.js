@@ -8,6 +8,9 @@
 
     function getTheme() {
         try {
+            // 优先使用新系统的存储 key
+            const savedNew = localStorage.getItem('jingent_colormode');
+            if (savedNew === 'light' || savedNew === 'dark') return savedNew;
             const saved = localStorage.getItem(THEME_STORAGE_KEY);
             if (saved === 'light' || saved === 'dark') return saved;
         } catch (e) {}
@@ -17,9 +20,13 @@
     function applyTheme(theme) {
         const root = document.documentElement;
         if (theme === 'light') {
+            root.setAttribute('data-color-mode', 'light');
             root.setAttribute('data-theme', 'light');
+            document.body.classList.add('light-mode');
         } else {
-            root.setAttribute('data-theme', 'dark');
+            root.setAttribute('data-color-mode', 'dark');
+            root.removeAttribute('data-theme');
+            document.body.classList.remove('light-mode');
         }
         updateThemeToggleLabel();
         // 广播，供需要感知主题的模块（如代码高亮）响应
@@ -56,6 +63,9 @@
     window.toggleTheme = toggleTheme;
 
     function init() {
+        // 如果顶部栏已存在（由 theme-bar.js 注入），则跳过初始化，避免冲突
+        if (document.getElementById('appTopBar')) return;
+
         // data-theme 已由 head 脚本按存储设好；这里补一次确保按钮状态一致
         applyTheme(getTheme());
         const btn = document.getElementById('themeToggleBtn');

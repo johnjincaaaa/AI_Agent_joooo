@@ -1,20 +1,24 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="zh-CN">
 <head>
     <meta charset="UTF-8">
-    <title>有料 AI</title>
+    <title>Jingent AI</title>
     <!-- 提前设置主题，避免刷新时闪一下暗色 -->
     <script>
         (function () {
             try {
-                var saved = localStorage.getItem('app_theme');
-                if (saved === 'light' || saved === 'dark') {
-                    document.documentElement.setAttribute('data-theme', saved);
+                var saved = localStorage.getItem('jingent_colormode') || localStorage.getItem('app_theme');
+                if (saved === 'light') {
+                    document.documentElement.setAttribute('data-theme', 'light');
+                    document.documentElement.setAttribute('data-color-mode', 'light');
+                } else if (saved === 'dark') {
+                    document.documentElement.setAttribute('data-color-mode', 'dark');
                 }
             } catch (e) {}
         })();
     </script>
     <link rel="stylesheet" href="../static/css/page_chat.css?v={{ ASSET_VERSION }}">
+    <link rel="stylesheet" href="../static/css/page_home.css?v={{ ASSET_VERSION }}">
     <link rel="stylesheet" href="../static/css/page_chat_bottomUser.css?v={{ ASSET_VERSION }}">
     <link rel="stylesheet" href="../static/css/page_chat_loginRegister.css?v={{ ASSET_VERSION }}">
     <link rel="stylesheet" href="../static/css/page_chat_inputBox.css?v={{ ASSET_VERSION }}">
@@ -79,7 +83,7 @@
         </a>
         <!-- 无代码工作流入口 -->
         <a class="float-dock-item" id="floatWorkflowBtn" href="/workflow"
-           data-i18n-title="float_workflow" title="无代码工作流">
+           title="无代码工作流">
             <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2"
                  stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
                 <circle cx="5.5" cy="5.5" r="2.5"></circle>
@@ -89,7 +93,7 @@
                 <path d="M6.5 8v2a2 2 0 0 0 2 2h7a2 2 0 0 0 2-2V8"></path>
                 <path d="M12 14v2.5"></path>
             </svg>
-            <span class="float-dock-label" data-i18n="float_workflow">工作流</span>
+            <span class="float-dock-label">工作流</span>
         </a>
     </div>
 </div>
@@ -186,9 +190,9 @@ LLM_API_KEY=ollama</pre>
         <!-- 品牌区 -->
         <div class="modal-brand">
             <div class="modal-logo">
-                <img src="../static/a.png" alt="有料 AI">
+                <img src="../static/a.png" alt="Jingent AI">
             </div>
-            <div class="modal-title" data-i18n="modal_welcome">欢迎使用 有料 AI</div>
+            <div class="modal-title" data-i18n="modal_welcome">欢迎使用 Jingent AI</div>
             <div class="modal-subtitle" data-i18n="modal_subtitle">登录后即可保存你的对话历史</div>
         </div>
 
@@ -200,14 +204,35 @@ LLM_API_KEY=ollama</pre>
 
         <!-- 登录表单 -->
         <div class="form-box show" id="loginForm">
-            <div class="input-item">
-                <label for="login_username" data-i18n="label_username">用户名</label>
-                <input type="text" id="login_username" data-i18n-ph="ph_login_username" placeholder="请输入用户名">
+            <!-- 登录方式切换：账号/手机号 -->
+            <div class="login-type-switch">
+                <span class="login-type active" data-ltype="account">账号登录</span>
+                <span class="login-type-divider">·</span>
+                <span class="login-type" data-ltype="phone">手机号登录</span>
             </div>
+
+            <!-- 账号模式输入框 -->
+            <div class="input-item" id="loginAccountField">
+                <label for="login_username">账号</label>
+                <input type="text" id="login_username" placeholder="请输入账号（用户名或手机号）">
+            </div>
+
+            <!-- 手机号模式输入框（默认隐藏） -->
+            <div class="input-item" id="loginPhoneField" style="display: none;">
+                <label for="login_phone">手机号</label>
+                <input type="tel" id="login_phone" placeholder="请输入11位手机号" maxlength="11">
+            </div>
+
+            <!-- 密码/验证码切换 -->
             <div class="input-item">
-                <label for="login_pwd" data-i18n="label_password">密码</label>
-                <div class="password-field">
-                    <input type="password" id="login_pwd" data-i18n-ph="ph_login_pwd" placeholder="请输入密码">
+                <div class="field-label-row">
+                    <label id="loginSecretLabel">密码</label>
+                    <span class="secret-switch" id="loginSecretSwitch">短信验证码登录</span>
+                </div>
+
+                <!-- 密码输入框（默认） -->
+                <div class="password-field" id="loginPwdField">
+                    <input type="password" id="login_pwd" placeholder="请输入密码">
                     <button type="button" class="pwd-toggle-btn" data-target="login_pwd" aria-label="显示密码" title="显示密码">
                         <svg class="icon-eye-open" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                             <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path>
@@ -220,20 +245,34 @@ LLM_API_KEY=ollama</pre>
                         </svg>
                     </button>
                 </div>
+
+                <!-- 验证码输入框（默认隐藏） -->
+                <div class="code-field" id="loginCodeField" style="display: none;">
+                    <input type="text" id="login_code" placeholder="请输入6位验证码" maxlength="6">
+                    <button type="button" class="send-code-btn" id="loginSendCodeBtn">获取验证码</button>
+                </div>
             </div>
-            <button class="submit-btn" id="doLogin" data-i18n="btn_do_login">立即登录</button>
+
+            <button class="submit-btn" id="doLogin">立即登录</button>
         </div>
 
         <!-- 注册表单 -->
         <div class="form-box" id="registerForm">
             <div class="input-item">
-                <label for="reg_username" data-i18n="label_username">用户名</label>
-                <input type="text" id="reg_username" data-i18n-ph="ph_reg_username" placeholder="请设置用户名">
+                <label for="reg_phone">手机号</label>
+                <input type="tel" id="reg_phone" placeholder="请输入11位手机号" maxlength="11">
             </div>
             <div class="input-item">
-                <label for="reg_pwd" data-i18n="label_password">密码</label>
+                <label for="reg_code">验证码</label>
+                <div class="code-field">
+                    <input type="text" id="reg_code" placeholder="请输入6位验证码" maxlength="6">
+                    <button type="button" class="send-code-btn" id="sendCodeBtn">获取验证码</button>
+                </div>
+            </div>
+            <div class="input-item">
+                <label for="reg_pwd">密码</label>
                 <div class="password-field">
-                    <input type="password" id="reg_pwd" data-i18n-ph="ph_reg_pwd" placeholder="请设置密码">
+                    <input type="password" id="reg_pwd" data-i18n-ph="ph_reg_pwd" placeholder="请设置密码（至少6位）">
                     <button type="button" class="pwd-toggle-btn" data-target="reg_pwd" aria-label="显示密码" title="显示密码">
                         <svg class="icon-eye-open" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                             <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path>
@@ -248,7 +287,7 @@ LLM_API_KEY=ollama</pre>
                 </div>
             </div>
             <div class="input-item">
-                <label for="reg_repwd" data-i18n="label_repassword">确认密码</label>
+                <label for="reg_repwd">确认密码</label>
                 <div class="password-field">
                     <input type="password" id="reg_repwd" data-i18n-ph="ph_reg_repwd" placeholder="请再次输入密码">
                     <button type="button" class="pwd-toggle-btn" data-target="reg_repwd" aria-label="显示密码" title="显示密码">
@@ -270,16 +309,109 @@ LLM_API_KEY=ollama</pre>
 </div>
 
 
+<!-- 3. 系统设置弹窗 -->
+<div class="settings-modal" id="settingsModal">
+    <div class="modal-overlay"></div>
+    <div class="modal-content settings-content">
+        <button class="close-btn" id="closeSettingsBtn">×</button>
+        <div class="modal-brand">
+            <div class="modal-logo">
+                <img src="../static/a.png" alt="Jingent AI">
+            </div>
+            <div class="modal-title">系统设置</div>
+            <div class="modal-subtitle">管理你的账户信息</div>
+        </div>
+
+        <!-- 设置选项卡 -->
+        <div class="settings-tabs">
+            <span class="settings-tab active" data-stab="profile">个人资料</span>
+            <span class="settings-tab" data-stab="security">账号安全</span>
+        </div>
+
+        <!-- 个人资料 -->
+        <div class="settings-pane show" id="stab-profile">
+            <div class="input-item">
+                <label>账号</label>
+                <input type="text" id="setAccount" disabled style="opacity: 0.6; cursor: not-allowed;">
+            </div>
+            <div class="input-item">
+                <label>手机号</label>
+                <input type="text" id="setPhone" disabled style="opacity: 0.6; cursor: not-allowed;">
+            </div>
+            <div class="input-item">
+                <label for="setNickname">昵称</label>
+                <input type="text" id="setNickname" placeholder="请输入昵称" maxlength="20">
+            </div>
+            <button class="submit-btn" id="saveNicknameBtn">保存昵称</button>
+        </div>
+
+        <!-- 账号安全 -->
+        <div class="settings-pane" id="stab-security">
+            <div class="input-item">
+                <label for="setOldPwd">原密码</label>
+                <div class="password-field">
+                    <input type="password" id="setOldPwd" placeholder="请输入原密码">
+                    <button type="button" class="pwd-toggle-btn" data-target="setOldPwd" aria-label="显示密码" title="显示密码">
+                        <svg class="icon-eye-open" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle></svg>
+                        <svg class="icon-eye-closed" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94"></path><line x1="1" y1="1" x2="23" y2="23"></line></svg>
+                    </button>
+                </div>
+            </div>
+            <div class="input-item">
+                <label for="setNewPwd">新密码</label>
+                <div class="password-field">
+                    <input type="password" id="setNewPwd" placeholder="请输入新密码（至少6位）">
+                    <button type="button" class="pwd-toggle-btn" data-target="setNewPwd" aria-label="显示密码" title="显示密码">
+                        <svg class="icon-eye-open" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle></svg>
+                        <svg class="icon-eye-closed" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94"></path><line x1="1" y1="1" x2="23" y2="23"></line></svg>
+                    </button>
+                </div>
+            </div>
+            <div class="input-item">
+                <label for="setConfirmPwd">确认新密码</label>
+                <div class="password-field">
+                    <input type="password" id="setConfirmPwd" placeholder="请再次输入新密码">
+                    <button type="button" class="pwd-toggle-btn" data-target="setConfirmPwd" aria-label="显示密码" title="显示密码">
+                        <svg class="icon-eye-open" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle></svg>
+                        <svg class="icon-eye-closed" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94"></path><line x1="1" y1="1" x2="23" y2="23"></line></svg>
+                    </button>
+                </div>
+            </div>
+            <button class="submit-btn" id="savePasswordBtn">修改密码</button>
+        </div>
+    </div>
+</div>
+
+
 <!-- 移动端侧边栏抽屉遮罩 -->
 <div class="sidebar-backdrop" id="sidebarBackdrop"></div>
 
 <div class="app-shell">
     <div class="sidebar-wrap">
         <div class="sidebar" id="sideBar">
-            <div class="brand">
-                <span class="brand-mark"></span>
-                <span class="brand-name" data-i18n="brand_name">有料 AI</span>
+            <div class="sidebar-section-label">工作台</div>
+            <a href="/" class="sidebar-nav-item" title="返回首页">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path>
+                    <polyline points="9 22 9 12 15 12 15 22"></polyline>
+                </svg>
+                <span>首页</span>
+            </a>
+            <div class="sidebar-nav-item active" id="chatEntry" title="AI 对话">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path>
+                </svg>
+                <span>AI 对话</span>
             </div>
+            <a href="/workflow" class="sidebar-nav-item" title="无代码工作流">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <rect x="3" y="3" width="7" height="7"></rect>
+                    <rect x="14" y="3" width="7" height="7"></rect>
+                    <rect x="14" y="14" width="7" height="7"></rect>
+                    <rect x="3" y="14" width="7" height="7"></rect>
+                </svg>
+                <span>工作流</span>
+            </a>
             <div class="sidebar-section-label" data-i18n="sidebar_jobhunt_section">找工作</div>
             <div class="sidebar-nav-item" id="jobHuntEntry" title="简历制作与岗位推荐">
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -320,6 +452,14 @@ LLM_API_KEY=ollama</pre>
 
             <!-- 点击弹出的下拉菜单 -->
             <div class="profile-dropdown" id="profileDropdown">
+                <div class="dropdown-item settings-btn" id="settingsBtn">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                         stroke-linecap="round" stroke-linejoin="round">
+                        <circle cx="12" cy="12" r="3"></circle>
+                        <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
+                    </svg>
+                    <span>系统设置</span>
+                </div>
                 <div class="dropdown-item logout-btn" id="logoutBtn">
                     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
                          stroke-linecap="round" stroke-linejoin="round">
@@ -373,16 +513,6 @@ LLM_API_KEY=ollama</pre>
                     </svg>
                 </button>
 
-                <button class="lang-toggle-btn" id="langToggleBtn" data-i18n-title="lang_toggle_title" title="切换中/英文">EN</button>
-                <button class="theme-toggle-btn" id="themeToggleBtn" data-i18n-title="theme_toggle_title" title="切换亮/暗主题" aria-label="切换主题">
-                    <svg class="theme-icon-sun" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                        <circle cx="12" cy="12" r="4"></circle>
-                        <path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41"></path>
-                    </svg>
-                    <svg class="theme-icon-moon" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                        <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path>
-                    </svg>
-                </button>
             </div>
             <div class="chat-session" id="chatSession" data-i18n="new_session">新对话</div>
         </div>
@@ -392,9 +522,9 @@ LLM_API_KEY=ollama</pre>
                 <!-- 推广横幅（红框位置：标题栏下、logo上），文案后台可配置 -->
                 <div class="promo-banner" id="promoBanner" hidden></div>
                 <div class="empty-logo">
-                    <img src="../static/a.png" alt="有料 AI">
+                    <img src="../static/a.png" alt="Jingent AI">
                 </div>
-                <div class="empty-title" data-i18n="empty_title">我是 有料 AI，有什么可以帮你？</div>
+                <div class="empty-title" data-i18n="empty_title">我是 Jingent AI，有什么可以帮你？</div>
                 <div class="empty-desc" data-i18n="empty_desc">输入你的问题，开启一段新的对话</div>
 
                 <!-- 场景模板快捷入口 -->
@@ -628,6 +758,7 @@ LLM_API_KEY=ollama</pre>
 
 
 <script src="../static/js/config.js?v={{ ASSET_VERSION }}"></script>
+<script src="../static/js/theme-bar.js?v={{ ASSET_VERSION }}"></script>
 <script src="../static/js/theme.js?v={{ ASSET_VERSION }}"></script>
 <script src="../static/js/i18n.js?v={{ ASSET_VERSION }}"></script>
 <script src="../static/js/showLoginExpiredModal.js?v={{ ASSET_VERSION }}"></script>

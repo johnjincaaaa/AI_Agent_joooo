@@ -769,7 +769,9 @@ function deleteSingleMessage(msgEl, index) {
 }
 
 // Enter 发送，Ctrl+Enter / Shift+Enter 换行
-const userInput = document.getElementById("userInput");
+if (typeof userInput === 'undefined') {
+    var userInput = document.getElementById("userInput");
+}
 userInput.addEventListener("keydown", e => {
     if (e.key === "Enter" && !e.isComposing) {
         if (e.ctrlKey || e.shiftKey) {

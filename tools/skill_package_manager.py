@@ -1,7 +1,7 @@
-"""
+﻿"""
 技能包管理器：解析、验证、导入技能包
 支持两种格式：
-1. 有料 AI 标准格式（含 skill.json）
+1. Jingent AI 标准格式（含 skill.json）
 2. TRAE/Claude Skill 兼容格式（含 SKILL.md，frontmatter + 正文）
 """
 import os
@@ -91,7 +91,7 @@ def parse_skill_zip(zip_bytes: bytes) -> Dict[str, Any]:
         file_list = zip_file.namelist()
         result = {"valid": False, "error": "", "skill": {}, "files": file_list}
 
-        # 1. 优先查找 skill.json（有料 AI 标准格式）
+        # 1. 优先查找 skill.json（Jingent AI 标准格式）
         skill_json = None
         for fname in file_list:
             if fname.endswith("skill.json") or fname.endswith("skill.json/"):

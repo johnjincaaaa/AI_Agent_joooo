@@ -9,8 +9,21 @@
 const LANG = {
     zh: {
         // 顶部 / 通用
-        brand_name: '有料 AI',
+        brand_name: 'Jingent AI',
         login: '登录',
+
+        // 首页
+        home_hero_title: '高性能 · AI 工作台',
+        home_hero_subtitle: '一站式 AI 对话、工作流编排、岗位匹配',
+        home_card_1_title: 'AI 对话',
+        home_card_1_desc: '智能聊天 · 多模型支持 · 代码增强',
+        home_card_2_title: '无代码工作流',
+        home_card_2_desc: '可视化编排 · 自动化一切',
+        home_card_3_title: '岗位推荐',
+        home_card_3_desc: 'AI 智能匹配 · 精准职业推荐',
+        home_card_4_title: '技能市场',
+        home_card_4_desc: '一键安装 · 扩展能力',
+
         logged_in: '已登录',
         not_logged_in: '未登录',
         guide_btn: '接入教程',
@@ -48,7 +61,7 @@ const LANG = {
         new_chat_title: '新建对话',
 
         // 空状态
-        empty_title: '我是 有料 AI，有什么可以帮你？',
+        empty_title: '我是 Jingent AI，有什么可以帮你？',
         empty_desc: '输入你的问题，开启一段新的对话',
 
         // 场景模板
@@ -93,7 +106,7 @@ const LANG = {
         send_title: '发送',
 
         // 登录/注册弹窗
-        modal_welcome: '欢迎使用 有料 AI',
+        modal_welcome: '欢迎使用 Jingent AI',
         modal_subtitle: '登录后即可保存你的对话历史',
         tab_login: '登录',
         tab_register: '注册',
@@ -326,6 +339,19 @@ const LANG = {
     en: {
         brand_name: 'Youliao AI',
         login: 'Sign in',
+
+        // Home page
+        home_hero_title: 'High-Performance · AI Workbench',
+        home_hero_subtitle: 'All-in-one AI Chat, Workflow Orchestration, Job Matching',
+        home_card_1_title: 'AI Chat',
+        home_card_1_desc: 'Smart conversation · Multi-model · Code enhanced',
+        home_card_2_title: 'No-Code Workflow',
+        home_card_2_desc: 'Visual builder · Automate everything',
+        home_card_3_title: 'Job Recommendations',
+        home_card_3_desc: 'AI-powered matching · Precision career advice',
+        home_card_4_title: 'Skill Market',
+        home_card_4_desc: 'One-click install · Extend capabilities',
+
         logged_in: 'Signed in',
         not_logged_in: 'Sign in',
         guide_btn: 'API Guide',

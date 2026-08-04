@@ -4,7 +4,7 @@
 ========================================================== */
 :root {
     /* 背景层次：从最深到稍亮 */
-    --bg-app: #0d0f13;          /* 整体最底背景 */
+    --bg-app: var(--theme-bg, #0d0f13);          /* 整体最底背景 */
     --bg-sidebar: #15171c;      /* 侧边栏 */
     --bg-chat: #0d0f13;         /* 聊天主区 */
     --bg-elevated: #1b1e25;     /* 卡片/悬浮层 */
@@ -87,7 +87,7 @@
 }
 
 html {
-    background-color: var(--bg-app);
+    background-color: var(--theme-bg, var(--bg-app));
 }
 
 body {
@@ -95,7 +95,7 @@ body {
     padding: 0;
     height: 100vh;
     overflow: hidden;
-    background-color: var(--bg-app);
+    background-color: var(--theme-bg, var(--bg-app));
     color: var(--text-primary);
     display: flex;
     flex-direction: column;
@@ -518,6 +518,10 @@ body,
 .login-btn:hover {
     background: var(--accent-hover);
     transform: translateY(-1px);
+}
+body.has-top-bar .login-btn {
+    top: 72px;
+    z-index: 998;
 }
 
 /* ----------------------- hover 提示气泡 ----------------------- */

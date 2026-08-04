@@ -1,4 +1,4 @@
-from sqlalchemy import create_engine, Column, Integer, String, Text, DateTime, ForeignKey,JSON,BIGINT,Float,UniqueConstraint, inspect, text
+﻿from sqlalchemy import create_engine, Column, Integer, String, Text, DateTime, ForeignKey,JSON,BIGINT,Float,UniqueConstraint, inspect, text
 from sqlalchemy.orm import declarative_base, relationship, sessionmaker
 from datetime import datetime
 from config import SQLALCHEMY_DATABASE_URL
@@ -22,6 +22,8 @@ class User(Base):
     id = Column(Integer, primary_key=True, index=True)
     username = Column(String(50), unique=True, index=True, nullable=False)  # 账号唯一
     password = Column(String(255), nullable=False)  # bcrypt 哈希
+    phone = Column(String(20), unique=True, index=True, nullable=True)     # 手机号（手机号注册）
+    nickname = Column(String(50), nullable=True)                             # 用户昵称（可修改）
     register_time = Column(DateTime, default=datetime.now)
 
     # ===== 推广拉新相关 =====
@@ -158,8 +160,8 @@ PROMO_CONFIG_DEFAULTS = {
     "input_promo_zh": "邀请好友下载APP，每人奖励3元，满5人再得20元+永久会员！",
     "input_promo_en": "Invite friends to download the App: ¥3 each, plus ¥20 + lifetime membership at 5 invites!",
     # 空状态横幅文案（默认用用户给的推广词）
-    "banner_promo_zh": "有料 AI 重磅福利\n📥下载APP ➜ 2元 + 30天会员\n👥邀1人 = 3元\n👥邀5人 = 20元 + 永久会员\n智能AI对话工具，收益轻松拿！",
-    "banner_promo_en": "Youliao AI Bonus\n📥 Download App ➜ ¥2 + 30-day membership\n👥 Invite 1 = ¥3\n👥 Invite 5 = ¥20 + lifetime membership\nSmart AI chat, earn with ease!",
+    "banner_promo_zh": "Jingent AI 重磅福利\n📥下载APP ➜ 2元 + 30天会员\n👥邀1人 = 3元\n👥邀5人 = 20元 + 永久会员\n智能AI对话工具，收益轻松拿！",
+    "banner_promo_en": "Jingent AI Bonus\n📥 Download App ➜ ¥2 + 30-day membership\n👥 Invite 1 = ¥3\n👥 Invite 5 = ¥20 + lifetime membership\nSmart AI chat, earn with ease!",
     # 奖励规则
     "reward_base": "3",
     "tier_threshold": "5",
@@ -200,6 +202,8 @@ def _ensure_user_columns():
         "balance_usd": "FLOAT NOT NULL DEFAULT 0",
         "referral_count": "INTEGER NOT NULL DEFAULT 0",
         "membership_expire_at": "DATETIME NULL",
+        "phone": "VARCHAR(20)",
+        "nickname": "VARCHAR(50)",
     }
     with engine.begin() as conn:
         for col, ddl in add_cols.items():
