@@ -65,6 +65,23 @@ class JobProfile(Base):
 
 
 # ======================
+# Jinclaw Agent 会话表
+# ======================
+class JinclawSession(Base):
+    __tablename__ = "jinclaw_sessions"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), index=True)
+    session_name = Column(String(100), nullable=False, default="新建会话")
+    messages = Column(JSON, default=list)
+    workspace_dir = Column(String(500), nullable=True)
+    created_at = Column(DateTime, default=datetime.now)
+    updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now)
+
+    user = relationship("User")
+
+
+# ======================
 # 有效推广记录表
 # ======================
 class ReferralEvent(Base):

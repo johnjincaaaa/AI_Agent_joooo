@@ -1,0 +1,40 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "Jingent AI",
+  "version": "0.1.0",
+  "identifier": "com.jingent.ai",
+  "build": {
+    "beforeDevCommand": "powershell -NoProfile -ExecutionPolicy Bypass -Command \"Set-Location (Join-Path $PWD.Path '..') -ErrorAction Stop; if(-not (Test-Path logs)){ New-Item -ItemType Directory logs -Force | Out-Null }; try { $c=New-Object Net.Sockets.TcpClient; $c.Connect('127.0.0.1',8000); $c.Close(); Write-Output 'TAURI_SRV_READY backend already up'; exit 0 } catch {}; if(-not (Get-Command python -ErrorAction SilentlyContinue)){ Write-Error 'python not in PATH'; exit 1 }; $out=(Resolve-Path logs).Path+'\\backend_stdout.log'; $err=(Resolve-Path logs).Path+'\\backend_stderr.log'; $p=Start-Process -FilePath python -ArgumentList 'main.py' -PassThru -WindowStyle Hidden -RedirectStandardOutput $out -RedirectStandardError $err; $ts=Get-Date; do { if($p.HasExited){ Write-Error ('backend exited code='+$p.ExitCode+' see logs\\backend_stdout.log'); exit 1 }; if((Get-Date)-$ts -gt [timespan]::FromSeconds(25)){ try { $p.Kill() } catch {}; Write-Error 'backend timed out'; exit 1 }; try { $c2=New-Object Net.Sockets.TcpClient; $c2.Connect('127.0.0.1',8000); $c2.Close(); Start-Sleep -Milliseconds 500; Write-Output 'TAURI_SRV_READY backend up pid='$p.Id; exit 0 } catch { Start-Sleep -Milliseconds 400 } } while($true)\"",
+    "beforeBuildCommand": "",
+    "devUrl": "http://127.0.0.1:8000/jinclaw?is_desktop=1",
+    "frontendDist": "../static"
+  },
+  "app": {
+    "windows": [
+      {
+        "label": "main",
+        "title": "Jingent AI — Jinclaw Coding Agent",
+        "width": 1600,
+        "height": 960,
+        "minWidth": 1200,
+        "minHeight": 760,
+        "resizable": true,
+        "fullscreen": false
+      }
+    ],
+    "security": {
+      "csp": null
+    }
+  },
+  "bundle": {
+    "active": false,
+    "targets": "all",
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/icon.icns",
+      "icons/icon.ico"
+    ]
+  }
+}

@@ -98,6 +98,15 @@ function handleLoginSuccess(data, fallbackName) {
     document.getElementById("userName").textContent = displayName;
     modal.style.display = 'none';
     openBtn.textContent = t('logged_in');
+    // 支持 next query 参数回跳（jinclaw 兜底跳转登录、chat 登录后需要回来源页时用）
+    try {
+        const params = new URLSearchParams(window.location.search);
+        const next = params.get('next');
+        if (next && /^\/[A-Za-z0-9_\-/?=&.%#@]*$/.test(next)) { // 只允许同源相对路径
+            window.location.replace(next);
+            return; // 跳转后不执行 reload / initHistory
+        }
+    } catch(_) {}
     window.location.reload();
     initUserProfile();
     initHistory().then(r => {});
@@ -301,6 +310,15 @@ document.getElementById('doRegister').onclick = async () => {
             if (data.user_id) localStorage.setItem('user_id', data.user_id);
             document.getElementById("userName").textContent = displayName;
             modal.style.display = 'none';
+            // 同样支持 next 回跳
+            try {
+                const params = new URLSearchParams(window.location.search);
+                const next = params.get('next');
+                if (next && /^\/[A-Za-z0-9_\-/?=&.%#@]*$/.test(next)) {
+                    window.location.replace(next);
+                    return;
+                }
+            } catch(_) {}
             window.location.reload();
         } else {
             alert('注册失败：' + (data.msg || '未知错误'));

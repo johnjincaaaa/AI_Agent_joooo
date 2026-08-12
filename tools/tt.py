@@ -27,6 +27,7 @@ def online(keyword: str) -> str:
         search_result = "联网搜索结果：\n"
         # print(results)
         for i, item in enumerate(results, 1):
+            print(f"{i}. {item}")
             search_result += f"{i}. {item['title']}\n摘要：{item['body']}\n\n"
 
         return search_result.strip() or "未搜索到有效信息"
@@ -37,4 +38,4 @@ def online(keyword: str) -> str:
 
 # 测试运行
 if __name__ == "__main__":
-    print(online.invoke("台湾问题"))
+    print(online.invoke("百家乐网站"))

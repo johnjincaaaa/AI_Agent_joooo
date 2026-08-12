@@ -1,0 +1,600 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <title>Jinclaw - AI Coding Agent</title>
+    <script>
+        (function () {
+            try {
+                var saved = localStorage.getItem('jingent_colormode') || localStorage.getItem('app_theme');
+                if (saved === 'light') {
+                    document.documentElement.setAttribute('data-theme', 'light');
+                    document.documentElement.setAttribute('data-color-mode', 'light');
+                } else if (saved === 'dark') {
+                    document.documentElement.setAttribute('data-color-mode', 'dark');
+                }
+            } catch (e) {}
+        })();
+    </script>
+    <link rel="stylesheet" href="../static/css/page_chat.css?v={{ ASSET_VERSION }}">
+    <link rel="stylesheet" href="../static/css/page_home.css?v={{ ASSET_VERSION }}">
+    <link rel="stylesheet" href="../static/css/page_jinclaw.css?v={{ ASSET_VERSION }}">
+    <link rel="icon" href="../static/a.ico" type="image/x-icon">
+    <script src="https://cdn.jsdelivr.net/npm/marked/lib/marked.umd.js"></script>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+</head>
+<body>
+
+<!-- ============ LOCK SCREEN (web only) ============ -->
+<div class="jc-lock" id="lockScreen">
+    <div class="jc-lock-card">
+        <div class="jc-lock-icon">
+            <svg width="64" height="64" viewBox="0 0 64 64" fill="none">
+                <rect x="4" y="4" width="56" height="56" rx="16" stroke="currentColor" stroke-width="3"/>
+                <rect x="18" y="20" width="28" height="4" rx="2" fill="currentColor" opacity="0.7"/>
+                <rect x="18" y="28" width="20" height="4" rx="2" fill="currentColor" opacity="0.5"/>
+                <rect x="18" y="36" width="24" height="4" rx="2" fill="currentColor" opacity="0.3"/>
+                <circle cx="46" cy="44" r="8" fill="var(--accent,#4c8dff)"/>
+                <path d="M44 44h4M46 42v4" stroke="#fff" stroke-width="1.5" stroke-linecap="round"/>
+            </svg>
+        </div>
+        <h1>Jinclaw Agent</h1>
+        <p>Jinclaw 是桌面端专属的 AI 编程助手</p>
+        <div class="jc-lock-features">
+            <div class="jc-lock-feat">
+                <span class="jc-lock-feat-icon">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
+                </span>
+                <div><strong>本地文件访问</strong><br><small>直接读写本地项目文件</small></div>
+            </div>
+            <div class="jc-lock-feat">
+                <span class="jc-lock-feat-icon">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
+                </span>
+                <div><strong>命令执行</strong><br><small>运行 Shell/PowerShell 命令</small></div>
+            </div>
+            <div class="jc-lock-feat">
+                <span class="jc-lock-feat-icon">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
+                </span>
+                <div><strong>代码 Diff</strong><br><small>预览变更，一键应用/撤销</small></div>
+            </div>
+            <div class="jc-lock-feat">
+                <span class="jc-lock-feat-icon">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+                </span>
+                <div><strong>本地存储</strong><br><small>数据在 AppData 和 ~/.jingent/</small></div>
+            </div>
+        </div>
+        <a class="jc-lock-dl" href="#" id="downloadBtn">下载 Jingent AI 桌面端</a>
+    </div>
+</div>
+
+<!-- ============ MAIN APP (desktop only) ============ -->
+<div class="jc-shell" id="appShell" style="display:none">
+    <!-- ── LEFT: Work Panel ── -->
+    <aside class="jc-work-panel" id="workPanel">
+        <!-- View 1: Project + Task list -->
+        <div class="jc-work-view" id="projectListView">
+            <div class="jc-work-nav">
+                <div class="jc-work-nav-brand">
+                    <svg width="20" height="20" viewBox="0 0 64 64" fill="none">
+                        <rect x="4" y="4" width="56" height="56" rx="16" stroke="var(--accent)" stroke-width="3"/>
+                        <rect x="18" y="20" width="28" height="4" rx="2" fill="var(--accent)" opacity="0.7"/>
+                        <rect x="18" y="28" width="20" height="4" rx="2" fill="var(--accent)" opacity="0.5"/>
+                        <rect x="18" y="36" width="24" height="4" rx="2" fill="var(--accent)" opacity="0.3"/>
+                        <circle cx="46" cy="44" r="8" fill="var(--accent)"/>
+                        <path d="M44 44h4M46 42v4" stroke="#fff" stroke-width="1.5" stroke-linecap="round"/>
+                    </svg>
+                    <span>Jinclaw</span>
+                </div>
+                <div class="jc-work-nav-links">
+                    <a href="/chat" class="jc-nav-link" title="AI 对话" aria-label="AI 对话">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+                    </a>
+                    <a href="/" class="jc-nav-link" title="首页" aria-label="首页">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
+                    </a>
+                </div>
+            </div>
+
+            <div class="jc-new-task-wrap">
+                <button class="jc-new-task-btn" id="selectFolderBtn">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
+                    <span>新建项目</span>
+                </button>
+            </div>
+
+            <div class="jc-work-scroll" id="projectTaskList">
+                <div class="jc-empty-state-mini" id="projectEmpty">
+                    <p>点击「新建项目」选择文件夹</p>
+                    <p class="jc-empty-hint">或直接对话，使用默认工作目录</p>
+                </div>
+            </div>
+
+            <!-- ── Bottom user bar (Chat 同款) ── -->
+            <div class="jc-user-profile" id="userProfileBar">
+                <div class="jc-up-avatar" aria-hidden="true">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+                </div>
+                <div class="jc-up-info">
+                    <div class="jc-up-name" id="userNameText" data-i18n="not_logged_in">未登录</div>
+                    <div class="jc-up-quota" id="userQuotaText">—</div>
+                </div>
+                <button class="jc-up-login" id="openLoginBtnInner" type="button" data-i18n="login">登录</button>
+            </div>
+        </div>
+
+        <!-- View 2: File tree (slides in) -->
+        <div class="jc-work-view" id="fileTreeView" style="display:none">
+            <div class="jc-ft-topbar">
+                <button class="jc-ft-back" id="fileTreeBackBtn">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
+                    <span id="fileTreeBackLabel">返回项目列表</span>
+                </button>
+            </div>
+            <div class="jc-work-section-header">文件管理</div>
+            <div class="jc-file-tree" id="fileTree">
+                <div class="jc-empty-state-mini"><p>加载中...</p></div>
+            </div>
+        </div>
+    </aside>
+
+    <!-- 三栏 resizer：左 <-> 中 -->
+    <div class="jc-resizer jc-resizer-left" title="拖动调整左栏宽度"></div>
+
+    <!-- ── CENTER: Chat Panel ── -->
+    <main class="jc-center-panel" id="centerPanel">
+
+        <!-- ── 顶部工具条：面板折叠 + 状态 ── -->
+        <div class="jc-toolbar" id="jcToolbar">
+            <div class="jc-toolbar-group">
+                <button class="jc-tb-btn" id="toggleLeftBtn" title="切换项目面板 (Ctrl+B)" type="button">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"/><line x1="9" y1="4" x2="9" y2="20"/></svg>
+                </button>
+                <button class="jc-tb-btn" id="toggleRightBtn" title="切换预览面板 (Ctrl+.)" type="button">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"/><line x1="15" y1="4" x2="15" y2="20"/></svg>
+                </button>
+            </div>
+            <div class="jc-tb-divider"></div>
+            <div class="jc-toolbar-group">
+                <span class="jc-status-pill" id="statusPill">就绪</span>
+            </div>
+            <div class="jc-toolbar-group right">
+                <button class="jc-lang-toggle" id="langToggleBtn" title="中 / EN" aria-label="切换中英文" type="button">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>
+                    <span class="jc-lang-label" id="langLabel">中</span>
+                </button>
+                <button class="jc-tb-btn" id="newTaskBtn" title="新对话 (Ctrl+Shift+N)" type="button">
+                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                </button>
+                <button class="jc-tb-btn" id="themeToggleBtn" title="切换亮/暗主题" type="button">
+                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
+                </button>
+            </div>
+        </div>
+
+        <div class="jc-chat" id="chatBox">
+            <div class="jc-chat-inner">
+            <div class="jc-empty-state" id="emptyState">
+                <div class="jc-empty-logo">
+                    <svg viewBox="0 0 64 64" fill="none">
+                        <rect x="6" y="6" width="52" height="52" rx="14" stroke="#fff" stroke-width="3" opacity="0.95"/>
+                        <rect x="20" y="22" width="26" height="4" rx="2" fill="#fff" opacity="0.85"/>
+                        <rect x="20" y="30" width="18" height="4" rx="2" fill="#fff" opacity="0.65"/>
+                        <rect x="20" y="38" width="22" height="4" rx="2" fill="#fff" opacity="0.45"/>
+                        <circle cx="46" cy="46" r="8" fill="#fff" opacity="0.95"/>
+                        <path d="M44 46h4M46 44v4" stroke="url(#brandGrad)" stroke-width="2" stroke-linecap="round"/>
+                        <defs>
+                            <linearGradient id="brandGrad" x1="76" y1="44" x2="84" y2="50" gradientUnits="userSpaceOnUse">
+                                <stop stop-color="#4c8dff"/><stop offset="0.55" stop-color="#6d5cff"/><stop offset="1" stop-color="#8b5cf6"/>
+                            </linearGradient>
+                        </defs>
+                    </svg>
+                </div>
+                <h2>Jinclaw — 你的代码级 AI 搭档</h2>
+                <p>我能直接读写本地文件、运行 Shell / Git 命令、浏览网页、逐行审查代码变更</p>
+
+                <div class="jc-sg-category">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
+                    <span>快速开始</span>
+                </div>
+                <div class="jc-suggestions">
+                    <button class="jc-sg" type="button" data-text="先列出当前目录（即项目根）的文件结构，然后给我一份项目概览：用了什么技术栈、代码主要分布在哪几个文件夹、入口文件在哪。">
+                        <span class="jc-sg-icon">
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+                        </span>
+                        <span class="jc-sg-main">
+                            <span class="jc-sg-title">认识我的项目</span>
+                            <span class="jc-sg-desc">扫描目录结构 + 技术栈分析</span>
+                        </span>
+                    </button>
+                    <button class="jc-sg" type="button" data-text="读取 AGENTS.md 的内容，摘要里面关于代码风格、工作流、必须遵守的约束，用 5 条以内要点概括。">
+                        <span class="jc-sg-icon">
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
+                        </span>
+                        <span class="jc-sg-main">
+                            <span class="jc-sg-title">学习开发规范</span>
+                            <span class="jc-sg-desc">从 AGENTS.md 摘要工作约定</span>
+                        </span>
+                    </button>
+                    <button class="jc-sg" type="button" data-text="请在当前项目下创建一个 hello.py：使用 FastAPI 写一个 GET /health 返回 {status:ok}，然后运行它测试。">
+                        <span class="jc-sg-icon">
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></svg>
+                        </span>
+                        <span class="jc-sg-main">
+                            <span class="jc-sg-title">写一个 HTTP 服务</span>
+                            <span class="jc-sg-desc">Python FastAPI · 含运行验证</span>
+                        </span>
+                    </button>
+                    <button class="jc-sg" type="button" data-text="检查当前 Git 仓库的状态：列出所有未跟踪 / 已修改 / 已暂存的文件，并对变更做一句话说明。">
+                        <span class="jc-sg-icon">
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg>
+                        </span>
+                        <span class="jc-sg-main">
+                            <span class="jc-sg-title">查看 Git 变更</span>
+                            <span class="jc-sg-desc">diff 摘要 + 风险提示</span>
+                        </span>
+                    </button>
+                </div>
+
+                <div class="jc-sg-category">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
+                    <span>深度工作</span>
+                </div>
+                <div class="jc-suggestions">
+                    <button class="jc-sg" type="button" data-text="我想做一个功能。先不要写代码！先给出一份 3-5 步的执行计划，每步标注可能的风险和回滚策略，等我确认再动手。">
+                        <span class="jc-sg-icon">
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="3 11 22 2 13 21 11 13 3 11"/></svg>
+                        </span>
+                        <span class="jc-sg-main">
+                            <span class="jc-sg-title">先 Plan 再动手</span>
+                            <span class="jc-sg-desc">把需求拆成可控的小步</span>
+                        </span>
+                    </button>
+                    <button class="jc-sg" type="button" data-text="审查 main.py 的路由注册部分：检查是否有未捕获异常、未授权即可访问的敏感接口、SQL 注入风险。用清单方式列出来，严重程度高的给修复建议。">
+                        <span class="jc-sg-icon">
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+                        </span>
+                        <span class="jc-sg-main">
+                            <span class="jc-sg-title">代码安全审查</span>
+                            <span class="jc-sg-desc">查漏洞 → 按严重分级</span>
+                        </span>
+                    </button>
+                </div>
+            </div>
+            </div>
+        </div>
+
+        <div class="jc-input-area">
+            <div class="jc-input-wrap">
+                <div class="jc-input-tools">
+                    <div class="jc-input-tools-inner">
+                        <button class="jc-input-tool" id="attachBtn" title="附加文件 (Ctrl+O)" type="button" aria-label="附加文件">
+                            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg>
+                        </button>
+                        <button class="jc-input-tool" id="screenshotBtn" title="截一张屏再描述" type="button" aria-label="截图">
+                            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>
+                        </button>
+                        <button class="jc-input-tool text" id="tempBtn" title="调整温度" type="button">
+                            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 14.76V3.5a2.5 2.5 0 0 0-5 0v11.26a4.5 4.5 0 1 0 5 0z"/></svg>
+                            <span class="jc-tt-label">温度 0.7</span>
+                        </button>
+                    </div>
+                    <div class="jc-input-tools-right">
+                        <!-- 模型指示器（放在工具条右侧，代替原来 absolute 浮标） -->
+                        <button type="button" class="jc-input-tool jc-model-inline" id="modelIndicatorBtn" title="切换 / 管理模型">
+                            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="20" height="14" rx="2" ry="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
+                            <span class="jc-model-name" id="currentModelLabel">加载中…</span>
+                            <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
+                        </button>
+                        <button class="jc-input-tool text" id="clearBtn" title="清空对话" type="button">
+                            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+                            <span class="jc-tt-label">清空</span>
+                        </button>
+                        <span class="jc-kbd" title="按 Ctrl+Enter 发送">Ctrl⏎ 发送</span>
+                    </div>
+                </div>
+                <div class="jc-att-preview" id="attachmentsPreview"></div>
+                <div class="jc-input-row">
+                    <textarea id="userInput" class="jc-input"
+                        placeholder="有什么想改的？告诉我需求，我来 Plan → Execute → Verify…"
+                        rows="1"></textarea>
+                    <button class="jc-send-btn" id="sendBtn" title="发送 (Ctrl+Enter)" type="button">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
+                    </button>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <!-- 三栏 resizer：中 <-> 右 -->
+    <div class="jc-resizer jc-resizer-right" title="拖动调整右栏宽度"></div>
+
+    <!-- ── RIGHT: Preview Panel ── -->
+    <aside class="jc-preview-panel" id="previewPanel">
+        <div class="jc-prev-tabs">
+            <div class="jc-prev-tabs-inner" id="prevTabsInner">
+                <button class="jc-prev-tab active" type="button" data-prev="browser-0" aria-label="浏览器预览">
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>
+                </button>
+                <button class="jc-prev-tab" type="button" data-prev="code" aria-label="代码预览">
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg>
+                    <span class="jc-tab-badge" id="codeTabBadge" style="display:none">0</span>
+                </button>
+                <button class="jc-prev-tab" type="button" data-prev="terminal" aria-label="终端">
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19"/></svg>
+                </button>
+            </div>
+
+            <!-- Split dropdown: New Browser / New Terminal -->
+            <div class="jc-add-dropdown" id="addDropdownWrap">
+                <button class="jc-icon-btn jc-add-main" id="addTabMain" type="button" title="新建浏览器 / 终端">
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                </button>
+                <button class="jc-icon-btn jc-add-toggle" id="addTabToggle" type="button" aria-label="新建选项">
+                    <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
+                </button>
+                <div class="jc-add-menu" id="addTabMenu" style="display:none" role="menu">
+                    <button type="button" class="jc-add-item" role="menuitem" data-add="browser">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>
+                        <span>新建浏览器</span>
+                    </button>
+                    <button type="button" class="jc-add-item" role="menuitem" data-add="terminal">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19"/></svg>
+                        <span>新建 PowerShell 终端</span>
+                    </button>
+                </div>
+            </div>
+            <button class="jc-icon-btn" id="closePreviewBtn" type="button" title="关闭面板" aria-label="关闭面板">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+            </button>
+        </div>
+
+        <div class="jc-prev-content active" id="prev-browser-0">
+            <div class="jc-browser-bar">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="jc-br-lock" aria-hidden="true"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+                <input type="text" class="jc-browser-url jc-browser-url-0" value="about:blank" placeholder="输入 URL 并回车">
+                <button class="jc-icon-btn jc-browser-refresh-0" type="button" title="刷新" aria-label="刷新">
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>
+                </button>
+            </div>
+            <iframe class="jc-browser-iframe" id="browserFrame-0" src="about:blank" sandbox="allow-scripts allow-forms allow-same-origin allow-popups allow-modals"></iframe>
+        </div>
+
+        <div class="jc-prev-content" id="prev-code">
+            <div class="jc-code-placeholder" id="codePlaceholder">
+                <p>打开左侧文件树中的文件，或等待 AI 输出代码变更</p>
+            </div>
+            <div class="jc-editor-container" id="editorContainer" style="display:none">
+                <div class="jc-editor-toolbar" id="editorToolbar">
+                    <!-- 多文件并列 Tab：动态渲染在这个容器里，hover 单个 tab 图标变 × -->
+                    <div class="jc-editor-tabs" id="jcEditorTabs" role="tablist" aria-label="已打开文件"></div>
+                    <div>
+                        <button class="jc-editor-btn" id="editorApplyBtn" type="button" style="display:none">
+                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+                            <span>应用修改</span>
+                        </button>
+                        <button class="jc-editor-btn danger" id="editorRevertBtn" type="button" style="display:none">
+                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/></svg>
+                            <span>撤销</span>
+                        </button>
+                    </div>
+                </div>
+                <div class="jc-editor-mount" id="editorMount"></div>
+            </div>
+        </div>
+
+        <div class="jc-prev-content" id="prev-terminal">
+            <div class="jc-term-bar">
+                <span class="jc-term-cwd" id="termCwd">~</span>
+            </div>
+            <div class="jc-term-mount" id="terminal">
+                <div class="jc-term-placeholder" id="termPlaceholder"><pre>Jinclaw Terminal
+───────────────
+输入命令并按 Enter 执行。
+输入 'clear' 清屏。</pre></div>
+            </div>
+            <div class="jc-term-input-row">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" class="jc-term-prompt" aria-hidden="true"><polyline points="4 17 10 11 4 5"/></svg>
+                <input type="text" class="jc-term-input" id="termInput" placeholder="输入命令..."
+                       autocomplete="off" spellcheck="false">
+            </div>
+        </div>
+    </aside>
+
+</div>
+
+<!-- ============ MODAL: Folder Select ============ -->
+<div class="jc-modal-overlay" id="folderModal" style="display:none">
+    <div class="jc-modal">
+        <div class="jc-modal-header">选择工作文件夹</div>
+        <div class="jc-modal-body">
+            <input type="text" class="jc-modal-input" id="folderModalInput"
+                   placeholder="输入文件夹路径（留空使用默认 AppData 目录）...">
+            <p class="jc-modal-hint">留空则自动在 AppData 下创建项目目录</p>
+        </div>
+        <div class="jc-modal-footer">
+            <button class="jc-modal-btn primary" id="folderModalOk" type="button">确认</button>
+            <button class="jc-modal-btn" id="folderModalCancel" type="button">取消</button>
+        </div>
+    </div>
+</div>
+
+<!-- ============ MODAL: Model Management ============ -->
+<div class="jc-modal-overlay" id="modelModal" style="display:none">
+    <div class="jc-modal jc-modal-lg">
+        <div class="jc-modal-header jc-mm-header">
+            <div class="jc-mm-title">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="20" height="14" rx="2" ry="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
+                <span>大模型管理</span>
+            </div>
+            <button class="jc-modal-close" id="modelModalClose" type="button" aria-label="关闭">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+            </button>
+        </div>
+        <div class="jc-modal-body jc-mm-body">
+
+            <!-- 左侧：当前模型列表 -->
+            <div class="jc-mm-pane">
+                <div class="jc-mm-pane-title">选择要使用的模型</div>
+                <div class="jc-mm-list" id="modelList"></div>
+                <button class="jc-mm-add-btn" type="button" id="openAddModelBtn">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                    <span>添加自定义模型</span>
+                </button>
+            </div>
+
+            <!-- 右侧：添加模型表单 (默认折叠，点击“添加自定义模型”后滑入) -->
+            <div class="jc-mm-pane jc-mm-form-pane" id="addModelFormPane" style="display:none">
+                <div class="jc-mm-pane-title">添加模型</div>
+
+                <div class="jc-form-group">
+                    <label class="jc-form-label"><span class="jc-req">*</span>API 格式</label>
+                    <select class="jc-form-select" id="addModelApiFormat">
+                        <option value="openai">OpenAI Chat Completions 格式</option>
+                        <option value="anthropic">Anthropic Messages 格式</option>
+                        <option value="ollama">Ollama 本地格式</option>
+                    </select>
+                </div>
+
+                <div class="jc-form-group jc-form-url-group">
+                    <div class="jc-form-label-row">
+                        <label class="jc-form-label"><span class="jc-req">*</span>自定义请求地址</label>
+                        <label class="jc-switch">
+                            <span>完整 URL</span>
+                            <input type="checkbox" id="fullUrlToggle">
+                            <span class="jc-switch-slider"></span>
+                        </label>
+                    </div>
+                    <input type="text" class="jc-form-input" id="addModelBaseUrl" placeholder="例如 https://api.openai.com/v1">
+                    <div class="jc-form-hint info">
+                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
+                        <span id="urlHintText">请填写兼容 OpenAI API 的服务端点地址，不要以斜杠结尾。/chat/completions 将会被补充到你填写的地址末尾。</span>
+                    </div>
+                </div>
+
+                <div class="jc-form-group jc-form-modelid-group">
+                    <div class="jc-form-label-row">
+                        <label class="jc-form-label"><span class="jc-req">*</span>模型 ID</label>
+                        <label class="jc-switch">
+                            <span>多模态</span>
+                            <input type="checkbox" id="multimodalToggle" checked>
+                            <span class="jc-switch-slider"></span>
+                        </label>
+                    </div>
+                    <input type="text" class="jc-form-input" id="addModelId" placeholder="输入模型 ID">
+                </div>
+
+                <div class="jc-form-group">
+                    <label class="jc-form-label"><span class="jc-req">*</span>API 密钥</label>
+                    <input type="password" class="jc-form-input" id="addModelApiKey" placeholder="输入 API 密钥">
+                </div>
+
+                <details class="jc-form-details" open>
+                    <summary>高级配置</summary>
+                    <p class="jc-details-hint">包含模型系列（优化的 Prompt 和超参）、展示名称、上下文窗口等配置。</p>
+                    <div class="jc-form-group in-details">
+                        <label class="jc-form-label">展示名称（可选）</label>
+                        <input type="text" class="jc-form-input" id="addModelDisplayName" placeholder="例如：豆包 4.0 Ultra">
+                    </div>
+                    <div class="jc-form-group in-details">
+                        <label class="jc-form-label">模型系列</label>
+                        <select class="jc-form-select" id="addModelFamily">
+                            <option value="auto">自动检测</option>
+                            <option value="qwen">通义千问 / Qwen 系列</option>
+                            <option value="deepseek">DeepSeek 系列</option>
+                            <option value="claude">Claude 系列</option>
+                            <option value="gpt">GPT 系列</option>
+                            <option value="llama">Llama 系列</option>
+                        </select>
+                    </div>
+                    <div class="jc-form-group in-details">
+                        <label class="jc-form-label">上下文窗口</label>
+                        <input type="number" class="jc-form-input" id="addModelCtxWin" placeholder="默认 128000" value="128000">
+                    </div>
+                </details>
+
+                <div class="jc-mm-form-footer">
+                    <button class="jc-modal-btn" type="button" id="cancelAddModelBtn">取消</button>
+                    <button class="jc-modal-btn primary" type="button" id="submitAddModelBtn">提交</button>
+                </div>
+            </div>
+
+        </div>
+    </div>
+</div>
+
+<script>
+document.addEventListener('contextmenu', function(e) { e.preventDefault(); });
+</script>
+<script src="../static/js/config.js?v={{ ASSET_VERSION }}"></script>
+<script src="../static/js/i18n.js?v={{ ASSET_VERSION }}"></script>
+<script src="../static/js/theme-bar.js?v={{ ASSET_VERSION }}"></script>
+<script src="../static/js/theme.js?v={{ ASSET_VERSION }}"></script>
+<script src="../static/js/jinclaw.js?v={{ ASSET_VERSION }}"></script>
+
+<!-- 文件右键菜单 -->
+<div class="jc-ctx-menu" id="ctxMenu" style="display:none">
+    <div class="jc-ctx-item" data-action="explore">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
+        <span>在文件资源管理器中显示</span>
+    </div>
+    <div class="jc-ctx-item" data-action="add_to_chat">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+        <span>添加到对话</span>
+    </div>
+    <div class="jc-ctx-item" data-action="copy_path">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+        <span>复制路径</span>
+    </div>
+    <div class="jc-ctx-sep"></div>
+    <div class="jc-ctx-item" data-action="rename">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
+        <span>重命名</span>
+    </div>
+    <div class="jc-ctx-item danger" data-action="delete">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+        <span>删除</span>
+    </div>
+</div>
+
+<!-- 内嵌登录/注册弹窗：不跳 chat 页面、不走 window.open，网页端 + Tauri 端统一可用 -->
+<div class="jc-login-overlay" id="loginDialog" style="display:none" role="dialog" aria-modal="true" aria-labelledby="jcLoginTitle">
+    <div class="jc-login-card">
+        <button type="button" class="jc-login-close" id="loginCloseBtn" aria-label="关闭">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+        </button>
+        <h2 id="jcLoginTitle">欢迎回来 👋</h2>
+        <p class="jc-login-sub">登录 Jingent AI，对话、配额、文件管理全局同步</p>
+        <div class="jc-login-tabs">
+            <button type="button" class="jc-login-tab active" data-tab="login">登录</button>
+            <button type="button" class="jc-login-tab" data-tab="register">注册</button>
+        </div>
+        <form id="loginForm" class="jc-login-form" autocomplete="on" novalidate>
+            <label class="jc-login-field">
+                <span class="jc-login-label">用户名 / 手机号</span>
+                <input name="username" type="text" required minlength="2" placeholder="请输入用户名或手机号" autocomplete="username">
+            </label>
+            <label class="jc-login-field">
+                <span class="jc-login-label">密码</span>
+                <input name="password" type="password" required minlength="6" placeholder="至少 6 位" autocomplete="current-password">
+            </label>
+            <label class="jc-login-field" data-register-only style="display:none">
+                <span class="jc-login-label">确认密码</span>
+                <input name="password2" type="password" placeholder="再次输入密码" autocomplete="new-password">
+            </label>
+            <div class="jc-login-err" id="loginErrorMsg" style="display:none"></div>
+            <button type="submit" class="jc-login-submit" id="loginSubmitBtn">
+                <span class="jc-login-submit-label">登 录</span>
+                <span class="jc-login-submit-spinner" style="display:none"></span>
+            </button>
+            <div class="jc-login-alt">
+                <span>还想用短信验证码？</span>
+                <a href="/" target="_blank" rel="noopener">去 chat 页登录</a>
+            </div>
+        </form>
+    </div>
+</div>
+</body>
+</html>

@@ -1,6 +1,6 @@
 from typing import Optional
 
-from fastapi import HTTPException, status, Depends
+from fastapi import HTTPException, status, Depends, Request
 from jose import JWTError, jwt
 from datetime import datetime, timedelta, timezone
 from config import SECRET_KEY, ALGORITHM, ACCESS_TOKEN_EXPIRE_MINUTES
@@ -12,6 +12,21 @@ from fastapi.security import OAuth2PasswordBearer
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="login")
 oauth2_scheme_optional = OAuth2PasswordBearer(tokenUrl="login", auto_error=False)
 
+TOKEN_COOKIE_KEY = "jingent_token"
+
+
+def _decode_token_or_none(token: Optional[str]) -> Optional[int]:
+    if not token:
+        return None
+    try:
+        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        user_id = payload.get("user_id")
+        if user_id is None:
+            return None
+        return int(user_id)
+    except (JWTError, ValueError, TypeError):
+        return None
+
 
 def create_access_token(data: dict):
     to_encode = data.copy()
@@ -21,14 +36,13 @@ def create_access_token(data: dict):
 
 
 def decode_user_id(token: str) -> int:
-    payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
-    user_id = payload.get("user_id")
-    if user_id is None:
+    uid = _decode_token_or_none(token)
+    if uid is None:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="无效的 token",
         )
-    return int(user_id)
+    return uid
 
 
 def verify_token(token: str = Depends(oauth2_scheme)) -> int:
@@ -41,13 +55,21 @@ def verify_token(token: str = Depends(oauth2_scheme)) -> int:
         )
 
 
-def get_optional_user_id(token: Optional[str] = Depends(oauth2_scheme_optional)) -> Optional[int]:
-    if not token:
-        return None
-    try:
-        return decode_user_id(token)
-    except (JWTError, HTTPException):
-        return None
+def get_optional_user_id(
+    request: Request,
+    token: Optional[str] = Depends(oauth2_scheme_optional),
+) -> Optional[int]:
+    """优先用 Authorization header，兜底读 HTTP-only cookie (jingent_token / auth_token)。"""
+    uid = _decode_token_or_none(token)
+    if uid is not None:
+        return uid
+    # Cookie 兜底：跨页面（chat → jinclaw）登录同步的关键
+    for key in (TOKEN_COOKIE_KEY, "auth_token", "jingent_session"):
+        ck = request.cookies.get(key)
+        uid = _decode_token_or_none(ck)
+        if uid is not None:
+            return uid
+    return None
 
 
 # ===================== 后台管理员 token =====================

@@ -14,11 +14,11 @@ const LANG = {
 
         // 首页
         home_hero_title: '高性能 · AI 工作台',
-        home_hero_subtitle: '一站式 AI 对话、工作流编排、岗位匹配',
+        home_hero_subtitle: '一站式 AI 对话 · AI Agent · 岗位匹配',
         home_card_1_title: 'AI 对话',
         home_card_1_desc: '智能聊天 · 多模型支持 · 代码增强',
-        home_card_2_title: '无代码工作流',
-        home_card_2_desc: '可视化编排 · 自动化一切',
+        home_card_2_title: 'Jinclaw 编程助手',
+        home_card_2_desc: 'AI 编程代理 · 读写文件 · 命令执行',
         home_card_3_title: '岗位推荐',
         home_card_3_desc: 'AI 智能匹配 · 精准职业推荐',
         home_card_4_title: '技能市场',
@@ -342,11 +342,11 @@ const LANG = {
 
         // Home page
         home_hero_title: 'High-Performance · AI Workbench',
-        home_hero_subtitle: 'All-in-one AI Chat, Workflow Orchestration, Job Matching',
+        home_hero_subtitle: 'All-in-one AI Chat · AI Agent · Job Matching',
         home_card_1_title: 'AI Chat',
         home_card_1_desc: 'Smart conversation · Multi-model · Code enhanced',
-        home_card_2_title: 'No-Code Workflow',
-        home_card_2_desc: 'Visual builder · Automate everything',
+        home_card_2_title: 'Jinclaw Coding Agent',
+        home_card_2_desc: 'AI Agent · File I/O · Shell · Git',
         home_card_3_title: 'Job Recommendations',
         home_card_3_desc: 'AI-powered matching · Precision career advice',
         home_card_4_title: 'Skill Market',

@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Jingent AI</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    background: #0f172a;
+    color: #e2e8f0;
+    min-height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .container { text-align: center; }
+  .spinner {
+    width: 40px;
+    height: 40px;
+    border: 3px solid #334155;
+    border-top-color: #3b82f6;
+    border-radius: 50%;
+    margin: 0 auto 20px;
+    animation: spin 1s linear infinite;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  h1 { font-size: 20px; margin-bottom: 8px; }
+  p { color: #94a3b8; font-size: 14px; }
+</style>
+</head>
+<body>
+<div class="container">
+  <div class="spinner"></div>
+  <h1 id="status">正在启动服务...</h1>
+  <p id="subStatus">请稍候，首次启动可能需要 10-30 秒</p>
+</div>
+<script>
+  document.addEventListener('contextmenu', function(e) { e.preventDefault(); });
+  var attempts = 0;
+  var maxAttempts = 60;
+
+  async function checkBackend() {
+    attempts++;
+    try {
+      var resp = await fetch('http://localhost:8000/health', { cache: 'no-store' });
+      if (resp.ok) {
+        document.getElementById('status').textContent = '服务已就绪，正在跳转...';
+        window.location.href = 'http://localhost:8000/jinclaw?is_desktop=1';
+        return;
+      }
+    } catch (e) {}
+
+    if (attempts >= maxAttempts) {
+      document.getElementById('status').textContent = '启动超时';
+      document.getElementById('subStatus').innerHTML = '请手动刷新页面，或检查端口 8000 是否被占用';
+      return;
+    }
+
+    var dots = '.'.repeat(attempts % 4);
+    document.getElementById('status').textContent = '正在启动服务' + dots;
+    setTimeout(checkBackend, 1000);
+  }
+
+  checkBackend();
+</script>
+</body>
+</html>
