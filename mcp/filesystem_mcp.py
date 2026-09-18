@@ -21,8 +21,31 @@ def register_filesystem_tools(manager):
     manager.register_tool(
         name="mcp_file_write",
         func=file_write,
-        description="创建或写入本地文件。如果文件已存在会被覆盖。",
+        description=(
+            "创建新文件，或整体重写一个文件。"
+            "⚠️ 只在新建文件、或确实要替换整个文件内容时用。"
+            "修改已有文件的局部内容，一律优先用 mcp_file_edit —— 整体重写大文件既慢又容易改坏无关代码。"
+        ),
         parameters={"path": "文件路径", "content": "要写入的内容", "encoding": "编码格式，默认 utf-8"},
+    )
+
+    manager.register_tool(
+        name="mcp_file_edit",
+        func=file_edit,
+        description=(
+            "精确替换文件里的一段文本（局部修改已有文件的首选方式）。"
+            "old_string 必须在文件中唯一匹配：如果匹配到 0 处或多处都会报错，"
+            "此时请带上更多上下文（前后多几行）让它唯一，再重试。"
+            "要替换多处相同文本时，显式传 expected_count 说明预期处数。"
+            "返回统一 diff，能直接看出改了什么。"
+        ),
+        parameters={
+            "path": "文件路径",
+            "old_string": "要被替换的原文（必须唯一匹配，需带足够上下文）",
+            "new_string": "替换后的新文本（传空字符串表示删除这段）",
+            "expected_count": "预期匹配处数，默认 1；要批量替换多处时显式指定",
+            "encoding": "编码格式，默认 utf-8",
+        },
     )
 
     manager.register_tool(
@@ -87,6 +110,110 @@ def file_write(path: str, content: str, encoding: str = "utf-8") -> str:
         return f"成功：文件已写入 {file_path}（{len(content)} 字符）"
     except Exception as e:
         return f"写入文件失败: {str(e)}"
+
+
+# 超过这个大小就不算 diff（difflib 在大文件上很慢）
+MAX_DIFF_BYTES = 1024 * 1024
+
+
+def make_unified_diff(old: str, new: str, path: str) -> str:
+    """生成统一 diff 文本。内容过大时退化为只报告行数变化。"""
+    import difflib
+
+    if len(old) > MAX_DIFF_BYTES or len(new) > MAX_DIFF_BYTES:
+        delta = len(new.splitlines()) - len(old.splitlines())
+        return f"(文件过大，跳过 diff 计算；行数变化 {delta:+d})"
+
+    diff = difflib.unified_diff(
+        old.splitlines(keepends=True),
+        new.splitlines(keepends=True),
+        fromfile=f"a/{path}",
+        tofile=f"b/{path}",
+        n=3,
+    )
+    return "".join(diff)
+
+
+def file_edit(
+    path: str,
+    old_string: str,
+    new_string: str = "",
+    expected_count: int = 1,
+    encoding: str = "utf-8",
+) -> str:
+    """
+    精确替换文件中的一段文本。
+
+    要求 old_string 唯一匹配（或匹配数等于 expected_count），
+    否则报错并说明实际匹配了多少处 —— 让模型知道要补上下文而不是盲目重试。
+    """
+    try:
+        file_path = Path(path).expanduser().resolve()
+
+        if not file_path.exists():
+            return f"错误：文件不存在 - {path}\n如果是要新建文件，请用 mcp_file_write。"
+        if not file_path.is_file():
+            return f"错误：路径不是文件 - {path}"
+
+        safe_check = _check_safe_path(file_path)
+        if safe_check:
+            return safe_check
+
+        if not old_string:
+            return "错误：old_string 不能为空。要整体重写文件请用 mcp_file_write。"
+
+        # 读文件（编码回退和 file_read 保持一致）
+        content = None
+        used_encoding = encoding
+        for enc in [encoding, "utf-8", "utf-8-sig", "gbk", "gb2312"]:
+            try:
+                content = file_path.read_text(encoding=enc)
+                used_encoding = enc
+                break
+            except UnicodeDecodeError:
+                continue
+        if content is None:
+            return f"错误：无法以支持的编码读取文件 {path}"
+
+        actual = content.count(old_string)
+
+        if actual == 0:
+            preview = old_string[:120].replace("\n", "\\n")
+            return (
+                f"错误：在 {path} 中找不到 old_string（匹配 0 处）。\n"
+                f"要找的内容开头：{preview}\n"
+                "常见原因：缩进/空格不一致、内容与文件实际不符。"
+                "建议先用 mcp_file_read 确认原文，再照抄过来。"
+            )
+
+        try:
+            want = int(expected_count)
+        except (TypeError, ValueError):
+            want = 1
+
+        if actual != want:
+            return (
+                f"错误：old_string 在 {path} 中匹配了 {actual} 处，但预期 {want} 处。\n"
+                f"请在 old_string 里带上更多上下文（前后多几行）让它唯一；"
+                f"如果确实要替换全部 {actual} 处，请传 expected_count={actual}。"
+            )
+
+        new_content = content.replace(old_string, new_string)
+
+        if new_content == content:
+            return f"提示：替换后内容无变化（old_string 与 new_string 相同），未写入 {path}。"
+
+        file_path.write_text(new_content, encoding=used_encoding)
+
+        diff = make_unified_diff(content, new_content, file_path.name)
+        added = sum(1 for l in diff.splitlines() if l.startswith("+") and not l.startswith("+++"))
+        removed = sum(1 for l in diff.splitlines() if l.startswith("-") and not l.startswith("---"))
+
+        return (
+            f"成功：已修改 {file_path}（替换 {actual} 处，+{added} -{removed} 行）\n\n{diff}"
+        )
+    except Exception as e:
+        return f"编辑文件失败: {str(e)}"
 
 
 def file_list(path: str = ".", recursive: bool = False) -> str:

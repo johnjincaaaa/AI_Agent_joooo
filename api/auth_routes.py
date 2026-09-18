@@ -348,3 +348,79 @@ def register(
             "user_id": new_user.id,
             "username": new_user.nickname or new_user.username,
         }, token)
+
+
+# ==================================================================
+# LLM 设置（桌面端引导填写 API Key）
+# ==================================================================
+
+class LLMSettingsForm(BaseModel):
+    llm_api_key: str = ""
+    llm_base_url: str = ""
+    llm_model: str = ""
+
+
+def _read_env_dict() -> dict:
+    """读取 data_dir/.env 为 dict（保留注释行靠后处理）。"""
+    from paths import env_file
+    p = env_file()
+    if not p.exists():
+        return {}
+    d = {}
+    for line in p.read_text(encoding="utf-8").splitlines():
+        line = line.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        k, _, v = line.partition("=")
+        d[k.strip()] = v.strip()
+    return d
+
+
+def _write_env_updates(updates: dict):
+    """把 key=value 写回 data_dir/.env，保留已有行，仅更新/追加。"""
+    from paths import env_file
+    p = env_file()
+    lines = p.read_text(encoding="utf-8").splitlines() if p.exists() else []
+    out = []
+    seen = set()
+    for line in lines:
+        s = line.strip()
+        if s and not s.startswith("#") and "=" in s:
+            k = s.split("=", 1)[0].strip()
+            if k in updates:
+                out.append(f"{k}={updates[k]}")
+                seen.add(k)
+                continue
+        out.append(line)
+    for k, v in updates.items():
+        if k not in seen:
+            out.append(f"{k}={v}")
+    p.write_text("\n".join(out) + "\n", encoding="utf-8")
+
+
+@router.get('/api/settings/llm', summary='获取当前 LLM 配置（key 脱敏）')
+def get_llm_settings():
+    from config import LLM_API_KEY, LLM_BASE_URL, LLM_MODEL
+    masked = LLM_API_KEY[:4] + "****" + LLM_API_KEY[-4:] if len(LLM_API_KEY) > 8 else ("已配置" if LLM_API_KEY else "")
+    return {
+        "code": 200,
+        "llm_api_key_masked": masked,
+        "llm_base_url": LLM_BASE_URL,
+        "llm_model": LLM_MODEL,
+        "configured": bool(LLM_API_KEY),
+    }
+
+
+@router.post('/api/settings/llm', summary='保存 LLM 配置到本地 .env')
+def set_llm_settings(form: LLMSettingsForm):
+    updates = {}
+    if form.llm_api_key.strip():
+        updates["LLM_API_KEY"] = form.llm_api_key.strip()
+    if form.llm_base_url.strip():
+        updates["LLM_BASE_URL"] = form.llm_base_url.strip()
+    if form.llm_model.strip():
+        updates["LLM_MODEL"] = form.llm_model.strip()
+    if not updates:
+        return {"code": 400, "msg": "没有需要保存的配置"}
+    _write_env_updates(updates)
+    return {"code": 200, "msg": "已保存，重启后生效（或刷新页面重新加载配置）"}

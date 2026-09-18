@@ -6,8 +6,15 @@ from pathlib import Path
 from typing import Optional
 import os
 
+from paths import resource_path
+
 
 def _find_project_root() -> Path:
+    # 打包后从 _MEIPASS 资源目录读 AGENTS.md
+    packaged = resource_path("AGENTS.md")
+    if packaged.exists():
+        return packaged.parent
+    # 开发模式：从 cwd 向上找
     cwd = Path.cwd()
     for parent in [cwd] + list(cwd.parents):
         if (parent / "AGENTS.md").exists():

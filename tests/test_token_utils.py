@@ -54,16 +54,32 @@ class TestVerifyToken:
         assert detail.get("code") == 401
 
 
+class _FakeRequest:
+    """最小 Request 替身：get_optional_user_id 只用到 .cookies。"""
+    def __init__(self, cookies: dict | None = None):
+        self.cookies = cookies or {}
+
+
 class TestOptionalUserId:
     def test_none_when_missing(self):
-        assert token_utils.get_optional_user_id(None) is None
+        assert token_utils.get_optional_user_id(_FakeRequest(), None) is None
 
     def test_returns_id_when_valid(self):
         token = token_utils.create_access_token({"user_id": 99})
-        assert token_utils.get_optional_user_id(token) == 99
+        assert token_utils.get_optional_user_id(_FakeRequest(), token) == 99
 
     def test_invalid_token_gracefully_returns_none(self):
-        assert token_utils.get_optional_user_id("garbage-token") is None
+        assert token_utils.get_optional_user_id(_FakeRequest(), "garbage-token") is None
+
+    def test_falls_back_to_cookie(self):
+        """Header 无 token 时，应从 cookie 读出登录态（chat → jinclaw 跨页同步的关键）。"""
+        token = token_utils.create_access_token({"user_id": 123})
+        req = _FakeRequest({token_utils.TOKEN_COOKIE_KEY: token})
+        assert token_utils.get_optional_user_id(req, None) == 123
+
+    def test_ignores_bad_cookie(self):
+        req = _FakeRequest({token_utils.TOKEN_COOKIE_KEY: "not-a-jwt"})
+        assert token_utils.get_optional_user_id(req, None) is None
 
 
 class TestAdminToken:

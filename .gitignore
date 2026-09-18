@@ -70,3 +70,4 @@ _reference/
 !guizang-ppt-skill.zip  # 保留技能包模板
 .trae/
 .jingent/
+/android-app/

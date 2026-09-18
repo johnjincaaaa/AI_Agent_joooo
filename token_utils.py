@@ -46,13 +46,14 @@ def decode_user_id(token: str) -> int:
 
 
 def verify_token(token: str = Depends(oauth2_scheme)) -> int:
-    try:
-        return decode_user_id(token)
-    except JWTError:
+    """校验用户 token，失败统一返回 dict 形式的 detail（前端依赖 detail.code）。"""
+    uid = _decode_token_or_none(token)
+    if uid is None:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail={"code": 401, "msg": "token 验证失败"},
         )
+    return uid
 
 
 def get_optional_user_id(

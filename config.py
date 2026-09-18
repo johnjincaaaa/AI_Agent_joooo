@@ -12,7 +12,10 @@ from typing import List
 
 from dotenv import load_dotenv
 
-load_dotenv()
+from paths import ensure_env_file
+
+# 运行时 .env 放 %APPDATA%/Jingent/.env（打包后仍可写），首次运行自动从 .env.example 生成
+load_dotenv(ensure_env_file())
 
 
 class ConfigError(RuntimeError):
@@ -126,9 +129,11 @@ SCENE_PRESETS = {
 # ==================================================================
 TOOL_LIST: list = []
 
+from paths import data_dir
+
 SQLALCHEMY_DATABASE_URL = os.getenv(
     "SQLALCHEMY_DATABASE_URL",
-    "sqlite:///./app.db",
+    f"sqlite:///{data_dir() / 'app.db'}",
 )
 
 
@@ -217,8 +222,6 @@ def validate_config(strict: bool = True) -> List[ValidationWarning]:
 # ==================================================================
 # File upload (chat attachments)
 # ==================================================================
-from pathlib import Path
-
 ALLOWED_IMAGE_TYPES = {"image/jpeg", "image/png", "image/gif", "image/webp", "image/bmp"}
 ALLOWED_DOCUMENT_TYPES = {
     "application/pdf",
@@ -232,4 +235,4 @@ ALLOWED_FILE_EXTENSIONS = {
 }
 MAX_IMAGE_SIZE = 10 * 1024 * 1024   # 10MB
 MAX_DOCUMENT_SIZE = 20 * 1024 * 1024  # 20MB
-UPLOAD_DIR = Path("uploads")
+UPLOAD_DIR = data_dir() / "uploads"

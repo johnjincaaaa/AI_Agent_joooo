@@ -1,0 +1,39 @@
+[Unit]
+Description=Jingent AI backend
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=jingent
+Group=jingent
+WorkingDirectory=/opt/jingent
+
+# 生产环境配置从这里读（不进 git）。至少要设置：
+#   SECRET_KEY=<高强度随机串>
+#   LLM_API_KEY=<你的 key>
+#   RUNTIME_ENV=prod
+#   CORS_ORIGINS=https://your-domain
+#   SQLALCHEMY_DATABASE_URL=sqlite:////var/lib/jingent/app.db
+EnvironmentFile=/etc/jingent/jingent.env
+
+ExecStart=/opt/jingent/.venv/bin/python -m uvicorn main:app --host 127.0.0.1 --port 8000
+Restart=on-failure
+RestartSec=5
+
+# 崩溃后自动拉起，但连续失败就停下别刷日志
+StartLimitBurst=5
+StartLimitIntervalSec=60
+
+# 基础加固：服务只能写自己的数据目录
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/lib/jingent /var/log/jingent
+
+StandardOutput=append:/var/log/jingent/app.log
+StandardError=append:/var/log/jingent/error.log
+
+[Install]
+WantedBy=multi-user.target

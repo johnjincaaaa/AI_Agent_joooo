@@ -68,11 +68,13 @@ app = FastAPI(
     description="Jingent — AI 聊天 + 代码写作助手",
     version="1.0",
 )
-app.mount("/static", StaticFiles(directory="static"), name="static")
+from paths import resource_path, data_dir
+app.mount("/static", StaticFiles(directory=str(resource_path("static"))), name="static")
+UPLOAD_DIR = data_dir() / "uploads"
 UPLOAD_DIR.mkdir(exist_ok=True)
 app.mount("/uploads", StaticFiles(directory=str(UPLOAD_DIR)), name="uploads")
 from fastapi.templating import Jinja2Templates
-templates = Jinja2Templates(directory="templates")
+templates = Jinja2Templates(directory=str(resource_path("templates")))
 
 # 静态资源版本号
 import time as _time
@@ -127,4 +129,5 @@ logger.info("[Boot] Auth routes loaded (api/auth_routes.py)")
 
 
 if __name__ == "__main__":
-    uvicorn.run("main:app", host="127.0.0.1", port=8000, workers=1)
+    # 直接传 app 对象（而非字符串 "main:app"），PyInstaller 打包后也能正常启动
+    uvicorn.run(app, host="127.0.0.1", port=8000, workers=1)

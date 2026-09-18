@@ -49,6 +49,9 @@ class JingentStorage:
 
     def _init_db(self):
         conn = sqlite3.connect(str(self.db_path))
+        # 迁移期间必须关外键：下面重建 projects 表时会 RENAME，
+        # 新版 SQLite 会自动改写 tasks 的外键指向重命名后的表，DROP 后外键就悬空了。
+        conn.execute("PRAGMA foreign_keys = OFF")
         # ── v1 原始表（无 user_id）：用 CREATE … IF NOT EXISTS 保证不报错 ──
         conn.execute("""
             CREATE TABLE IF NOT EXISTS projects (
@@ -122,11 +125,13 @@ class JingentStorage:
                     has_ws_only_uniq = True
                     break
             if has_ws_only_uniq:
-                # SQLite 无法 DROP UNIQUE，只能重建表。使用保守的 RENAME + 回填方案
+                # SQLite 无法 DROP UNIQUE，只能重建表。
+                # 关键：legacy_alter_table=ON 让 RENAME 不去改写其它表的外键引用，
+                # 否则 tasks 的 FK 会被指向 projects_old_XXXX，DROP 后彻底悬空。
                 import random as _r
                 suffix = _r.randint(1000, 9999)
+                conn.execute("PRAGMA legacy_alter_table = ON")
                 conn.execute(f"ALTER TABLE projects RENAME TO projects_old_{suffix}")
-                pk_line = "id TEXT PRIMARY KEY"
                 col_line = ", ".join([
                     "id TEXT PRIMARY KEY",
                     "name TEXT NOT NULL",
@@ -141,6 +146,7 @@ class JingentStorage:
                     f"SELECT {','.join(cols)} FROM projects_old_{suffix}"
                 )
                 conn.execute(f"DROP TABLE projects_old_{suffix}")
+                conn.execute("PRAGMA legacy_alter_table = OFF")
             conn.execute(
                 "CREATE UNIQUE INDEX IF NOT EXISTS idx_projects_ws_uid "
                 "ON projects(workspace_path, COALESCE(user_id, -1))")

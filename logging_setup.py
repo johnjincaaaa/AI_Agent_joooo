@@ -11,8 +11,10 @@ import sys
 from pathlib import Path
 from datetime import datetime
 
+from paths import data_dir
 
-DEFAULT_LOG_DIR = Path("logs")
+
+DEFAULT_LOG_DIR = data_dir() / "logs"
 
 
 def setup_logging(

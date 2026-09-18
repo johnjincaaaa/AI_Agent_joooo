@@ -1,7 +1,6 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
   "productName": "Jingent AI",
-  "version": "0.1.0",
   "identifier": "com.jingent.ai",
   "build": {
     "beforeDevCommand": "powershell -NoProfile -ExecutionPolicy Bypass -Command \"Set-Location (Join-Path $PWD.Path '..') -ErrorAction Stop; if(-not (Test-Path logs)){ New-Item -ItemType Directory logs -Force | Out-Null }; try { $c=New-Object Net.Sockets.TcpClient; $c.Connect('127.0.0.1',8000); $c.Close(); Write-Output 'TAURI_SRV_READY backend already up'; exit 0 } catch {}; if(-not (Get-Command python -ErrorAction SilentlyContinue)){ Write-Error 'python not in PATH'; exit 1 }; $out=(Resolve-Path logs).Path+'\\backend_stdout.log'; $err=(Resolve-Path logs).Path+'\\backend_stderr.log'; $p=Start-Process -FilePath python -ArgumentList 'main.py' -PassThru -WindowStyle Hidden -RedirectStandardOutput $out -RedirectStandardError $err; $ts=Get-Date; do { if($p.HasExited){ Write-Error ('backend exited code='+$p.ExitCode+' see logs\\backend_stdout.log'); exit 1 }; if((Get-Date)-$ts -gt [timespan]::FromSeconds(25)){ try { $p.Kill() } catch {}; Write-Error 'backend timed out'; exit 1 }; try { $c2=New-Object Net.Sockets.TcpClient; $c2.Connect('127.0.0.1',8000); $c2.Close(); Start-Sleep -Milliseconds 500; Write-Output 'TAURI_SRV_READY backend up pid='$p.Id; exit 0 } catch { Start-Sleep -Milliseconds 400 } } while($true)\"",
@@ -27,8 +26,10 @@
     }
   },
   "bundle": {
-    "active": false,
-    "targets": "all",
+    "active": true,
+    "targets": "nsis",
+    "externalBin": ["binaries/backend"],
+    "createUpdaterArtifacts": true,
     "icon": [
       "icons/32x32.png",
       "icons/128x128.png",
@@ -36,5 +37,13 @@
       "icons/icon.icns",
       "icons/icon.ico"
     ]
+  },
+  "plugins": {
+    "updater": {
+      "endpoints": [
+        "https://github.com/johnjincaaaa/AI_Agent_joooo/releases/latest/download/latest.json"
+      ],
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDU3NjMyQTE1MUE0N0UzOQpSV1E1ZnFSUm9USjJCYmx3UmlHZjg3OGFLMWl5RE1jd0ZOaVFra2dDN3o3aGZCamlJekZjWVpLSgo="
+    }
   }
 }
