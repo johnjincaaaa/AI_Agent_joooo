@@ -1,6 +1,6 @@
 # Jingent AI
 
-AI 聊天 + 代码写作助手（FastAPI 后端 + Jinclaw Coding Agent + Tauri 桌面壳）。
+AI 聊天 + 代码写作助手（FastAPI 后端 + Jinclaw Coding Agent）。
 
 ## 项目简介
 
@@ -8,7 +8,6 @@ AI 聊天 + 代码写作助手（FastAPI 后端 + Jinclaw Coding Agent + Tauri �
 - **Jinclaw Coding Agent**：代码探索 → 规划 → 执行 → 验证的编码代理，具备文件读写、Shell、Git、浏览器、数据库等本地 MCP 工具。
 - **推广拉新**：邀请制奖励、签到、提现、后台管理。
 - **求职**：简历生成、岗位匹配、模拟面试。
-- **桌面端**：Tauri 2 封装，PyInstaller 打包后端为 sidecar。
 
 ## 目录结构
 
@@ -28,9 +27,7 @@ AI 聊天 + 代码写作助手（FastAPI 后端 + Jinclaw Coding Agent + Tauri �
 ├── tests/                # pytest 测试
 ├── deploy/               # systemd 服务 + 部署文档
 ├── docs/                 # 架构与配置文档
-├── start.py / start.bat  # 一键启动（开发）
-├── start_backend.bat/.ps1# Tauri dev 后端拉起
-└── backend.spec          # PyInstaller 打包配置
+└── start.py / start.bat  # 一键启动（开发）
 ```
 
 ## 快速开始
@@ -60,10 +57,6 @@ python start.py        # 或 python main.py
 pytest tests/
 ```
 
-### 打包桌面端
-
-见 [docs/development.md](docs/development.md) 和 `.github/workflows/release.yml`。
-
 ## 文档
 
 - [架构说明](docs/architecture.md)
@@ -72,4 +65,4 @@ pytest tests/
 
 ## 配置
 
-所有运行时配置项见 [docs/config.md](docs/config.md)。核心配置通过 `.env`（桌面端自动落到 `%APPDATA%/Jingent/.env`）。
+所有运行时配置项见 [docs/config.md](docs/config.md)。核心配置通过 `.env` 加载。

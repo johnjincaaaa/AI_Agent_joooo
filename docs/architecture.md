@@ -2,7 +2,7 @@
 
 ## 总览
 
-Jingent AI 是单体 FastAPI 应用，采用「薄入口 + 分层包」结构。桌面端通过 Tauri 2 把后端打包成 sidecar 运行。
+Jingent AI 是单体 FastAPI 应用，采用「薄入口 + 分层包」结构。
 
 ```
 请求 → main.py（装配）→ 路由层 app/api/ → 业务层 app/services/ → 数据层 app/core/db/
@@ -49,7 +49,7 @@ Jinclaw 的 projects/tasks/diffs 三张表带 `user_id` 列，存储层（`app/j
 
 `app/jinclaw/tool_registry.py` 聚合两类工具：
 
-1. **本地 MCP**（`app/mcp/`，`desktop_only=True`）：`mcp_shell_exec`、`mcp_file_read/write/edit`、`mcp_git_*`、`mcp_browser_*`、`mcp_db_*`。
+1. **本地 MCP**（`app/mcp/`）：`mcp_shell_exec`、`mcp_file_read/write/edit`、`mcp_git_*`、`mcp_browser_*`、`mcp_db_*`。
 2. **云端工具**（`app/tools/`）：`web_search`、`code_exec`、`image_parsing`、`document_parsing`、`http_request`。
 
 `AgentLoop`（`agent_loop.py`）对代码类任务执行「探索 → 规划 → 执行 → 验证」四步流程，工具调用上限 30 轮。
@@ -83,4 +83,4 @@ Jinclaw 的 projects/tasks/diffs 三张表带 `user_id` 列，存储层（`app/j
 - **CORS**：dev 全开，prod 读 `CORS_ORIGINS`。
 - **密码**：bcrypt 哈希（`app/core/password_utils.py`）。
 
-> 注意：`/ai/jinclaw/*` 的 workspace 文件操作和 shell 执行端点设计上服务桌面端场景，部署到公网前需确认鉴权与路径沙箱策略（见部署文档）。
+> 注意：`/ai/jinclaw/*` 的 workspace 文件操作和 shell 执行端点操作的是服务器文件系统，部署到公网前需确认鉴权与路径沙箱策略（见部署文档）。

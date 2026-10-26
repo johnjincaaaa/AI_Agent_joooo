@@ -125,7 +125,6 @@ function _authHeaders() {
 }
 
 var S = {
-    isDesktop: false,
     currentProjectId: null,
     currentTaskId: null,
     chatHistory: [],
@@ -144,12 +143,7 @@ var S = {
 
 // ── Init ───────────────────────────────────────────────────
 function init() {
-    var params = new URLSearchParams(location.search);
-    S.isDesktop = params.get('is_desktop') === '1';
-    if (!S.isDesktop) {
-        document.getElementById('lockScreen').style.display = '';
-        return;
-    }
+    // 网页端直接进入工作台（桌面端已移除）
     document.getElementById('lockScreen').style.display = 'none';
     document.getElementById('appShell').style.display = '';
 
@@ -436,10 +430,6 @@ function bindEvents() {
             e.target.style.display = 'none';
             document.querySelector('.jc-mm-body').classList.remove('show-form');
         }
-    });
-
-    document.getElementById('downloadBtn').addEventListener('click', function(e) {
-        e.preventDefault(); alert('桌面端下载链接（请配置 APP_DOWNLOAD_URL）');
     });
 
     // ── Project/Task list delegation (bound once, handles all dynamic content) ──

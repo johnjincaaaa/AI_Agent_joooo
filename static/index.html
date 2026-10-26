@@ -47,7 +47,7 @@
       var resp = await fetch('http://localhost:8000/health', { cache: 'no-store' });
       if (resp.ok) {
         document.getElementById('status').textContent = '服务已就绪，正在跳转...';
-        window.location.href = 'http://localhost:8000/jinclaw?is_desktop=1';
+        window.location.href = 'http://localhost:8000/jinclaw';
         return;
       }
     } catch (e) {}

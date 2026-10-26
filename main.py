@@ -12,7 +12,6 @@ from fastapi.staticfiles import StaticFiles
 import logging
 import os
 import sys
-from pathlib import Path
 
 # ── 1. 日志：最先初始化，后续所有 logger 都能用上 ──
 from app.core.logging_setup import setup_logging
@@ -22,16 +21,16 @@ _log_dir = setup_logging()
 import app.config as config
 from app.config import ConfigError, validate_config
 
-# 桌面开发模式：SECRET_KEY 未配也能跑（只打 WARN）
-_in_desktop_env = Path("src-tauri/Cargo.toml").exists()
+# 开发模式（RUNTIME_ENV != prod）：SECRET_KEY 未配也能跑（只打 WARN）
+_runtime_env = os.getenv("RUNTIME_ENV", "dev").lower()
 try:
-    validate_config(strict=not _in_desktop_env)
+    validate_config(strict=(_runtime_env == "prod"))
 except ConfigError as e:
     logging.getLogger(__name__).critical(str(e))
     sys.exit(1)
 
 logger = logging.getLogger(__name__)
-if _in_desktop_env:
+if _runtime_env != "prod":
     for w in validate_config(strict=False):
         logger.warning("[config][%s] %s: %s", w.level, w.field, w.message)
 
@@ -129,5 +128,5 @@ logger.info("[Boot] Auth routes loaded (api/auth_routes.py)")
 
 
 if __name__ == "__main__":
-    # 直接传 app 对象（而非字符串 "main:app"），PyInstaller 打包后也能正常启动
+    # 直接传 app 对象（而非字符串 "main:app"），确保入口稳定
     uvicorn.run(app, host="127.0.0.1", port=8000, workers=1)

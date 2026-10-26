@@ -44,7 +44,6 @@ addopts = [
     "-v",
     "--strict-markers",
     "--tb=short",
-    "--ignore=src-tauri",
     "--ignore=.venv",
     "--ignore=venv",
 ]
