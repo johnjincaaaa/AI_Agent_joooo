@@ -315,6 +315,8 @@ LLM_API_KEY=ollama</pre>
         <div class="settings-tabs">
             <span class="settings-tab active" data-stab="profile">个人资料</span>
             <span class="settings-tab" data-stab="security">账号安全</span>
+            <span class="settings-tab" data-stab="llm">AI 配置</span>
+            <span class="settings-tab" data-stab="memory">我的记忆</span>
         </div>
 
         <!-- 个人资料 -->
@@ -367,6 +369,58 @@ LLM_API_KEY=ollama</pre>
                 </div>
             </div>
             <button class="submit-btn" id="savePasswordBtn">修改密码</button>
+        </div>
+
+        <!-- AI 配置（用户自定义大模型） -->
+        <div class="settings-pane" id="stab-llm">
+            <div class="input-item">
+                <label for="llmBaseUrl">API 地址（OpenAI 兼容）</label>
+                <input type="text" id="llmBaseUrl" placeholder="https://api.deepseek.com/v1" autocomplete="off">
+            </div>
+            <div class="input-item">
+                <label for="llmModel">模型名</label>
+                <input type="text" id="llmModel" placeholder="deepseek-chat" autocomplete="off">
+            </div>
+            <div class="input-item">
+                <label for="llmApiKey">API Key</label>
+                <div class="password-field">
+                    <input type="password" id="llmApiKey" placeholder="sk-..." autocomplete="off">
+                    <button type="button" class="pwd-toggle-btn" data-target="llmApiKey" aria-label="显示密码" title="显示密码">
+                        <svg class="icon-eye-open" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle></svg>
+                        <svg class="icon-eye-closed" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94"></path><line x1="1" y1="1" x2="23" y2="23"></line></svg>
+                    </button>
+                </div>
+            </div>
+            <div class="input-item">
+                <div class="llm-tip">配置仅保存在当前浏览器，AI 对话会使用它；留空的项自动使用服务器默认配置。</div>
+            </div>
+            <div class="llm-actions">
+                <button class="submit-btn" id="saveLLMConfigBtn">保存配置</button>
+                <button class="submit-btn secondary" id="testLLMConfigBtn">测试连接</button>
+            </div>
+            <div id="llmTestResult" class="llm-test-result"></div>
+        </div>
+
+        <!-- 我的记忆（个人陪伴助手） -->
+        <div class="settings-pane" id="stab-memory">
+            <div id="memoryLoginTip" style="display:none;">
+                <div class="llm-tip">登录后 AI 才能记住你，并随对话自动积累细节记忆。</div>
+            </div>
+            <div class="input-item">
+                <label for="globalMemoryInput">全局画像（AI 长期记住的核心信息）</label>
+                <div class="memory-add-row">
+                    <input type="text" id="globalMemoryInput" placeholder="例：我叫小舟，目前在深圳实习，喜欢打游戏" maxlength="500">
+                    <button class="submit-btn" id="addGlobalMemoryBtn">添加</button>
+                </div>
+            </div>
+            <div class="memory-section">
+                <div class="memory-section-title">全局画像</div>
+                <div id="globalMemoryList" class="memory-list"><div class="memory-empty">暂无，添加一条试试</div></div>
+            </div>
+            <div class="memory-section">
+                <div class="memory-section-title">细节记忆（对话后自动积累）</div>
+                <div id="detailMemoryList" class="memory-list"><div class="memory-empty">暂无细节记忆</div></div>
+            </div>
         </div>
     </div>
 </div>

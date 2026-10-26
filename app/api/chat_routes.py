@@ -3,6 +3,7 @@
 
 路径保持不变：无 prefix，直接 /, /chat, /ai/*
 """
+import asyncio
 import json
 import logging
 import uuid
@@ -23,7 +24,7 @@ from app.config import (
     MAX_IMAGE_SIZE, MAX_DOCUMENT_SIZE, UPLOAD_DIR, SYSTEM_PROMPT,
     MODEL, DASHSCOPE_URL, DASHSCOPE_API_KEY,
 )
-from app.core.db import get_db, ChatSession
+from app.core.db import get_db, ChatSession, Memory
 from app.core.token_utils import verify_token, get_optional_user_id
 from app.core.rate_limit import check_anonymous_rate_limit, get_anonymous_remaining
 import app.tools as tools
@@ -67,6 +68,7 @@ class ChatRequest(BaseModel):
     document_paths: List[str] = []
     lang: str = "zh"
     scene: Optional[str] = None
+    llm: Optional[dict] = None   # 用户前端自定义 LLM 配置 {base_url, model, api_key}，缺省回退 .env
 
 
 class ChatDbRequest(BaseModel):
@@ -167,6 +169,71 @@ def build_system_prompt(lang: str = "zh", scene: Optional[str] = None) -> str:
     if is_en:
         return "You are a helpful assistant. Always respond in English."
     return SYSTEM_PROMPT
+
+
+def resolve_llm_config(user_llm: Optional[dict]):
+    """用户前端自定义 LLM 配置（base_url/model/api_key），缺省回退 .env。"""
+    cfg = user_llm or {}
+    return (
+        (cfg.get("model") or "").strip() or MODEL,
+        (cfg.get("base_url") or "").strip() or DASHSCOPE_URL,
+        (cfg.get("api_key") or "").strip() or DASHSCOPE_API_KEY,
+    )
+
+
+def build_memory_prompt(user_id: Optional[int], db: Session) -> str:
+    """拼记忆块：全局画像 + 最近细节记忆；未登录用户无记忆。"""
+    if not user_id:
+        return ""
+    globals_ = (
+        db.query(Memory)
+        .filter(Memory.user_id == user_id, Memory.type == "global")
+        .order_by(Memory.id.asc())
+        .all()
+    )
+    details = (
+        db.query(Memory)
+        .filter(Memory.user_id == user_id, Memory.type == "detail")
+        .order_by(Memory.id.desc())
+        .limit(15)
+        .all()
+    )
+    if not globals_ and not details:
+        return ""
+    lines = ["【你记得的关于这位用户的记忆】"]
+    if globals_:
+        lines.append("· 全局画像：")
+        lines += [f"  - {m.content}" for m in globals_]
+    if details:
+        lines.append("· 细节记忆：")
+        lines += [f"  - {m.content}" for m in reversed(details)]  # 旧在前，新在后
+    lines.append("请在对话中自然体现你记得这些（主动关心、呼应细节），但不要生硬罗列；")
+    lines.append("如果新对话与旧记忆冲突，以用户当前表达为准。")
+    return "\n".join(lines)
+
+
+async def _background_extract_memories(
+        user_id: int, user_msg: str, ai_reply: str,
+        base_url: str, model: str, api_key: str,
+) -> None:
+    """对话结束后后台抽取记忆（独立 DB 连接，不阻塞 SSE 响应）。"""
+    try:
+        from app.api.memory_routes import extract_facts_sync, save_extracted_facts
+        from app.core.db import SessionLocal
+        facts = await asyncio.to_thread(
+            extract_facts_sync, user_msg, ai_reply, base_url, model, api_key
+        )
+        if not facts:
+            return
+        db = SessionLocal()
+        try:
+            added = save_extracted_facts(db, user_id, facts)
+            if added:
+                logger.info("[memory] 后台抽取新增 %d 条记忆 (user=%s)", added, user_id)
+        finally:
+            db.close()
+    except Exception as e:
+        logger.warning("[memory] 后台抽取异常: %s", e)
 
 
 def build_tool_list(open_online: bool, enabled_skills: Optional[List[str]] = None):
@@ -380,6 +447,7 @@ async def chat_stream(
         http_request: Request,
         temperature: float = 0.7,
         user_id: Optional[int] = Depends(get_optional_user_id),
+        db: Session = Depends(get_db),
 ):
     remaining = ensure_chat_access(http_request, user_id)
 
@@ -387,11 +455,12 @@ async def chat_stream(
     full_history.append(ChatMessage(role='user', message=chat_request.newMessage))
     ai_context = full_history[-50:]
 
+    model_name, base_url, api_key = resolve_llm_config(chat_request.llm)
     model = init_chat_model(
-        model=MODEL,
+        model=model_name,
         model_provider="openai",
-        base_url=DASHSCOPE_URL,
-        api_key=DASHSCOPE_API_KEY,
+        base_url=base_url,
+        api_key=api_key,
         temperature=temperature,
     )
     enabled_skills = resolve_enabled_skills(
@@ -415,6 +484,10 @@ async def chat_stream(
         final_system_prompt = base_system_prompt + "\n\n---\n\n".join(skill_prompts)
     else:
         final_system_prompt = base_system_prompt
+
+    memory_prompt = build_memory_prompt(user_id, db)
+    if memory_prompt:
+        final_system_prompt = final_system_prompt + "\n\n" + memory_prompt
 
     agent = create_agent(
         model=model,
@@ -446,6 +519,13 @@ async def chat_stream(
         yield f"data: [HISTORY] {json.dumps([m.model_dump() for m in final_history], ensure_ascii=False)}\n\n"
         yield "data: [DONE]\n\n"
 
+        # 对话结束后台抽取记忆（不阻塞 SSE）
+        if user_id and full_ai_reply:
+            asyncio.create_task(_background_extract_memories(
+                user_id, chat_request.newMessage, full_ai_reply,
+                base_url, model_name, api_key,
+            ))
+
     headers = {}
     if remaining is not None:
         headers["X-Anon-Remaining"] = str(remaining)
@@ -464,6 +544,7 @@ def ai_chat(
         http_request: Request,
         temperature: float = 0.7,
         user_id: Optional[int] = Depends(get_optional_user_id),
+        db: Session = Depends(get_db),
 ):
     ensure_chat_access(http_request, user_id)
 
@@ -471,11 +552,12 @@ def ai_chat(
     full_history.append(ChatMessage(role='user', message=chat_request.newMessage))
     ai_context = full_history[-50:]
 
+    model_name, base_url, api_key = resolve_llm_config(chat_request.llm)
     model = init_chat_model(
-        model=MODEL,
+        model=model_name,
         model_provider="openai",
-        base_url=DASHSCOPE_URL,
-        api_key=DASHSCOPE_API_KEY,
+        base_url=base_url,
+        api_key=api_key,
         temperature=temperature,
     )
     resolved_skills = resolve_enabled_skills(
@@ -503,6 +585,10 @@ def ai_chat(
     else:
         final_system_prompt = base_system_prompt
 
+    memory_prompt = build_memory_prompt(user_id, db)
+    if memory_prompt:
+        final_system_prompt = final_system_prompt + "\n\n" + memory_prompt
+
     agent = create_agent(
         model=model,
         system_prompt=final_system_prompt,
@@ -524,6 +610,13 @@ def ai_chat(
         ai_reply = result["messages"][-1].content
 
         final_history = full_history + [{"role": "ai", "message": ai_reply}]
+
+        # 对话结束后台抽取记忆（不阻塞响应）
+        if user_id and ai_reply:
+            asyncio.create_task(_background_extract_memories(
+                user_id, chat_request.newMessage, str(ai_reply),
+                base_url, model_name, api_key,
+            ))
 
         return {
             "code": 200,

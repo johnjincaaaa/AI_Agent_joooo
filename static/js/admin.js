@@ -17,8 +17,6 @@
         popup_intro_en:       {label: "分享弹窗介绍·英文", type: "textarea"},
         input_promo_zh:       {label: "输入框推广文案·中文", type: "textarea"},
         input_promo_en:       {label: "输入框推广文案·英文", type: "textarea"},
-        banner_promo_zh:      {label: "空状态横幅·中文", type: "textarea"},
-        banner_promo_en:      {label: "空状态横幅·英文", type: "textarea"},
     };
 
     function token() { return sessionStorage.getItem(TOKEN_KEY); }

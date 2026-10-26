@@ -171,6 +171,22 @@ class CheckInRecord(Base):
     )
 
 
+# ======================
+# 记忆表（个人陪伴助手：全局画像 + 细节事实）
+# ======================
+class Memory(Base):
+    __tablename__ = "memories"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), index=True, nullable=False)
+    type = Column(String(10), nullable=False, default="detail")   # global=全局画像 / detail=细节事实
+    category = Column(String(30), nullable=True)                  # 个人信息/喜好偏好/目标计划/情绪状态/重要事件/其他
+    content = Column(Text, nullable=False)                        # 记忆内容
+    source = Column(String(20), nullable=True)                    # manual=手动 / extract=对话抽取
+    created_at = Column(DateTime, default=datetime.now, index=True)
+    updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now)
+
+
 # DB 依赖：给接口【自动提供数据库连接】，用完【自动关闭】
 def get_db():
     db = SessionLocal()

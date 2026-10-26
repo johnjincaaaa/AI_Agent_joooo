@@ -361,7 +361,8 @@ async function sendMessage() {
                 image_paths: imagePaths,
                 document_paths: documentPaths,
                 lang: typeof getLang === 'function' ? getLang() : 'zh',
-                scene: currentScene
+                scene: currentScene,
+                llm: getLLMConfig()
             }),
             signal: signal
         });
@@ -1573,3 +1574,205 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 });
 
+
+
+// ================= 个人陪伴助手：LLM 配置 + 记忆（设置弹窗） =================
+const LLM_CONFIG_KEY = 'jingent_llm_config';
+
+// 读取用户自定义 LLM 配置（本浏览器）；无配置返回 null
+function getLLMConfig() {
+    try {
+        const raw = localStorage.getItem(LLM_CONFIG_KEY);
+        if (!raw) return null;
+        const cfg = JSON.parse(raw);
+        if (!cfg || typeof cfg !== 'object') return null;
+        const clean = {};
+        if (cfg.base_url) clean.base_url = String(cfg.base_url).trim();
+        if (cfg.model) clean.model = String(cfg.model).trim();
+        if (cfg.api_key) clean.api_key = String(cfg.api_key).trim();
+        return Object.keys(clean).length ? clean : null;
+    } catch (e) { return null; }
+}
+
+function saveLLMConfig(cfg) {
+    const clean = {};
+    if (cfg.base_url) clean.base_url = String(cfg.base_url).trim();
+    if (cfg.model) clean.model = String(cfg.model).trim();
+    if (cfg.api_key) clean.api_key = String(cfg.api_key).trim();
+    if (Object.keys(clean).length) {
+        localStorage.setItem(LLM_CONFIG_KEY, JSON.stringify(clean));
+    } else {
+        localStorage.removeItem(LLM_CONFIG_KEY);
+    }
+}
+
+// —— 设置弹窗打开时：回显 LLM 配置 + 加载记忆 ——
+function loadLLMSettingsIntoForm() {
+    const cfg = getLLMConfig();
+    const baseUrlEl = document.getElementById('llmBaseUrl');
+    const modelEl = document.getElementById('llmModel');
+    const keyEl = document.getElementById('llmApiKey');
+    if (!baseUrlEl || !modelEl || !keyEl) return;
+    baseUrlEl.value = cfg && cfg.base_url ? cfg.base_url : '';
+    modelEl.value = cfg && cfg.model ? cfg.model : '';
+    keyEl.value = cfg && cfg.api_key ? cfg.api_key : '';
+}
+
+async function loadMemoriesIntoForm() {
+    const listGlobal = document.getElementById('globalMemoryList');
+    const listDetail = document.getElementById('detailMemoryList');
+    const loginTip = document.getElementById('memoryLoginTip');
+    if (!listGlobal || !listDetail) return;
+    const token = localStorage.getItem('token');
+    if (!token) {
+        if (loginTip) loginTip.style.display = 'block';
+        listGlobal.innerHTML = '<div class="memory-empty">登录后可用</div>';
+        listDetail.innerHTML = '<div class="memory-empty">登录后可用</div>';
+        return;
+    }
+    if (loginTip) loginTip.style.display = 'none';
+    try {
+        const res = await fetch(`${config.API_BASE_URL}/ai/memories?limit=100`, {
+            headers: buildAuthHeaders()
+        });
+        const data = await res.json();
+        const rows = (data && data.data) || [];
+        const globals = rows.filter(m => m.type === 'global');
+        const details = rows.filter(m => m.type === 'detail');
+        listGlobal.innerHTML = globals.length
+            ? globals.map(m => memoryItemHTML(m)).join('')
+            : '<div class="memory-empty">暂无，添加一条试试</div>';
+        listDetail.innerHTML = details.length
+            ? details.map(m => memoryItemHTML(m)).join('')
+            : '<div class="memory-empty">暂无细节记忆</div>';
+    } catch (e) {
+        listGlobal.innerHTML = '<div class="memory-empty">加载失败</div>';
+        listDetail.innerHTML = '<div class="memory-empty">加载失败</div>';
+    }
+}
+
+function memoryItemHTML(m) {
+    const cat = m.category ? `<span class="memory-cat">${escapeHtml(m.category)}</span>` : '';
+    return `<div class="memory-item" data-id="${m.id}">
+        <span class="memory-content">${escapeHtml(m.content)}</span>
+        ${cat}
+        <button class="memory-del" title="删除" data-id="${m.id}">×</button>
+    </div>`;
+}
+
+function escapeHtml(s) {
+    return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({
+        '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+    })[c]);
+}
+
+// —— 事件绑定 ——
+document.addEventListener('click', async (e) => {
+    const delBtn = e.target.closest('.memory-del');
+    if (delBtn) {
+        const id = delBtn.dataset.id;
+        try {
+            await fetch(`${config.API_BASE_URL}/ai/memories/${id}`, {
+                method: 'DELETE',
+                headers: buildAuthHeaders()
+            });
+            loadMemoriesIntoForm();
+        } catch (err) { console.error(err); }
+        return;
+    }
+});
+
+document.addEventListener('click', () => {
+    if (document.getElementById('settingsModal') && document.getElementById('settingsModal').style.display === 'block') {
+        loadLLMSettingsIntoForm();
+    }
+});
+// 打开设置弹窗时初始化（settingsBtn 在 LoginRegister.js 已绑监听，这里再绑一次）
+const _settingsBtn = document.getElementById('settingsBtn');
+if (_settingsBtn) {
+    _settingsBtn.addEventListener('click', () => {
+        setTimeout(() => {
+            loadLLMSettingsIntoForm();
+            if (document.querySelector('.settings-tab[data-stab="memory"]')) {
+                loadMemoriesIntoForm();
+            }
+        }, 50);
+    });
+}
+
+// 保存 LLM 配置
+const saveLLMConfigBtn = document.getElementById('saveLLMConfigBtn');
+if (saveLLMConfigBtn) {
+    saveLLMConfigBtn.onclick = () => {
+        saveLLMConfig({
+            base_url: document.getElementById('llmBaseUrl').value,
+            model: document.getElementById('llmModel').value,
+            api_key: document.getElementById('llmApiKey').value
+        });
+        const box = document.getElementById('llmTestResult');
+        box.className = 'llm-test-result ok';
+        box.textContent = '已保存到本浏览器，新的对话将使用该配置。';
+    };
+}
+
+// 测试连接
+const testLLMConfigBtn = document.getElementById('testLLMConfigBtn');
+if (testLLMConfigBtn) {
+    testLLMConfigBtn.onclick = async () => {
+        const base_url = document.getElementById('llmBaseUrl').value.trim();
+        const model = document.getElementById('llmModel').value.trim();
+        const api_key = document.getElementById('llmApiKey').value.trim();
+        const box = document.getElementById('llmTestResult');
+        if (!api_key) {
+            box.className = 'llm-test-result err';
+            box.textContent = '请先填写 API Key';
+            return;
+        }
+        box.className = 'llm-test-result';
+        box.textContent = '测试中…';
+        try {
+            const res = await fetch(`${config.API_BASE_URL}/ai/llm/test`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ base_url, model, api_key })
+            });
+            const data = await res.json();
+            if (res.ok && data.code === 200) {
+                box.className = 'llm-test-result ok';
+                box.textContent = '连接成功：' + (data.reply || '');
+            } else {
+                box.className = 'llm-test-result err';
+                box.textContent = '连接失败：' + (data.detail || res.status);
+            }
+        } catch (err) {
+            box.className = 'llm-test-result err';
+            box.textContent = '连接失败：' + err.message;
+        }
+    };
+}
+
+// 添加全局记忆
+const addGlobalMemoryBtn = document.getElementById('addGlobalMemoryBtn');
+if (addGlobalMemoryBtn) {
+    addGlobalMemoryBtn.onclick = async () => {
+        const input = document.getElementById('globalMemoryInput');
+        const content = input.value.trim();
+        if (!content) return;
+        const token = localStorage.getItem('token');
+        if (!token) { alert('请先登录'); return; }
+        try {
+            const res = await fetch(`${config.API_BASE_URL}/ai/memories`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', ...buildAuthHeaders() },
+                body: JSON.stringify({ type: 'global', content, category: '其他', source: 'manual' })
+            });
+            const data = await res.json();
+            if (res.ok && data.code === 200) {
+                input.value = '';
+                loadMemoriesIntoForm();
+            } else {
+                alert(data.detail || '添加失败');
+            }
+        } catch (err) { console.error(err); }
+    };
+}

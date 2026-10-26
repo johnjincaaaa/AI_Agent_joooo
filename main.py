@@ -47,7 +47,7 @@ from app.tools.skills_registry import get_skill_catalog, resolve_tools
 from app.services.job_mock_data import RESUME_TEMPLATES, MOCK_JOBS, match_jobs
 
 # 路由模块
-from app.api import chat_routes, job_routes, admin_routes, auth_routes
+from app.api import chat_routes, job_routes, admin_routes, auth_routes, memory_routes
 
 # Middleware
 from app.core.middleware import add_request_middleware
@@ -101,6 +101,11 @@ def health_check():
 
 
 # ==================== 路由装配 ====================
+# 确保表结构存在（幂等：create_all 只建缺失表，memories 等新表在此创建）
+from app.core.db.seed import init_db
+init_db()
+logger.info("[Boot] DB schema ensured (init_db)")
+
 # chat_routes 先 bind + include（页面路由 + 技能/场景 API）
 chat_routes.bind(templates)
 app.include_router(chat_routes.router)
@@ -118,6 +123,10 @@ logger.info("[Boot] Admin/Promo routes loaded (api/admin_routes.py)")
 # 认证 / 用户
 app.include_router(auth_routes.router)
 logger.info("[Boot] Auth routes loaded (api/auth_routes.py)")
+
+# 记忆（个人陪伴助手：全局 + 细节）+ LLM 配置测试
+app.include_router(memory_routes.router)
+logger.info("[Boot] Memory routes loaded (api/memory_routes.py)")
 
 
 if __name__ == "__main__":

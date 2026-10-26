@@ -11,6 +11,6 @@ __all__ = [
     "engine", "SessionLocal", "Base", "get_db",
     "User", "ChatSession", "JobProfile",
     "ReferralEvent", "WithdrawRequest", "PromoConfig",
-    "PageVisit", "DownloadClick", "CheckInRecord",
+    "PageVisit", "DownloadClick", "CheckInRecord", "Memory",
     "PROMO_CONFIG_DEFAULTS", "init_db", "seed_promo_config",
 ]

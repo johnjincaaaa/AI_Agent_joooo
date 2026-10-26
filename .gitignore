@@ -24,6 +24,8 @@ env/
 .env
 .env.local
 .env.*.local
+.env.bak*
+.env.example.bak*
 
 # Database
 *.db

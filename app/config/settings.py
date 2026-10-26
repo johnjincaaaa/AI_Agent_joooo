@@ -15,10 +15,11 @@ from typing import List
 
 from dotenv import load_dotenv
 
-from app.core.paths import ensure_env_file, data_dir
+from app.core.paths import ensure_env_file, data_dir, resource_path
 
-# 运行时 .env 放 %APPDATA%/Jingent/.env（打包后仍可写），首次运行自动从 .env.example 生成
-load_dotenv(ensure_env_file())
+# 运行配置优先用项目根目录 .env（网页端/源码部署），缺失时回退 %APPDATA%/Jingent/.env
+_PROJECT_ENV = resource_path(".env")
+load_dotenv(_PROJECT_ENV if _PROJECT_ENV.exists() else ensure_env_file())
 
 
 class ConfigError(RuntimeError):
@@ -65,7 +66,7 @@ ADMIN_PASSWORD = os.getenv("ADMIN_PASSWORD", "")
 # ==================================================================
 SQLALCHEMY_DATABASE_URL = os.getenv(
     "SQLALCHEMY_DATABASE_URL",
-    f"sqlite:///{data_dir() / 'app.db'}",
+    f"sqlite:///{resource_path('app.db')}",
 )
 
 
