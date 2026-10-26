@@ -15,7 +15,7 @@ a = Analysis(
         ('.env.example', '.'),
     ],
     hiddenimports=[
-        'paths',
+        'app.core.paths',
         'uvicorn.logging',
         'uvicorn.loops.auto',
         'uvicorn.protocols.http.auto',

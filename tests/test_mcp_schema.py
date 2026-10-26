@@ -1,6 +1,6 @@
 """Tests for mcp._build_json_schema and MCPManager helper utilities."""
 import pytest
-from mcp import _build_json_schema, _infer_js_type
+from app.mcp import _build_json_schema, _infer_js_type
 
 
 def sample_func_str_only(a, b, c):
@@ -117,7 +117,7 @@ class TestBuildJsonSchema:
 
 class TestMCPManager:
     def test_register_and_list(self):
-        from mcp import MCPManager
+        from app.mcp import MCPManager
         mgr = MCPManager()
 
         def echo(text: str, repeat: int = 1):
@@ -135,13 +135,13 @@ class TestMCPManager:
         assert meta["parameters"]["properties"]["repeat"]["default"] == 1
 
     def test_call_tool_success(self):
-        from mcp import MCPManager
+        from app.mcp import MCPManager
         mgr = MCPManager()
         mgr.register_tool("add", lambda a, b: a + b, "add two ints", {"a": "op1", "b": "op2"})
         assert mgr.call_tool("add", a=2, b=3) == 5
 
     def test_call_unknown_raises(self):
-        from mcp import MCPManager
+        from app.mcp import MCPManager
         mgr = MCPManager()
         with pytest.raises(ValueError, match="未知的 MCP 工具"):
             mgr.call_tool("nope")

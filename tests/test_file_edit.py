@@ -1,7 +1,7 @@
 """mcp_file_edit 的单元测试 —— 唯一匹配约束是这个工具的核心契约。"""
 import pytest
 
-from mcp.filesystem_mcp import file_edit, make_unified_diff
+from app.mcp.filesystem_mcp import file_edit, make_unified_diff
 
 
 SAMPLE = """def add(a, b):

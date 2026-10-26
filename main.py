@@ -15,12 +15,12 @@ import sys
 from pathlib import Path
 
 # ── 1. 日志：最先初始化，后续所有 logger 都能用上 ──
-from logging_setup import setup_logging
+from app.core.logging_setup import setup_logging
 _log_dir = setup_logging()
 
 # ── 2. 配置加载 + 校验 ──
-import config
-from config import ConfigError, validate_config
+import app.config as config
+from app.config import ConfigError, validate_config
 
 # 桌面开发模式：SECRET_KEY 未配也能跑（只打 WARN）
 _in_desktop_env = Path("src-tauri/Cargo.toml").exists()
@@ -35,25 +35,25 @@ if _in_desktop_env:
     for w in validate_config(strict=False):
         logger.warning("[config][%s] %s: %s", w.level, w.field, w.message)
 
-from config import *
-from token_utils import (
+from app.config import *
+from app.core.token_utils import (
     create_access_token, verify_token, get_optional_user_id,
     create_admin_token, verify_admin_token,
 )
-from password_utils import hash_password, verify_password, needs_rehash
-from rate_limit import check_anonymous_rate_limit, get_anonymous_remaining
-from services import promo
-from sqlOrm import *
-import tools
-from tools.skills_registry import get_skill_catalog, resolve_tools
-from services.job_mock_data import RESUME_TEMPLATES, MOCK_JOBS, match_jobs
+from app.core.password_utils import hash_password, verify_password, needs_rehash
+from app.core.rate_limit import check_anonymous_rate_limit, get_anonymous_remaining
+from app.services import promo
+from app.core.db import *
+import app.tools as tools
+from app.tools.skills_registry import get_skill_catalog, resolve_tools
+from app.services.job_mock_data import RESUME_TEMPLATES, MOCK_JOBS, match_jobs
 
 # 路由模块
-from api import jinclaw_routes, chat_routes, job_routes, admin_routes, auth_routes
-from api.chat_routes import ensure_chat_access
+from app.api import jinclaw_routes, chat_routes, job_routes, admin_routes, auth_routes
+from app.api.chat_routes import ensure_chat_access
 
 # Middleware
-from middleware import add_request_middleware
+from app.core.middleware import add_request_middleware
 
 try:
     from langchain.chat_models import init_chat_model
@@ -68,7 +68,7 @@ app = FastAPI(
     description="Jingent — AI 聊天 + 代码写作助手",
     version="1.0",
 )
-from paths import resource_path, data_dir
+from app.core.paths import resource_path, data_dir
 app.mount("/static", StaticFiles(directory=str(resource_path("static"))), name="static")
 UPLOAD_DIR = data_dir() / "uploads"
 UPLOAD_DIR.mkdir(exist_ok=True)

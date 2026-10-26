@@ -1,0 +1,66 @@
+[project]
+name = "jingent-ai"
+version = "0.1.0"
+description = "Jingent AI — AI 聊天 + 代码写作助手（FastAPI + Jinclaw Agent）"
+requires-python = ">=3.10"
+dependencies = [
+    "fastapi",
+    "uvicorn[standard]",
+    "jinja2",
+    "python-multipart",
+    "sqlalchemy",
+    "python-jose[cryptography]",
+    "bcrypt",
+    "python-dotenv",
+    "pydantic",
+    "langchain",
+    "langchain-openai",
+    "dashscope",
+    "requests",
+    "beautifulsoup4",
+    "pillow",
+    "pypdf",
+    "python-docx",
+    # 仅在使用 MySQL 时需要，默认 SQLite 无需安装
+    # "pymysql",
+]
+
+# ── 可选：本地开发 / 测试依赖 ──
+[project.optional-dependencies]
+dev = [
+    "pytest",
+    "httpx",
+    "ruff",
+]
+
+# ── pytest 配置（原 pytest.ini）──
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]
+pythonpath = ["."]
+addopts = [
+    "-v",
+    "--strict-markers",
+    "--tb=short",
+    "--ignore=src-tauri",
+    "--ignore=.venv",
+    "--ignore=venv",
+]
+markers = [
+    "slow: tests that need network or take > 1s",
+    "integration: end-to-end / API integration tests",
+    "unit: pure unit tests (fast)",
+]
+
+# ── ruff 配置 ──
+[tool.ruff]
+line-length = 120
+target-version = "py310"
+
+[tool.ruff.lint]
+# 与 CI 一致：先放行 E501（行长）、B008（函数默认参数调用）、F401（未使用导入），
+# 待存量代码清理干净后再收紧。
+ignore = ["E501", "B008", "F401"]
+select = ["E9", "F63", "F7", "F82"]

@@ -8,7 +8,7 @@ from pathlib import Path
 def storage(tmp_home: Path):
     """Each test gets an isolated JingentStorage bound to a temp HOME."""
     # Import fresh after HOME is patched by tmp_home
-    from jinclaw.storage import JingentStorage
+    from app.jinclaw.storage import JingentStorage
     return JingentStorage()
 
 

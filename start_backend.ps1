@@ -4,10 +4,13 @@
 #   2) 否则后台拉起 python main.py，日志写到 logs/backend_<timestamp>.log
 #   3) 轮询最多 20s，端口 ready 就输出 READY 并退出
 #   4) 超时仍未 up，exit 1，让 cargo tauri dev 给出错误提示
+#
+# 本脚本是「拉起后端」的唯一实现，src-tauri/tauri.conf.json 的 beforeDevCommand 直接调用本文件。
+# start_backend.bat 是等价 cmd 版本，供 PowerShell 执行策略受限的环境手动使用。
 
 $ErrorActionPreference = "Stop"
 
-# 切到脚本所在目录（=项目根）
+# 自定位到项目根（不依赖调用方的 CWD）
 Set-Location -LiteralPath $PSScriptRoot
 
 $port = 8000
@@ -38,10 +41,6 @@ if (Test-PortListening -IP $hostIp -Port $port) {
 }
 
 # 2) 启动后端
-if (-not (Test-Path "logs")) { New-Item -ItemType Directory -Path "logs" -Force | Out-Null }
-$ts = Get-Date -Format "yyyyMMdd_HHmmss"
-$logFile = (Resolve-Path "logs").Path + "\backend_${ts}.log"
-
 $python = Get-Command python -ErrorAction SilentlyContinue
 if (-not $python) {
     Write-Error "未找到 python 可执行文件，请先安装 Python 3.10+ 并加入 PATH"
@@ -54,61 +53,36 @@ if (-not (Test-Path -LiteralPath $mainPy)) {
     exit 1
 }
 
-# 用 Start-Process -NoNewWindow 后台启动；stdout/stderr 重定向到日志
-$psi = New-Object System.Diagnostics.ProcessStartInfo
-$psi.FileName = $python.Source
-$psi.Arguments = "`"$mainPy`""
-$psi.WorkingDirectory = $PSScriptRoot
-$psi.UseShellExecute = $false
-$psi.RedirectStandardOutput = $true
-$psi.RedirectStandardError = $true
-$psi.CreateNoWindow = $true
+if (-not (Test-Path "logs")) { New-Item -ItemType Directory -Path "logs" -Force | Out-Null }
+$ts = Get-Date -Format "yyyyMMdd_HHmmss"
+$outLog = (Resolve-Path "logs").Path + "\backend_${ts}.log"
+$errLog = (Resolve-Path "logs").Path + "\backend_${ts}.err.log"
 
-$proc = New-Object System.Diagnostics.Process
-$proc.StartInfo = $psi
-$proc.EnableRaisingEvents = $false
+# 用 RedirectStandardOutput/Error 让 OS 直接重定向：脚本退出后后端进程继续写日志不丢失。
+$p = Start-Process -FilePath $python.Source `
+    -ArgumentList "`"$mainPy`"" `
+    -WorkingDirectory $PSScriptRoot `
+    -PassThru -WindowStyle Hidden `
+    -RedirectStandardOutput $outLog -RedirectStandardError $errLog
 
-# 异步捕获输出写到日志文件（避免阻塞子进程）
-$outputSb = New-Object System.Text.StringBuilder
-$errorSb = New-Object System.Text.StringBuilder
-
-Register-ObjectEvent -InputObject $proc -EventName OutputDataReceived -SourceIdentifier "stdout_$([guid]::NewGuid())" -Action {
-    param($sender, $e)
-    if ($null -ne $e.Data) {
-        [System.IO.File]::AppendAllText($event.MessageData.Log, ("[OUT] " + $e.Data + [Environment]::NewLine))
-    }
-} -MessageData @{ Log = $logFile } | Out-Null
-
-Register-ObjectEvent -InputObject $proc -EventName ErrorDataReceived -SourceIdentifier "stderr_$([guid]::NewGuid())" -Action {
-    param($sender, $e)
-    if ($null -ne $e.Data) {
-        [System.IO.File]::AppendAllText($event.MessageData.Log, ("[ERR] " + $e.Data + [Environment]::NewLine))
-    }
-} -MessageData @{ Log = $logFile } | Out-Null
-
-$null = $proc.Start()
-$proc.BeginOutputReadLine() | Out-Null
-$proc.BeginErrorReadLine() | Out-Null
-
-Write-Output "Started backend pid=$($proc.Id), log=$logFile"
+Write-Output "Started backend pid=$($p.Id), log=$outLog"
 
 # 3) 等待端口可用
 $deadline = (Get-Date).AddSeconds($maxWaitSec)
 while ((Get-Date) -lt $deadline) {
-    if ($proc.HasExited) {
-        Write-Error "后端进程异常退出，退出码=$($proc.ExitCode)，请查看日志: $logFile"
+    if ($p.HasExited) {
+        Write-Error "后端进程异常退出，退出码=$($p.ExitCode)，请查看日志: $outLog"
         exit 1
     }
     if (Test-PortListening -IP $hostIp -Port $port) {
-        # 端口通了之后，再等 400ms 让 uvicorn 完全进入 serving 状态，避免 Tauri 拿到 502
-        Start-Sleep -Milliseconds 500
-        Write-Output "TAURI_SRV_READY backend up pid=$($proc.Id) ${hostIp}:${port}"
+        Start-Sleep -Milliseconds 500  # 让 uvicorn 完全进入 serving 状态，避免 Tauri 拿到 502
+        Write-Output "TAURI_SRV_READY backend up pid=$($p.Id) ${hostIp}:${port}"
         exit 0
     }
     Start-Sleep -Milliseconds $pollMs
 }
 
 # 4) 超时
-Write-Error "等待 ${hostIp}:${port} 超过 ${maxWaitSec}s 仍未就绪，请查看日志: $logFile"
-try { $proc.Kill() } catch {}
+Write-Error "等待 ${hostIp}:${port} 超过 ${maxWaitSec}s 仍未就绪，请查看日志: $outLog"
+try { $p.Kill() } catch {}
 exit 1

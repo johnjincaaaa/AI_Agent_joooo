@@ -23,7 +23,57 @@ function parseApiErrorMessage(data, fallback) {
 
 function renderMarkdown(text) {
     marked.setOptions({ breaks: true, gfm: true });
-    const html = marked.parse(text);
+
+    // 保护 LaTeX 公式，防止 marked 把公式里的 _ * ^ 等当 Markdown 语法解析
+    const math = [];
+    const PREFIX = '\uE000'; // Private Use Area 字符，正常文本几乎不会出现
+    let s = text;
+
+    // 块级公式 $$...$$（支持跨行）
+    s = s.replace(/\$\$([\s\S]+?)\$\$/g, function (m, latex) {
+        math.push({ display: true, latex: latex.trim() });
+        return PREFIX + 'MATH' + (math.length - 1) + PREFIX;
+    });
+    // 块级公式 \[...\]（MathJax 风格，支持跨行）
+    s = s.replace(/\\\[([\s\S]+?)\\\]/g, function (m, latex) {
+        math.push({ display: true, latex: latex.trim() });
+        return PREFIX + 'MATH' + (math.length - 1) + PREFIX;
+    });
+    // 行内公式 $...$（单行）
+    s = s.replace(/\$([^$\n]+?)\$/g, function (m, latex) {
+        math.push({ display: false, latex: latex.trim() });
+        return PREFIX + 'MATH' + (math.length - 1) + PREFIX;
+    });
+    // 行内公式 \(...\)（MathJax 风格）
+    s = s.replace(/\\\(([\s\S]+?)\\\)/g, function (m, latex) {
+        math.push({ display: false, latex: latex.trim() });
+        return PREFIX + 'MATH' + (math.length - 1) + PREFIX;
+    });
+
+    let html = marked.parse(s);
+
+    // 把占位符替换回公式（KaTeX 渲染；未加载时兜底显示原文）
+    if (math.length) {
+        const re = new RegExp(PREFIX + 'MATH(\\d+)' + PREFIX, 'g');
+        html = html.replace(re, function (m, i) {
+            const item = math[+i];
+            if (!item) return m;
+            const raw = item.display ? '$$' + item.latex + '$$' : '$' + item.latex + '$';
+            if (typeof katex === 'undefined') {
+                const d = document.createElement('div');
+                d.textContent = raw;
+                return '<code>' + d.innerHTML + '</code>';
+            }
+            try {
+                return katex.renderToString(item.latex, { displayMode: item.display, throwOnError: false });
+            } catch (e) {
+                const d = document.createElement('div');
+                d.textContent = raw;
+                return '<code>' + d.innerHTML + '</code>';
+            }
+        });
+    }
+
     return html.replace(/<a /g, '<a target="_blank" rel="noopener noreferrer" ');
 }
 

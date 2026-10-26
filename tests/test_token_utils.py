@@ -4,7 +4,7 @@ import pytest
 from jose import jwt
 from fastapi import HTTPException
 
-import token_utils
+import app.core.token_utils as token_utils
 
 
 class TestCreateAccessToken:

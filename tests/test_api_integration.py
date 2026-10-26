@@ -122,8 +122,8 @@ class TestWorkspaceAPI:
         assert isinstance(data["tree"], list)
 
     def test_workspace_read_self(self):
-        # Read a file we know exists: config.py
-        resp = client.get("/ai/jinclaw/workspace/read", params={"path": "config.py"})
+        # Read a file we know exists: 配置已拆到 app/config/settings.py
+        resp = client.get("/ai/jinclaw/workspace/read", params={"path": "app/config/settings.py"})
         assert resp.status_code == 200
         data = resp.json()
         assert data["code"] == 200

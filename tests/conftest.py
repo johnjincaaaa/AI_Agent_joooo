@@ -32,8 +32,8 @@ def test_env(monkeypatch):
     # Now that env is patched, force config to re-read SECRET_KEY (it was imported with
     # the session value above; but for safety, also reset the module-level variable
     # so any tests that read config.SECRET_KEY directly see the test value.)
-    import config as _cfg
-    import token_utils as _tu
+    import app.config as _cfg
+    import app.core.token_utils as _tu
 
     orig_secret = _cfg.SECRET_KEY
     orig_algorithm = _cfg.ALGORITHM
