@@ -4,7 +4,6 @@ Jingent AI — FastAPI entrypoint.
 Phase-1 重构后：此文件负责「装配」，业务路由逐步拆分到 api/ 子模块。
 - 启动顺序：日志 → 配置校验 → 创建 app → 注册路由
 """
-from sqlalchemy.orm import Session
 import uvicorn
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware

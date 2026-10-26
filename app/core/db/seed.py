@@ -18,9 +18,6 @@ PROMO_CONFIG_DEFAULTS = {
     # 输入框推广文案
     "input_promo_zh": "邀请好友下载APP，每人奖励3元，满5人再得20元+永久会员！",
     "input_promo_en": "Invite friends to download the App: ¥3 each, plus ¥20 + lifetime membership at 5 invites!",
-    # 空状态横幅文案（默认用用户给的推广词）
-    "banner_promo_zh": "Jingent AI 重磅福利\n📥下载APP ➜ 2元 + 30天会员\n👥邀1人 = 3元\n👥邀5人 = 20元 + 永久会员\n智能AI对话工具，收益轻松拿！",
-    "banner_promo_en": "Jingent AI Bonus\n📥 Download App ➜ ¥2 + 30-day membership\n👥 Invite 1 = ¥3\n👥 Invite 5 = ¥20 + lifetime membership\nSmart AI chat, earn with ease!",
     # 奖励规则
     "reward_base": "3",
     "tier_threshold": "5",

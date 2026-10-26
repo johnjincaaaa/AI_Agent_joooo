@@ -60,6 +60,11 @@ function applyTheme(themeName) {
         root.style.setProperty('--bg-elevated', lightenHex(t.bg, 22));
         root.style.setProperty('--bg-hover', lightenHex(t.bg, 35));
         root.style.setProperty('--topbar-bg', lightenHex(t.bg, 18) + 'd9');
+    } else {
+        // 亮色：移除暗色模式写入的内联 --bg-* 变量，让 [data-theme="light"] CSS 接管
+        // （否则内联变量优先级高于 CSS 块，切亮后全局背景仍是深色）
+        ['--bg-app', '--bg-chat', '--bg-sidebar', '--bg-elevated', '--bg-hover', '--topbar-bg']
+            .forEach(key => root.style.removeProperty(key));
     }
 
     // 清除所有内联背景样式，让 CSS 变量接管
