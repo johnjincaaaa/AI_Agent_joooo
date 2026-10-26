@@ -28,8 +28,6 @@ class TestOpenAPI:
         assert spec["info"]["title"] == "Jingent AI"
         # Scene & skills endpoints are documented
         assert "/ai/scenes" in spec["paths"]
-        assert "/ai/jinclaw/tools" in spec["paths"]
-        assert "/ai/jinclaw/workspace/read" in spec["paths"]
 
 
 class TestScenePresets:
@@ -64,73 +62,3 @@ class TestScenePresets:
                 "办公场景应返回至少 1 个模板"
 
 
-class TestJinclawToolsAPI:
-    def test_tools_desktop_true(self):
-        resp = client.get("/ai/jinclaw/tools?desktop=true")
-        assert resp.status_code == 200
-        data = resp.json()
-        assert data["code"] == 200
-        assert isinstance(data["tools"], list)
-        # Desktop mode must include MCP tools
-        tool_names = [t["name"] for t in data["tools"]]
-        mcp_any = any(n.startswith("mcp_") for n in tool_names)
-        assert mcp_any, "桌面模式应包含 mcp_* 工具（至少 1 个）"
-
-    def test_tools_desktop_false(self):
-        resp = client.get("/ai/jinclaw/tools?desktop=false")
-        assert resp.status_code == 200
-        data = resp.json()
-        assert data["code"] == 200
-        tool_names = [t["name"] for t in data["tools"]]
-        # Web mode must exclude desktop-only MCP tools where registry marks them
-        all_mcp = [n for n in tool_names if n.startswith("mcp_")]
-        # Note: depends on ToolRegistry.mark.  If registry ships mcp as non-desktop, this
-        # might still include them — but at least the endpoint should answer OK.
-        assert isinstance(all_mcp, list)
-
-
-class TestMemoryAPI:
-    def test_memory_save_and_list_and_delete(self):
-        # Save
-        resp = client.post("/ai/jinclaw/memories", params={
-            "title": "Test Mem",
-            "content": "内容",
-            "description": "描述",
-        })
-        assert resp.status_code == 200
-        slug = resp.json()["slug"]
-        assert slug
-
-        # List
-        resp = client.get("/ai/jinclaw/memories")
-        assert resp.status_code == 200
-        data = resp.json()
-        assert data["count"] >= 1
-
-        # Delete
-        resp = client.delete(f"/ai/jinclaw/memories/{slug}")
-        assert resp.status_code == 200
-
-
-class TestWorkspaceAPI:
-    def test_workspace_tree_root(self):
-        # Current project root should always exist
-        resp = client.get("/ai/jinclaw/workspace/tree", params={"path": ".", "depth": 1})
-        assert resp.status_code == 200
-        data = resp.json()
-        assert data["code"] == 200
-        assert isinstance(data["tree"], list)
-
-    def test_workspace_read_self(self):
-        # Read a file we know exists: 配置已拆到 app/config/settings.py
-        resp = client.get("/ai/jinclaw/workspace/read", params={"path": "app/config/settings.py"})
-        assert resp.status_code == 200
-        data = resp.json()
-        assert data["code"] == 200
-        assert data["language"] == "python"
-        assert data["total_lines"] > 100
-        assert "SECRET_KEY" in data["content"]
-
-    def test_workspace_read_missing(self):
-        resp = client.get("/ai/jinclaw/workspace/read", params={"path": "does-not-exist-12345.xyz"})
-        assert resp.status_code == 404

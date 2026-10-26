@@ -72,7 +72,7 @@ class TestOptionalUserId:
         assert token_utils.get_optional_user_id(_FakeRequest(), "garbage-token") is None
 
     def test_falls_back_to_cookie(self):
-        """Header 无 token 时，应从 cookie 读出登录态（chat → jinclaw 跨页同步的关键）。"""
+        """Header 无 token 时，应从 cookie 读出登录态。"""
         token = token_utils.create_access_token({"user_id": 123})
         req = _FakeRequest({token_utils.TOKEN_COOKIE_KEY: token})
         assert token_utils.get_optional_user_id(req, None) == 123

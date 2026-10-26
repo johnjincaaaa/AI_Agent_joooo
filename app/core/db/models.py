@@ -3,7 +3,7 @@
 
 本模块只放：
   - engine / SessionLocal / Base 连接基础设施
-  - ORM 模型（User / ChatSession / JobProfile / JinclawSession / 推广与埋点等）
+  - ORM 模型（User / ChatSession / JobProfile / 推广与埋点等）
   - get_db 依赖
 
 表结构迁移与配置 seed 见：
@@ -79,23 +79,6 @@ class JobProfile(Base):
     profile_data = Column(JSON, default=dict)
     resume_content = Column(Text, nullable=True)
     template_id = Column(String(50), default="classic")
-    updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now)
-
-    user = relationship("User")
-
-
-# ======================
-# Jinclaw Agent 会话表
-# ======================
-class JinclawSession(Base):
-    __tablename__ = "jinclaw_sessions"
-
-    id = Column(Integer, primary_key=True, index=True)
-    user_id = Column(Integer, ForeignKey("users.id"), index=True)
-    session_name = Column(String(100), nullable=False, default="新建会话")
-    messages = Column(JSON, default=list)
-    workspace_dir = Column(String(500), nullable=True)
-    created_at = Column(DateTime, default=datetime.now)
     updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now)
 
     user = relationship("User")

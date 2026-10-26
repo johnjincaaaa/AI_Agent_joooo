@@ -98,7 +98,7 @@ function handleLoginSuccess(data, fallbackName) {
     document.getElementById("userName").textContent = displayName;
     modal.style.display = 'none';
     openBtn.textContent = t('logged_in');
-    // 支持 next query 参数回跳（jinclaw 兜底跳转登录、chat 登录后需要回来源页时用）
+    // 支持 next query 参数回跳（登录后回来源页用）
     try {
         const params = new URLSearchParams(window.location.search);
         const next = params.get('next');

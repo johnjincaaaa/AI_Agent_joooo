@@ -46,7 +46,6 @@ ruff check .              # 静态检查
 
 - 新增路由 → `app/api/`，在 `main.py` 注册。
 - 新增业务逻辑 → `app/services/`。
-- 新增本地工具 → `app/mcp/`，在 `manager.py` 的 `_register_default_tools` 注册。
-- 新增云端工具 → `app/tools/`，在 `app/jinclaw/tool_registry.py` 的 `_register_cloud_tools` 注册。
+- 新增聊天技能 → `app/tools/skills_registry.py` 的 `SKILL_CATALOG`/`SKILL_TOOLS` 注册。
 - 新增数据库表 → `app/core/db/models.py`；迁移/seed → `app/core/db/seed.py`。
 - 新增配置 → 见 [config.md](config.md)。

@@ -48,8 +48,7 @@ from app.tools.skills_registry import get_skill_catalog, resolve_tools
 from app.services.job_mock_data import RESUME_TEMPLATES, MOCK_JOBS, match_jobs
 
 # 路由模块
-from app.api import jinclaw_routes, chat_routes, job_routes, admin_routes, auth_routes
-from app.api.chat_routes import ensure_chat_access
+from app.api import chat_routes, job_routes, admin_routes, auth_routes
 
 # Middleware
 from app.core.middleware import add_request_middleware
@@ -103,15 +102,10 @@ def health_check():
 
 
 # ==================== 路由装配 ====================
-# chat_routes 必须先 bind + include（因为 jinclaw 依赖 ensure_chat_access）
+# chat_routes 先 bind + include（页面路由 + 技能/场景 API）
 chat_routes.bind(templates)
 app.include_router(chat_routes.router)
 logger.info("[Boot] Chat routes loaded (api/chat_routes.py)")
-
-# Jinclaw Coding Agent
-jinclaw_routes.bind(templates, ensure_chat_access)
-app.include_router(jinclaw_routes.router)
-logger.info("[Boot] Jinclaw routes loaded (api/jinclaw_routes.py)")
 
 # 找工作
 app.include_router(job_routes.router)

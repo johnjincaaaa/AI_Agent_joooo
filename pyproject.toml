@@ -1,7 +1,7 @@
 [project]
 name = "jingent-ai"
 version = "0.1.0"
-description = "Jingent AI — AI 聊天 + 代码写作助手（FastAPI + Jinclaw Agent）"
+description = "Jingent AI — AI 聊天 + 代码写作助手（FastAPI + LangChain Agent）"
 requires-python = ">=3.10"
 dependencies = [
     "fastapi",

@@ -7,9 +7,7 @@ Jingent AI 是单体 FastAPI 应用，采用「薄入口 + 分层包」结构。
 ```
 请求 → main.py（装配）→ 路由层 app/api/ → 业务层 app/services/ → 数据层 app/core/db/
                                                       ↓
-                                             Jinclaw Agent（app/jinclaw/）
-                                                      ↓
-                                             MCP 工具（app/mcp/ + app/tools/）
+                                             聊天 Agent（LangChain + app/tools/ 技能）
 ```
 
 ## 分层职责
@@ -17,11 +15,9 @@ Jingent AI 是单体 FastAPI 应用，采用「薄入口 + 分层包」结构。
 | 层 | 位置 | 职责 | 依赖方向 |
 |---|---|---|---|
 | 入口装配 | `main.py` | 初始化日志/配置/app，注册路由与中间件 | 引用所有层 |
-| 路由层 | `app/api/*_routes.py` | HTTP 端点、参数校验、鉴权、响应 | → services / jinclaw / core |
+| 路由层 | `app/api/*_routes.py` | HTTP 端点、参数校验、鉴权、响应 | → services / core |
 | 业务层 | `app/services/` | 推广拉新、求职 mock 等纯业务逻辑 | → core/db |
-| Agent 层 | `app/jinclaw/` | Agent loop、工具注册表、会话存储、系统提示词 | → mcp / tools / core |
-| MCP 层 | `app/mcp/` | 本地工具：文件、Shell、Git、浏览器、数据库 | → core |
-| 云端工具 | `app/tools/` | 联网、代码沙箱、图片/文档解析、技能管理 | → core |
+| 技能层 | `app/tools/` | 聊天技能注册表、图片/文档解析、联网搜索、技能包管理 | → core |
 | 基础设施 | `app/core/` | 路径、日志、中间件、安全、数据库 | 无（最底层） |
 | 配置 | `app/config/` | env 加载、场景预设、常量 | → core/paths |
 
@@ -43,16 +39,11 @@ Jingent AI 是单体 FastAPI 应用，采用「薄入口 + 分层包」结构。
 
 ### 用户数据隔离
 
-Jinclaw 的 projects/tasks/diffs 三张表带 `user_id` 列，存储层（`app/jinclaw/storage.py`）通过 `_uid_cond` 对每个查询注入归属过滤。匿名用户 `user_id=None` 走 legacy 数据。
+`ChatSession` 等业务表带 `user_id` 列；匿名用户 `user_id=None` 走限流与临时会话。
 
-### Agent 工具链
+### 聊天技能链
 
-`app/jinclaw/tool_registry.py` 聚合两类工具：
-
-1. **本地 MCP**（`app/mcp/`）：`mcp_shell_exec`、`mcp_file_read/write/edit`、`mcp_git_*`、`mcp_browser_*`、`mcp_db_*`。
-2. **云端工具**（`app/tools/`）：`web_search`、`code_exec`、`image_parsing`、`document_parsing`、`http_request`。
-
-`AgentLoop`（`agent_loop.py`）对代码类任务执行「探索 → 规划 → 执行 → 验证」四步流程，工具调用上限 30 轮。
+`/ai/chatStream` 通过 `app/tools/skills_registry.py` 聚合技能：工具类（`image_parsing`、`document_parsing`）+ 20 个提示词类技能；联网搜索走 `tool_intelligent_networking.py` 的 `online`/`online_intensive`。自定义技能包由 `skill_package_manager.py` 管理。
 
 ## 数据流示例
 
@@ -66,15 +57,9 @@ Jinclaw 的 projects/tasks/diffs 三张表带 `user_id` 列，存储层（`app/j
      → agent.astream → SSE 流式返回
 ```
 
-### 代码任务流（`POST /ai/jinclaw/chat`）
+### 代码任务流
 
-```
-前端 → jinclaw_routes.jinclaw_chat_stream
-     → 解析 workspace（task → project → workspace_path）
-     → AgentLoop.stream
-     → run_agent_loop：探索 → 计划 → 工具调用 → 验证
-     → SSE 返回事件（thinking/plan/tool_call/tool_result/message_chunk/done）
-```
+代码类任务建议通过终端使用 Claude Code 等外部 CLI 工具完成（自研 Jinclaw Agent 已移除）。
 
 ## 安全模型
 
@@ -82,5 +67,3 @@ Jinclaw 的 projects/tasks/diffs 三张表带 `user_id` 列，存储层（`app/j
 - **匿名限流**：`app/core/rate_limit.py`，每 IP 每日 `ANONYMOUS_RATE_LIMIT_MAX` 次。
 - **CORS**：dev 全开，prod 读 `CORS_ORIGINS`。
 - **密码**：bcrypt 哈希（`app/core/password_utils.py`）。
-
-> 注意：`/ai/jinclaw/*` 的 workspace 文件操作和 shell 执行端点操作的是服务器文件系统，部署到公网前需确认鉴权与路径沙箱策略（见部署文档）。

@@ -64,7 +64,7 @@ def get_optional_user_id(
     uid = _decode_token_or_none(token)
     if uid is not None:
         return uid
-    # Cookie 兜底：跨页面（chat → jinclaw）登录同步的关键
+    # Cookie 兜底：跨页面登录同步的关键
     for key in (TOKEN_COOKIE_KEY, "auth_token", "jingent_session"):
         ck = request.cookies.get(key)
         uid = _decode_token_or_none(ck)

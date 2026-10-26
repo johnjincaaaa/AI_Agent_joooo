@@ -31,7 +31,7 @@ router = APIRouter()
 
 
 def _token_response(payload: dict, token: str, status_code: int = 200) -> JSONResponse:
-    """统一的登录/注册返回：JSON body + HTTP-only Cookie 双写，便于 chat/jinclaw 跨页面共享登录态。"""
+    """统一的登录/注册返回：JSON body + HTTP-only Cookie 双写，便于跨页面共享登录态。"""
     resp = JSONResponse(status_code=status_code, content=payload)
     # 把 token 写进 cookie：过期时间与 JWT exp 对齐（分钟→秒），兜底 30 天
     max_age = max(60, int(ACCESS_TOKEN_EXPIRE_MINUTES) * 60)
