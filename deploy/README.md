@@ -14,7 +14,7 @@ sudo chown -R jingent:jingent /var/lib/jingent /var/log/jingent
 sudo git clone https://github.com/johnjincaaaa/AI_Agent_joooo.git /opt/jingent
 cd /opt/jingent
 sudo python3 -m venv .venv
-sudo .venv/bin/pip install -r requirements.txt
+sudo .venv/bin/pip install -r backend/requirements.txt
 sudo chown -R jingent:jingent /opt/jingent
 
 # 3. 生产配置（不进 git，权限收紧到只有 root 可读）

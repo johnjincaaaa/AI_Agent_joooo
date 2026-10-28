@@ -20,15 +20,16 @@ jobs:
         with:
           python-version: "3.12"
           cache: pip
-          cache-dependency-path: requirements.txt
+          cache-dependency-path: backend/requirements.txt
       - name: Install dependencies
         shell: bash
         run: |
           python -m pip install --upgrade pip
-          pip install -r requirements.txt
+          pip install -r backend/requirements.txt
           pip install pytest httpx
       - name: Run pytest
         shell: bash
+        working-directory: backend
         env:
           SECRET_KEY: ci-secret-do-not-use-in-prod
           LLM_API_KEY: ci-fake-key
@@ -56,7 +57,7 @@ jobs:
             cd /opt/jingent
             git fetch --all --tags
             git checkout "${{ github.ref_name }}"
-            .venv/bin/pip install -r requirements.txt
+            .venv/bin/pip install -r backend/requirements.txt
             sudo systemctl restart jingent
             sleep 3
             curl -fsS http://127.0.0.1:8000/health

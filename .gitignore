@@ -26,16 +26,27 @@ env/
 .env.*.local
 .env.bak*
 .env.example.bak*
+backend/.env
+backend/.env.*.local
+backend/.env.bak*
 
 # Database
 *.db
 *.sqlite
 *.sqlite3
 app.db
+backend/app.db
+*.db.bak*
 
-# Uploads & user data
-/uploads/
-/data/installed_skills/
+# 三方源码包与解压目录（仅本地参考，不入库）
+backend/*-master/
+backend/*-main/
+
+# Uploads & user data（运维数据：前端上传 + 三方资源）
+ops/uploads/
+ops/data/
+ops/temp/
+ops/shot/
 
 # Playwright / browser artifacts
 .playwright-mcp/
@@ -58,6 +69,7 @@ desktop.ini
 # Logs
 *.log
 logs/
+ops/logs/
 
 # Build artifacts
 dist/

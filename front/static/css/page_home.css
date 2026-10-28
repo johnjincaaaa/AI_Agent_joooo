@@ -1,0 +1,344 @@
+/* ========== Jingent AI 首页 · 安静工作面风格 ==========
+   taste-skill app rules：无渐变、无玻璃、无阴影、无等宽、无 01/02 编号。
+   品牌色：香薰紫。结构靠 tonal 面板分层，不靠装饰。
+   变量与 chat 页（page_chat.css）共用 theme-bar 主题体系，
+   背景色跟随主题切换（朱砂/青瓷/… ），避免被 theme-bar 的 !important 覆盖。
+========================================================== */
+
+:root {
+    /* 背景层次（暗色默认值；theme-bar 会在运行时覆盖 --bg-* 跟随主题色） */
+    --bg-app: #0d0f13;
+    --bg-sidebar: #15171c;
+    --bg-chat: #0d0f13;
+    --bg-elevated: #1b1e25;
+    --bg-hover: #23272f;
+
+    /* 文本 */
+    --text-primary: #ecedf1;
+    --text-secondary: #9aa1ad;
+    --text-muted: #6b7280;
+
+    /* 品牌强调色（香薰紫） */
+    --accent: #9D7BEA;
+    --accent-hover: #8B5CF6;
+    --accent-soft: rgba(157, 123, 234, 0.14);
+
+    /* 描边 */
+    --border: rgba(255, 255, 255, 0.07);
+    --border-strong: rgba(255, 255, 255, 0.12);
+
+    /* home 页别名 */
+    --home-surface: var(--bg-elevated);
+    --home-raised: var(--bg-hover);
+    --home-border: var(--border);
+    --home-text: var(--text-primary);
+    --home-muted: var(--text-secondary);
+    --home-accent: var(--accent);
+    --home-accent-soft: var(--accent-soft);
+}
+
+/* 亮色主题：接管暗色内联变量被移除后的样式 */
+[data-theme="light"] {
+    --bg-app: #f5f6f8;
+    --bg-sidebar: #ffffff;
+    --bg-chat: #f5f6f8;
+    --bg-elevated: #ffffff;
+    --bg-hover: #eceef2;
+
+    --text-primary: #1d2129;
+    --text-secondary: #5a616e;
+    --text-muted: #8a909c;
+
+    --accent: #7C5CFF;
+    --accent-hover: #6B46D4;
+    --accent-soft: rgba(124, 92, 255, 0.12);
+
+    --border: rgba(0, 0, 0, 0.09);
+    --border-strong: rgba(0, 0, 0, 0.16);
+}
+
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+html, body {
+    height: 100%;
+    font-family: "Microsoft YaHei", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    color: var(--home-text);
+    background: var(--bg-app, #0d0f13);
+    overflow-x: hidden;
+}
+
+body { min-height: 100vh; }
+
+body.has-top-bar { padding-top: 56px; }
+
+/* 主体：居中列，安静留白 */
+.home-main {
+    max-width: 880px;
+    margin: 0 auto;
+    padding: 120px 32px 48px;
+    min-height: calc(100vh - 56px);
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+}
+
+/* 首屏：纯文字陈述，两行以内 */
+.hero { margin-bottom: 56px; }
+.hero-title {
+    font-size: 64px;
+    font-weight: 700;
+    letter-spacing: -0.02em;
+    line-height: 1.05;
+    color: var(--home-text);
+}
+.hero-subtitle {
+    margin-top: 16px;
+    font-size: 18px;
+    color: var(--home-muted);
+}
+
+/* 卡片：tonal 面板，一条边，无阴影 */
+.feature-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+}
+.feature-card {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    padding: 28px 24px;
+    text-decoration: none;
+    color: inherit;
+    background: var(--home-surface);
+    border: 1px solid var(--home-border);
+    border-radius: 14px;
+    transition: border-color 0.18s ease, background-color 0.18s ease;
+}
+.feature-card:hover {
+    background: var(--home-raised);
+    border-color: var(--home-accent);
+}
+
+.card-icon {
+    flex-shrink: 0;
+    width: 44px;
+    height: 44px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 10px;
+    background: var(--home-accent-soft);
+    color: var(--home-accent);
+}
+
+.card-body { flex: 1; min-width: 0; }
+.card-title {
+    font-size: 17px;
+    font-weight: 600;
+    color: var(--home-text);
+    margin-bottom: 4px;
+}
+.card-desc {
+    font-size: 13px;
+    color: var(--home-muted);
+}
+
+.card-arrow {
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    color: var(--home-muted);
+    transition: color 0.18s ease, transform 0.18s ease;
+}
+.feature-card:hover .card-arrow {
+    color: var(--home-accent);
+    transform: translateX(3px);
+}
+
+/* 底部 */
+.home-footer {
+    margin-top: 64px;
+    font-size: 12px;
+    color: var(--home-muted);
+}
+
+/* 响应式 */
+@media (max-width: 720px) {
+    .feature-grid { grid-template-columns: 1fr; }
+    .hero-title { font-size: 40px; }
+    .home-main { padding: 88px 20px 40px; }
+}
+
+/* ========== 顶部栏（theme-bar.js 注入，依赖本文件样式） ==========
+   之前重写首页时误删了这套样式，导致 logo 图片按原始尺寸撑爆顶栏，
+   把 app-shell 挤成 0 高度（界面"全不见"）。这里恢复，并按 taste-skill
+   规则去玻璃、去阴影。
+========================================================== */
+
+.top-bar {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 56px;
+    padding: 0 24px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    z-index: 1000;
+    background: var(--bg-sidebar, #15171c);
+    border-bottom: 1px solid var(--border, rgba(255, 255, 255, 0.07));
+}
+.top-bar-left {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+.top-bar-right {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+.top-bar-logo {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    text-decoration: none;
+    color: inherit;
+}
+.logo-mark {
+    width: 32px;
+    height: 32px;
+    border-radius: 8px;
+    overflow: hidden;
+    flex-shrink: 0;
+}
+.logo-mark img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
+}
+.logo-text {
+    font-size: 16px;
+    font-weight: 700;
+    color: var(--text-primary, #ecedf1);
+}
+
+/* 语言选择器 */
+.lang-selector,
+.theme-selector {
+    position: relative;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 12px;
+    border: 1px solid var(--border, rgba(255, 255, 255, 0.07));
+    border-radius: 999px;
+    background: transparent;
+    color: var(--text-secondary, #9aa1ad);
+    font-size: 13px;
+    cursor: pointer;
+    transition: border-color 0.15s ease, color 0.15s ease;
+}
+.lang-selector:hover,
+.theme-selector:hover {
+    border-color: var(--border-strong, rgba(255, 255, 255, 0.12));
+    color: var(--text-primary, #ecedf1);
+}
+.lang-flag {
+    font-size: 14px;
+}
+.chev-down {
+    opacity: 0.5;
+    flex-shrink: 0;
+}
+.theme-dot {
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    background: var(--theme-dot, #c8523a);
+    flex-shrink: 0;
+}
+
+/* 下拉菜单 */
+.lang-dropdown,
+.theme-dropdown {
+    position: absolute;
+    top: calc(100% + 6px);
+    right: 0;
+    min-width: 160px;
+    background: var(--bg-elevated, #1b1e25);
+    border: 1px solid var(--border-strong, rgba(255, 255, 255, 0.12));
+    border-radius: 12px;
+    padding: 4px;
+    display: none;
+    z-index: 1001;
+}
+.lang-dropdown.show,
+.theme-dropdown.show {
+    display: block;
+}
+.lang-option,
+.theme-option {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 12px;
+    border-radius: 8px;
+    font-size: 13px;
+    color: var(--text-secondary, #9aa1ad);
+    cursor: pointer;
+    transition: background-color 0.15s ease;
+}
+.lang-option:hover,
+.theme-option:hover {
+    background: var(--bg-hover, #23272f);
+    color: var(--text-primary, #ecedf1);
+}
+.lang-option.active,
+.theme-option.active {
+    color: var(--accent, #9D7BEA);
+}
+.theme-option .theme-dot {
+    width: 10px;
+    height: 10px;
+    background: var(--dot, #c8523a);
+    flex-shrink: 0;
+    border-radius: 50%;
+}
+
+/* 亮/暗切换按钮 */
+.brightness-btn {
+    width: 34px;
+    height: 34px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border: 1px solid var(--border, rgba(255, 255, 255, 0.07));
+    border-radius: 999px;
+    background: transparent;
+    color: var(--text-secondary, #9aa1ad);
+    cursor: pointer;
+    transition: border-color 0.15s ease, color 0.15s ease;
+}
+.brightness-btn:hover {
+    border-color: var(--border-strong, rgba(255, 255, 255, 0.12));
+    color: var(--text-primary, #ecedf1);
+}
+
+/* 亮色主题适配 */
+[data-theme="light"] .top-bar {
+    background: #ffffff;
+    border-bottom: 1px solid rgba(0, 0, 0, 0.06);
+}
+[data-theme="light"] .logo-text {
+    color: #1d2129;
+}
+
+/* 小屏隐藏语言文字 */
+@media (max-width: 720px) {
+    .hidden-sm { display: none; }
+    .top-bar { padding: 0 16px; }
+}

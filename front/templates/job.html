@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>找工作 - Jingent AI</title>
+    <link rel="icon" href="../static/b.png" type="image/png">
+    <!-- 提前设置主题，避免刷新时闪一下暗色 -->
+    <script>
+        (function () {
+            try {
+                var saved = localStorage.getItem('jingent_colormode') || localStorage.getItem('app_theme');
+                if (saved === 'light') {
+                    document.documentElement.setAttribute('data-theme', 'light');
+                    document.documentElement.setAttribute('data-color-mode', 'light');
+                } else if (saved === 'dark') {
+                    document.documentElement.setAttribute('data-color-mode', 'dark');
+                }
+            } catch (e) {}
+        })();
+    </script>
+    <!-- page_chat.css 提供完整 CSS 变量体系（--accent/--bg-elevated/--border 等） -->
+    <link rel="stylesheet" href="../static/css/page_chat.css?v={{ ASSET_VERSION }}">
+    <!-- page_home.css 提供顶部栏（.top-bar/.lang-selector/.theme-selector 等）样式 -->
+    <link rel="stylesheet" href="../static/css/page_home.css?v={{ ASSET_VERSION }}">
+    <link rel="stylesheet" href="../static/css/page_job_hunt.css?v={{ ASSET_VERSION }}">
+    <style>
+        /* 独立 /job 页布局：body 是 flex column（page_chat.css），main 撑满剩余高度，
+           内部 .job-hunt-panel 用 flex:1 + overflow-y:auto 实现独立滚动 */
+        .job-page-main {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+            min-height: 0;
+            padding-top: 56px; /* 避开固定顶部栏（.top-bar position:fixed; height:56px） */
+        }
+    </style>
+</head>
+<body>
+    <!-- 顶部栏由 theme-bar.js 自动注入 -->
+
+    <main class="job-page-main">
+        <div class="job-hunt-panel" id="jobHuntPanel">
+            <div class="job-panel-header">
+                <h2 data-i18n="job_panel_title">找工作</h2>
+                <p data-i18n="job_panel_desc">完善个人画像 → 选择简历模板 → AI 生成简历 → 匹配 BOSS 直聘对口岗位（当前为虚拟数据）</p>
+            </div>
+
+            <div class="job-steps">
+                <span class="job-step-tag active" data-i18n="job_step_1">① 个人画像</span>
+                <span class="job-step-tag" data-i18n="job_step_2">② 简历模板</span>
+                <span class="job-step-tag" data-i18n="job_step_3">③ AI 简历</span>
+                <span class="job-step-tag" data-i18n="job_step_4">④ 岗位推荐</span>
+                <span class="job-step-tag" data-i18n="job_step_5">⑤ 简历体检</span>
+                <span class="job-step-tag" data-i18n="job_step_6">⑥ 模拟面试</span>
+            </div>
+
+            <section class="job-section">
+                <div class="job-section-title"><span class="num">1</span><span data-i18n="job_section_1">个人画像</span></div>
+                <div class="job-form-grid" id="jobProfileForm"></div>
+                <div class="job-actions">
+                    <button type="button" class="job-btn job-btn-secondary" id="jobSaveProfileBtn" data-i18n="job_save_profile">保存画像</button>
+                </div>
+                <div class="job-status-tip" id="jobSaveStatus"></div>
+            </section>
+
+            <section class="job-section">
+                <div class="job-section-title"><span class="num">2</span><span data-i18n="job_section_2">挑选简历模板</span></div>
+                <div class="template-grid" id="jobTemplateGrid"></div>
+            </section>
+
+            <section class="job-section">
+                <div class="job-section-title"><span class="num">3</span><span data-i18n="job_section_3">AI 完善简历</span></div>
+                <div class="resume-preview empty" id="jobResumePreview" data-i18n="job_resume_empty">点击「AI 完善简历」生成专业简历</div>
+                <div class="job-actions">
+                    <button type="button" class="job-btn job-btn-primary" id="jobGenerateBtn" data-i18n="job_generate_btn">AI 完善简历</button>
+                </div>
+                <div class="job-status-tip" id="jobResumeStatus"></div>
+            </section>
+
+            <section class="job-section">
+                <div class="job-section-title"><span class="num">4</span><span data-i18n="job_section_4">对口岗位推荐</span></div>
+                <div class="job-list" id="jobRecommendList">
+                    <p class="job-status-tip" data-i18n="job_match_default">完成画像与简历后，点击匹配推荐岗位</p>
+                </div>
+                <div class="job-actions">
+                    <button type="button" class="job-btn job-btn-primary" id="jobMatchBtn" data-i18n="job_match_btn">匹配推荐岗位</button>
+                </div>
+                <div class="job-status-tip" id="jobMatchStatus"></div>
+            </section>
+
+            <!-- 5. 简历漏洞检测 -->
+            <section class="job-section">
+                <div class="job-section-title"><span class="num">5</span><span data-i18n="job_section_5">AI 简历漏洞检测</span></div>
+                <p class="job-section-desc" data-i18n="job_section_5_desc">6 大维度全面扫描简历问题，获取针对性优化建议</p>
+                <div class="job-audit-result" id="jobAuditResult">
+                    <p class="job-status-tip" data-i18n="job_audit_need_resume">请先生成或填写简历内容</p>
+                </div>
+                <div class="job-actions">
+                    <button type="button" class="job-btn job-btn-primary" id="jobAuditBtn" data-i18n="job_audit_btn">开始检测</button>
+                </div>
+                <div class="job-status-tip" id="jobAuditStatus"></div>
+            </section>
+
+            <!-- 6. AI 模拟面试 -->
+            <section class="job-section">
+                <div class="job-section-title"><span class="num">6</span><span data-i18n="job_section_6">AI 模拟面试</span></div>
+                <p class="job-section-desc" data-i18n="job_section_6_desc">多轮渐进式面试，实时点评答题表现，助你快速提升</p>
+                <div class="job-interview-area" id="jobInterviewArea">
+                    <div class="job-interview-placeholder">
+                        <p class="job-status-tip" data-i18n="job_interview_start_btn">点击下方按钮开始模拟面试</p>
+                    </div>
+                </div>
+                <div class="job-actions">
+                    <button type="button" class="job-btn job-btn-primary" id="jobInterviewStartBtn" data-i18n="job_interview_start_btn">开始模拟面试</button>
+                    <button type="button" class="job-btn job-btn-secondary hidden" id="jobInterviewNextBtn" data-i18n="job_interview_next_btn">提交回答，下一题</button>
+                    <button type="button" class="job-btn job-btn-ghost hidden" id="jobInterviewRestartBtn" data-i18n="job_interview_restart_btn">重新开始</button>
+                </div>
+                <div class="job-status-tip" id="jobInterviewStatus"></div>
+            </section>
+        </div>
+    </main>
+
+    <script src="../static/js/config.js?v={{ ASSET_VERSION }}"></script>
+    <script src="../static/js/i18n.js?v={{ ASSET_VERSION }}"></script>
+    <script src="../static/js/theme-bar.js?v={{ ASSET_VERSION }}"></script>
+    <script src="../static/js/jobHunt.js?v={{ ASSET_VERSION }}"></script>
+    {{ plugin_scripts(request.url.path) | safe }}
+</body>
+</html>

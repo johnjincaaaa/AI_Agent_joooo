@@ -4,33 +4,50 @@
 
 Jingent AI 是单体 FastAPI 应用，采用「薄入口 + 分层包」结构。
 
+物理布局：后端代码在 `backend/`，前端资源在 `front/`，运维运行时数据在 `ops/`。
+
 ```
-请求 → main.py（装配）→ 路由层 app/api/ → 业务层 app/services/ → 数据层 app/core/db/
-                                                      ↓
-                                             聊天 Agent（LangChain + app/tools/ 技能）
+请求 → backend/main.py（装配）→ backend/app/api/ → backend/app/services/ → backend/app/core/db/
+                                                          ↓
+                                                 聊天 Agent（LangChain + backend/app/tools/ 技能）
 ```
 
 ## 分层职责
 
 | 层 | 位置 | 职责 | 依赖方向 |
 |---|---|---|---|
-| 入口装配 | `main.py` | 初始化日志/配置/app，注册路由与中间件 | 引用所有层 |
-| 路由层 | `app/api/*_routes.py` | HTTP 端点、参数校验、鉴权、响应 | → services / core |
-| 业务层 | `app/services/` | 推广拉新、求职 mock 等纯业务逻辑 | → core/db |
-| 技能层 | `app/tools/` | 聊天技能注册表、图片/文档解析、联网搜索、技能包管理 | → core |
-| 基础设施 | `app/core/` | 路径、日志、中间件、安全、数据库 | 无（最底层） |
-| 配置 | `app/config/` | env 加载、场景预设、常量 | → core/paths |
+| 入口装配 | `backend/main.py` | 初始化日志/配置/app，注册路由与中间件 | 引用所有层 |
+| 路由层 | `backend/app/api/*_routes.py` | HTTP 端点、参数校验、鉴权、响应 | → services / core |
+| 业务层 | `backend/app/services/` | 推广拉新、求职 mock 等纯业务逻辑 | → core/db |
+| 技能层 | `backend/app/tools/` | 聊天技能注册表、图片/文档解析、联网搜索、技能包管理 | → core |
+| 基础设施 | `backend/app/core/` | 路径、日志、中间件、安全、数据库 | 无（最底层） |
+| 配置 | `backend/app/config/` | env 加载、场景预设、常量 | → core/paths |
+
+## 目录结构
+
+```
+根/
+├── backend/               # 后端代码（main.py + app/ + tests/ + .env 等）
+├── front/                 # 前端资源（static/ + templates/）
+├── ops/                   # 运维运行时数据（logs/temp/uploads/data，不进 git）
+├── deploy/                # systemd 服务 + 部署文档
+├── docs/                  # 架构与配置文档
+├── start.py / start.bat   # 一键启动（根目录入口）
+└── README.md / AGENTS.md
+```
+
+路径统一由 `backend/app/core/paths.py` 锚定推导（不依赖 cwd），详见该模块注释。
 
 ## 关键设计
 
-### 配置分层（`app/config/`）
+### 配置分层（`backend/app/config/`）
 
-- **`settings.py`** — 运行时环境配置（从 `.env` 读），含 `validate_config()` 启动校验。
+- **`settings.py`** — 运行时环境配置（从 `backend/.env` 读），含 `validate_config()` 启动校验。
 - **`scenes.py`** — 场景预设业务数据（`SCENE_PRESETS`），与运行配置解耦。
 - **`constants.py`** — 不随部署变化的应用常量（上传白名单、`TOOL_LIST`）。
 - `__init__.py` 聚合导出，保持 `from app.config import X` 的调用方式不变。
 
-### 数据库分层（`app/core/db/`）
+### 数据库分层（`backend/app/core/db/`）
 
 原 `sqlOrm.py` 拆分：
 
@@ -43,7 +60,7 @@ Jingent AI 是单体 FastAPI 应用，采用「薄入口 + 分层包」结构。
 
 ### 聊天技能链
 
-`/ai/chatStream` 通过 `app/tools/skills_registry.py` 聚合技能：工具类（`image_parsing`、`document_parsing`）+ 20 个提示词类技能；联网搜索走 `tool_intelligent_networking.py` 的 `online`/`online_intensive`。自定义技能包由 `skill_package_manager.py` 管理。
+`/ai/chatStream` 通过 `backend/app/tools/skills_registry.py` 聚合技能：工具类（`image_parsing`、`document_parsing`）+ 20 个提示词类技能；联网搜索走 `tool_intelligent_networking.py` 的 `online`/`online_intensive`。自定义技能包由 `skill_package_manager.py` 管理。
 
 ## 数据流示例
 

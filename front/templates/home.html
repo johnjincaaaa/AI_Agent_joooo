@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Jingent AI</title>
+    <link rel="icon" href="../static/b.png" type="image/png">
+    <script>
+        (function () {
+            try {
+                var saved = localStorage.getItem('jingent_colormode') || localStorage.getItem('app_theme');
+                if (saved === 'light') {
+                    document.documentElement.setAttribute('data-theme', 'light');
+                    document.documentElement.setAttribute('data-color-mode', 'light');
+                } else if (saved === 'dark') {
+                    document.documentElement.setAttribute('data-color-mode', 'dark');
+                }
+            } catch (e) {}
+        })();
+    </script>
+    <link rel="stylesheet" href="../static/css/page_home.css?v={{ ASSET_VERSION }}">
+</head>
+<body>
+    <!-- 顶部栏由 theme-bar.js 自动注入 -->
+
+    <main class="home-main">
+        <header class="hero">
+            <h1 class="hero-title">AI 工作台</h1>
+            <p class="hero-subtitle">对话、Agent 与岗位匹配，放在同一个安静的工作面里。</p>
+        </header>
+
+        <nav class="feature-grid">
+            <a href="/chat" class="feature-card" target="_blank" rel="noopener noreferrer">
+                <div class="card-icon">
+                    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path>
+                    </svg>
+                </div>
+                <div class="card-body">
+                    <h2 class="card-title">AI 对话</h2>
+                    <p class="card-desc">多模型支持 · 智能聊天 · 代码增强</p>
+                </div>
+                <span class="card-arrow" aria-hidden="true">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"></line><polyline points="12 5 19 12 12 19"></polyline></svg>
+                </span>
+            </a>
+
+            <a href="/job" class="feature-card" target="_blank" rel="noopener noreferrer">
+                <div class="card-icon">
+                    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                        <rect x="2" y="7" width="20" height="14" rx="2" ry="2"></rect>
+                        <path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"></path>
+                    </svg>
+                </div>
+                <div class="card-body">
+                    <h2 class="card-title">岗位推荐</h2>
+                    <p class="card-desc">AI 智能匹配 · 精准职业推荐</p>
+                </div>
+                <span class="card-arrow" aria-hidden="true">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"></line><polyline points="12 5 19 12 12 19"></polyline></svg>
+                </span>
+            </a>
+        </nav>
+
+        <footer class="home-footer">
+            <span>© 2026 Jingent AI</span>
+        </footer>
+    </main>
+
+    <script src="../static/js/i18n.js?v={{ ASSET_VERSION }}"></script>
+    <script src="../static/js/theme-bar.js?v={{ ASSET_VERSION }}"></script>
+    {{ plugin_scripts(request.url.path) | safe }}
+</body>
+</html>

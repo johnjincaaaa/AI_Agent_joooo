@@ -1,0 +1,348 @@
+/* ==========================================================
+   右侧悬浮小球 · 鼠标停留(PC) / 点击(手机) 展开菜单
+   链接在 static/js/config.js 中自定义，留空则对应图标隐藏
+   2026-10-26 改版：与顶栏 themeSelector 统一为半透明胶囊风，
+   去掉高饱和渐变与发光，弱化存在感
+========================================================== */
+.float-dock {
+    position: fixed;
+    right: 18px;
+    top: 50%;
+    transform: translateY(-50%);
+    z-index: 9997;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 12px;
+}
+
+/* 悬浮小球（与顶栏 themeSelector 同风格：半透明深色圆 + 细边框 + 毛玻璃，无渐变无发光） */
+.float-ball {
+    width: 44px;
+    height: 44px;
+    border-radius: 50%;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    background: rgba(30, 30, 40, 0.65);
+    color: rgba(255, 255, 255, 0.9);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    transition: background 0.25s ease, border-color 0.25s ease, color 0.25s ease;
+    padding: 0;
+}
+.float-ball:hover {
+    background: rgba(45, 45, 55, 0.75);
+    border-color: rgba(255, 255, 255, 0.18);
+    color: #fff;
+}
+.float-ball:active {
+    transform: scale(0.94);
+}
+
+/* 锁图标状态：收起=闭合锁，展开(open)=开锁 */
+.float-ball-icon-unlocked {
+    display: none;
+}
+.float-dock.open .float-ball-icon {
+    display: none;
+}
+.float-dock.open .float-ball-icon-unlocked {
+    display: block;
+}
+
+/* 菜单容器：默认隐藏 */
+.float-menu {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    opacity: 0;
+    visibility: hidden;
+    transform: translateX(12px) scale(0.92);
+    transform-origin: right center;
+    transition: all 0.22s cubic-bezier(0.4, 0, 0.2, 1);
+    pointer-events: none;
+}
+
+/* PC端：hover 展开 */
+@media (hover: hover) and (pointer: fine) {
+    .float-dock:hover .float-menu,
+    .float-dock:focus-within .float-menu {
+        opacity: 1;
+        visibility: visible;
+        transform: translateX(0) scale(1);
+        pointer-events: auto;
+    }
+    .float-dock:hover .float-ball {
+        background: rgba(45, 45, 55, 0.75);
+        border-color: rgba(255, 255, 255, 0.18);
+        color: #fff;
+    }
+    .float-dock:hover .float-ball-icon {
+        display: none;
+    }
+    .float-dock:hover .float-ball-icon-unlocked {
+        display: block;
+    }
+}
+
+/* 移动端：通过 open 类展开 */
+.float-dock.open .float-menu {
+    opacity: 1;
+    visibility: visible;
+    transform: translateX(0) scale(1);
+    pointer-events: auto;
+}
+.float-dock.open .float-ball {
+    background: rgba(45, 45, 55, 0.85);
+    border-color: rgba(255, 255, 255, 0.2);
+}
+
+.float-dock-item {
+    width: 52px;
+    height: 52px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 3px;
+    text-decoration: none;
+    color: rgba(255, 255, 255, 0.9);
+    background: rgba(30, 30, 40, 0.65);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 14px;
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    cursor: pointer;
+    transition: background 0.25s ease, border-color 0.25s ease, color 0.25s ease;
+}
+
+.float-dock-item:hover {
+    background: rgba(45, 45, 55, 0.75);
+    border-color: rgba(255, 255, 255, 0.18);
+    color: #fff;
+}
+
+/* button 元素重置（分享按钮是 <button>） */
+.float-dock-item {
+    font: inherit;
+}
+
+/* 分享APP / 下载App / 客服：统一为顶栏半透明风格，去掉独立渐变，避免抢眼 */
+.float-dock-item#floatShareBtn,
+.float-dock-item#floatAppBtn {
+    background: rgba(30, 30, 40, 0.65);
+    border-color: rgba(255, 255, 255, 0.1);
+}
+.float-dock-item#floatShareBtn:hover,
+.float-dock-item#floatAppBtn:hover {
+    background: rgba(45, 45, 55, 0.75);
+    border-color: rgba(255, 255, 255, 0.18);
+    filter: none;
+}
+
+.float-dock-item[hidden] {
+    display: none !important;
+}
+
+.float-dock-label {
+    font-size: 11px;
+    font-weight: 600;
+    line-height: 1.1;
+    letter-spacing: 0.2px;
+}
+
+/* ==========================================================
+   分享APP 弹窗（深色磨砂，与教程/登录弹窗风格一致）
+========================================================== */
+.share-modal {
+    display: none;
+    position: fixed;
+    inset: 0;
+    z-index: 10000;
+}
+.share-modal.show {
+    display: block;
+}
+.share-overlay {
+    position: absolute;
+    inset: 0;
+    background: var(--modal-overlay);
+    backdrop-filter: blur(14px);
+    -webkit-backdrop-filter: blur(14px);
+}
+.share-content {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    width: min(460px, calc(100vw - 40px));
+    max-height: calc(100vh - 48px);
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    background: var(--modal-bg);
+    padding: 28px 30px 26px;
+    border-radius: 20px;
+    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.55), 0 0 0 1px rgba(255, 255, 255, 0.06);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    color: var(--text-primary);
+    display: flex;
+    flex-direction: column;
+    /* 滚动条与对话区一致 */
+    scrollbar-width: thin;
+    scrollbar-color: var(--scrollbar-thumb) transparent;
+}
+.share-content::-webkit-scrollbar {
+    width: 8px;
+}
+.share-content::-webkit-scrollbar-thumb {
+    background: var(--scrollbar-thumb);
+    border-radius: 4px;
+}
+.share-content .close-btn {
+    position: sticky;
+    top: 0;
+    z-index: 2;
+    flex-shrink: 0;
+    align-self: flex-end;
+    margin: -14px -6px -16px 0;
+    width: 30px;
+    height: 30px;
+    background: transparent;
+    border: none;
+    color: var(--text-secondary);
+    font-size: 22px;
+    line-height: 1;
+    cursor: pointer;
+    border-radius: 8px;
+}
+.share-content .close-btn:hover {
+    color: var(--text-primary);
+    background: var(--bg-hover);
+}
+.share-header {
+    margin-bottom: 20px;
+}
+.share-title {
+    font-size: 19px;
+    font-weight: 700;
+    color: var(--modal-title);
+}
+.share-intro {
+    margin-top: 10px;
+    font-size: 13.5px;
+    line-height: 1.7;
+    color: var(--text-secondary);
+    white-space: pre-line;
+}
+.share-link-label {
+    display: block;
+    font-size: 13px;
+    color: var(--text-secondary);
+    margin-bottom: 8px;
+}
+.share-link-row {
+    display: flex;
+    gap: 8px;
+    align-items: stretch;
+}
+.share-link-row input {
+    flex: 1;
+    min-width: 0;
+    padding: 11px 14px;
+    border: 1px solid var(--border-strong);
+    border-radius: 12px;
+    background: var(--field-bg);
+    color: var(--text-primary);
+    font-size: 13.5px;
+}
+.share-copy-btn {
+    flex-shrink: 0;
+    padding: 0 18px;
+    border: none;
+    border-radius: 12px;
+    background: var(--accent);
+    color: #fff;
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background 0.2s ease;
+    white-space: nowrap;
+}
+.share-copy-btn:hover {
+    background: var(--accent-hover);
+}
+.share-copy-btn.copied {
+    background: #2fae6a;
+}
+
+/* ----------------------- 移动端适配 ----------------------- */
+@media (max-width: 768px) {
+    .float-dock {
+        top: 62px;
+        right: 10px;
+        bottom: auto;
+        transform: none;
+        flex-direction: column-reverse;
+        align-items: flex-end;
+        gap: 10px;
+    }
+    .float-ball {
+        width: 40px;
+        height: 40px;
+    }
+    .float-ball svg {
+        width: 20px;
+        height: 20px;
+    }
+    .float-menu {
+        flex-direction: row;
+        gap: 8px;
+        transform: translateY(-8px) scale(0.92);
+        transform-origin: bottom right;
+    }
+    .float-dock.open .float-menu {
+        opacity: 1;
+        visibility: visible;
+        transform: translateY(0) scale(1);
+        pointer-events: auto;
+    }
+    .float-dock-item {
+        width: 44px;
+        height: 44px;
+        border-radius: 12px;
+        gap: 2px;
+    }
+    .float-dock-item svg {
+        width: 18px;
+        height: 18px;
+    }
+    .float-dock-label {
+        font-size: 9px;
+    }
+}
+
+/* ============ 亮主题：与顶栏 chip 一致 ============ */
+body.light-mode .float-ball,
+body.light-mode .float-dock-item,
+body.light-mode .float-dock-item#floatShareBtn,
+body.light-mode .float-dock-item#floatAppBtn {
+    background: rgba(255, 255, 255, 0.7);
+    border-color: rgba(0, 0, 0, 0.08);
+    color: #3f3f46;
+}
+body.light-mode .float-ball:hover,
+body.light-mode .float-dock-item:hover,
+body.light-mode .float-dock-item#floatShareBtn:hover,
+body.light-mode .float-dock-item#floatAppBtn:hover {
+    background: rgba(255, 255, 255, 0.95);
+    border-color: rgba(0, 0, 0, 0.12);
+    color: #1a1a1e;
+}
+body.light-mode .float-dock.open .float-ball {
+    background: rgba(255, 255, 255, 0.95);
+    border-color: rgba(0, 0, 0, 0.12);
+    color: #1a1a1e;
+}

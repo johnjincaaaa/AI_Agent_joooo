@@ -1,0 +1,655 @@
+/* ==================== 找工作模块 ==================== */
+
+.job-hunt-panel {
+    flex: 1;
+    overflow-y: auto;
+    padding: 20px 24px 40px;
+    max-width: 920px;
+    margin: 0 auto;
+    width: 100%;
+    box-sizing: border-box;
+    scrollbar-width: thin;
+    scrollbar-color: var(--scrollbar-thumb) transparent;
+}
+.job-hunt-panel::-webkit-scrollbar {
+    width: 8px;
+}
+.job-hunt-panel::-webkit-scrollbar-thumb {
+    background: var(--scrollbar-thumb);
+    border-radius: 4px;
+}
+
+.job-hunt-panel.hidden {
+    display: none !important;
+}
+
+/* 面板头部 */
+.job-panel-header {
+    margin-bottom: 24px;
+}
+
+.job-panel-header h2 {
+    font-size: 22px;
+    font-weight: 700;
+    color: var(--text-primary);
+    margin-bottom: 6px;
+}
+
+.job-panel-header p {
+    font-size: 14px;
+    color: var(--text-muted);
+}
+
+.job-steps {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-bottom: 24px;
+}
+
+.job-step-tag {
+    padding: 6px 14px;
+    border-radius: 100px;
+    font-size: 13px;
+    border: 1px solid var(--border-strong);
+    color: var(--text-secondary);
+    background: transparent;
+}
+
+.job-step-tag.active {
+    background: var(--accent-soft);
+    color: var(--accent);
+    border-color: rgba(157, 123, 234, 0.4);
+}
+
+.job-step-tag.done {
+    color: #4caf86;
+    border-color: rgba(76, 175, 134, 0.35);
+}
+
+/* 卡片区块 */
+.job-section {
+    background: var(--bg-elevated);
+    border: 1px solid var(--border-strong);
+    border-radius: var(--radius-lg);
+    padding: 20px;
+    margin-bottom: 20px;
+}
+
+.job-section-title {
+    font-size: 16px;
+    font-weight: 600;
+    color: var(--text-primary);
+    margin-bottom: 16px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.job-section-title span.num {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 22px;
+    height: 22px;
+    border-radius: 50%;
+    background: var(--accent-soft);
+    color: var(--accent);
+    font-size: 12px;
+    font-weight: 700;
+}
+
+/* 个人画像表单 */
+.job-form-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 14px;
+}
+
+.job-form-grid .full-width {
+    grid-column: 1 / -1;
+}
+
+.job-field label {
+    display: block;
+    font-size: 12px;
+    color: var(--text-muted);
+    margin-bottom: 6px;
+}
+
+.job-field input,
+.job-field select,
+.job-field textarea {
+    width: 100%;
+    box-sizing: border-box;
+    background: var(--bg-hover);
+    border: 1px solid var(--border-strong);
+    border-radius: var(--radius-sm);
+    padding: 10px 12px;
+    color: var(--text-primary);
+    font-size: 14px;
+    outline: none;
+    transition: border-color 0.2s;
+}
+
+.job-field input:focus,
+.job-field select:focus,
+.job-field textarea:focus {
+    border-color: rgba(157, 123, 234, 0.5);
+}
+
+.job-field textarea {
+    min-height: 88px;
+    resize: vertical;
+    line-height: 1.5;
+}
+
+/* 简历模板 */
+.template-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 12px;
+}
+
+.template-card {
+    padding: 16px;
+    border-radius: var(--radius-md);
+    border: 2px solid var(--border-strong);
+    background: var(--bg-hover);
+    cursor: pointer;
+    transition: border-color 0.2s, background 0.2s;
+}
+
+.template-card:hover {
+    border-color: rgba(157, 123, 234, 0.35);
+}
+
+.template-card.selected {
+    border-color: var(--accent);
+    background: var(--accent-soft);
+}
+
+.template-card h4 {
+    font-size: 15px;
+    color: var(--text-primary);
+    margin-bottom: 6px;
+}
+
+.template-card p {
+    font-size: 12px;
+    color: var(--text-muted);
+    line-height: 1.4;
+}
+
+/* 简历预览 */
+.resume-preview {
+    background: var(--bg-hover);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    padding: 20px;
+    min-height: 120px;
+    font-size: 14px;
+    line-height: 1.7;
+    color: var(--text-primary);
+}
+
+.resume-preview.empty {
+    color: var(--text-muted);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+}
+
+.resume-preview h1,
+.resume-preview h2,
+.resume-preview h3 {
+    margin: 12px 0 8px;
+    color: var(--text-primary);
+}
+
+/* 岗位卡片 */
+.job-list {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.job-card {
+    display: block;
+    padding: 16px 18px;
+    border-radius: var(--radius-md);
+    border: 1px solid var(--border-strong);
+    background: var(--bg-hover);
+    text-decoration: none;
+    color: inherit;
+    transition: border-color 0.2s, transform 0.15s;
+}
+
+.job-card:hover {
+    border-color: rgba(157, 123, 234, 0.45);
+    transform: translateY(-1px);
+}
+
+.job-card-top {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 12px;
+    margin-bottom: 8px;
+}
+
+.job-card-title {
+    font-size: 16px;
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+.job-card-salary {
+    font-size: 15px;
+    font-weight: 700;
+    color: #ff6b6b;
+    white-space: nowrap;
+}
+
+.job-card-company {
+    font-size: 14px;
+    color: var(--text-secondary);
+    margin-bottom: 10px;
+}
+
+.job-card-meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-bottom: 10px;
+    font-size: 12px;
+    color: var(--text-muted);
+}
+
+.job-card-tags {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-bottom: 10px;
+}
+
+.job-tag {
+    padding: 3px 8px;
+    border-radius: 4px;
+    font-size: 11px;
+    background: var(--accent-soft);
+    color: var(--accent);
+}
+
+.job-match {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    font-size: 12px;
+}
+
+.job-match-score {
+    font-weight: 700;
+    color: #4caf86;
+}
+
+.job-match-reason {
+    color: var(--text-muted);
+    flex: 1;
+    text-align: right;
+}
+
+.job-source-badge {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 4px;
+    font-size: 11px;
+    background: rgba(0, 190, 189, 0.15);
+    color: #00bebd;
+    margin-left: 8px;
+}
+
+/* 按钮 */
+.job-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    margin-top: 16px;
+}
+
+.job-btn {
+    padding: 10px 18px;
+    border-radius: var(--radius-sm);
+    border: none;
+    font-size: 14px;
+    cursor: pointer;
+    transition: background 0.2s, opacity 0.2s;
+}
+
+.job-btn:disabled {
+    opacity: 0.55;
+    cursor: not-allowed;
+}
+
+.job-btn-primary {
+    background: var(--accent);
+    color: #fff;
+}
+
+.job-btn-primary:hover:not(:disabled) {
+    background: var(--accent-hover);
+}
+
+.job-btn-secondary {
+    background: transparent;
+    color: var(--text-secondary);
+    border: 1px solid var(--border-strong);
+}
+
+.job-btn-secondary:hover:not(:disabled) {
+    color: var(--text-primary);
+    background: var(--bg-hover);
+}
+
+.job-status-tip {
+    font-size: 13px;
+    color: var(--text-muted);
+    margin-top: 10px;
+}
+
+.job-status-tip.error {
+    color: #ff6b6b;
+}
+
+.job-status-tip.success {
+    color: #4caf86;
+}
+
+@media (max-width: 768px) {
+    .job-form-grid {
+        grid-template-columns: 1fr;
+    }
+    .template-grid {
+        grid-template-columns: 1fr;
+    }
+    .job-hunt-panel {
+        padding: 16px 12px 32px;
+    }
+}
+
+/* ========= 简历漏洞检测 ========= */
+.job-section-desc {
+    color: var(--text-muted);
+    font-size: 13px;
+    margin: 4px 0 14px;
+}
+
+.audit-score-card {
+    display: flex;
+    gap: 24px;
+    align-items: center;
+    background: var(--bg-elevated);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    padding: 20px;
+    margin-bottom: 16px;
+}
+
+.audit-score-ring {
+    position: relative;
+    width: 120px;
+    height: 120px;
+    flex-shrink: 0;
+}
+
+.audit-score-ring svg {
+    width: 100%;
+    height: 100%;
+}
+
+.audit-score-text {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    text-align: center;
+}
+
+.score-num {
+    display: block;
+    font-size: 32px;
+    font-weight: 700;
+    color: var(--text-primary);
+}
+
+.score-label {
+    font-size: 12px;
+    color: var(--text-muted);
+}
+
+.audit-summary {
+    flex: 1;
+}
+
+.audit-summary h4 {
+    margin: 0 0 8px;
+    font-size: 15px;
+}
+
+.audit-summary p {
+    margin: 0;
+    color: var(--text-secondary);
+    line-height: 1.6;
+}
+
+.audit-issues h4 {
+    margin: 0 0 12px;
+    font-size: 15px;
+}
+
+.audit-issue {
+    background: var(--bg-elevated);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    padding: 14px;
+    margin-bottom: 10px;
+    border-left: 4px solid #888;
+}
+
+.audit-issue.severity-high { border-left-color: #ff6b6b; }
+.audit-issue.severity-medium { border-left-color: #fbbf24; }
+.audit-issue.severity-low { border-left-color: #4ade80; }
+
+.audit-issue-head {
+    display: flex;
+    gap: 10px;
+    margin-bottom: 8px;
+    flex-wrap: wrap;
+}
+
+.audit-category {
+    font-weight: 600;
+    font-size: 13px;
+    color: var(--text-primary);
+}
+
+.audit-severity {
+    padding: 2px 8px;
+    border-radius: 4px;
+    font-size: 11px;
+    background: rgba(255, 255, 255, 0.08);
+}
+
+.audit-issue.severity-high .audit-severity { background: rgba(255, 107, 107, 0.15); color: #ff6b6b; }
+.audit-issue.severity-medium .audit-severity { background: rgba(251, 191, 36, 0.15); color: #fbbf24; }
+.audit-issue.severity-low .audit-severity { background: rgba(74, 222, 128, 0.15); color: #4ade80; }
+
+.audit-issue-text {
+    margin: 0 0 6px;
+    color: var(--text-secondary);
+    font-size: 13px;
+}
+
+.audit-suggestion {
+    margin: 0;
+    color: var(--text-primary);
+    font-size: 13px;
+    line-height: 1.5;
+}
+
+/* ========= 模拟面试 ========= */
+.job-interview-area {
+    background: var(--bg-elevated);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    padding: 20px;
+}
+
+.interview-round-header {
+    display: flex;
+    gap: 10px;
+    margin-bottom: 14px;
+    flex-wrap: wrap;
+}
+
+.interview-round-tag,
+.interview-type-tag {
+    padding: 4px 12px;
+    border-radius: 20px;
+    font-size: 12px;
+    font-weight: 500;
+}
+
+.interview-round-tag {
+    background: rgba(0, 190, 189, 0.15);
+    color: #00bebd;
+}
+
+.interview-type-tag {
+    background: var(--bg-hover);
+    color: var(--text-secondary);
+}
+
+.interview-question {
+    background: var(--bg-hover);
+    border-radius: var(--radius-sm);
+    padding: 16px;
+    margin-bottom: 12px;
+}
+
+.interview-question p {
+    margin: 0;
+    font-size: 15px;
+    line-height: 1.7;
+    color: var(--text-primary);
+}
+
+.interview-tips {
+    color: var(--text-muted);
+    font-size: 13px;
+    margin: 0 0 14px;
+    padding: 8px 12px;
+    background: rgba(251, 191, 36, 0.08);
+    border-radius: 6px;
+}
+
+.interview-answer-input {
+    width: 100%;
+    padding: 12px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    background: var(--bg-input);
+    color: var(--text-primary);
+    font-size: 14px;
+    resize: vertical;
+    font-family: inherit;
+    box-sizing: border-box;
+}
+
+.interview-answer-input:focus {
+    outline: none;
+    border-color: var(--accent);
+}
+
+.interview-feedback {
+    background: rgba(0, 190, 189, 0.06);
+    border: 1px solid rgba(0, 190, 189, 0.2);
+    border-radius: var(--radius-sm);
+    padding: 14px;
+    margin-bottom: 16px;
+}
+
+.interview-feedback h5 {
+    margin: 0 0 12px;
+    font-size: 14px;
+    color: var(--text-primary);
+}
+
+.feedback-scores {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+    margin-bottom: 10px;
+}
+
+.feedback-score-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 12px;
+}
+
+.feedback-score-item > span:first-child {
+    color: var(--text-muted);
+    min-width: 60px;
+}
+
+.feedback-score-item > span:last-child {
+    color: var(--text-primary);
+    min-width: 30px;
+    text-align: right;
+}
+
+.feedback-bar {
+    flex: 1;
+    height: 6px;
+    background: var(--border);
+    border-radius: 3px;
+    overflow: hidden;
+}
+
+.feedback-bar-fill {
+    height: 100%;
+    background: #00bebd;
+    border-radius: 3px;
+    transition: width 0.3s ease;
+}
+
+.feedback-comment {
+    margin: 8px 0 0;
+    font-size: 13px;
+    color: var(--text-secondary);
+    line-height: 1.6;
+}
+
+.job-btn-ghost {
+    background: transparent;
+    border: 1px solid var(--border);
+    color: var(--text-secondary);
+}
+
+.job-btn-ghost:hover {
+    background: var(--bg-hover);
+}
+
+@media (max-width: 768px) {
+    .audit-score-card {
+        flex-direction: column;
+        text-align: center;
+    }
+    .feedback-scores {
+        grid-template-columns: 1fr;
+    }
+}

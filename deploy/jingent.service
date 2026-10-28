@@ -7,7 +7,7 @@ Wants=network-online.target
 Type=simple
 User=jingent
 Group=jingent
-WorkingDirectory=/opt/jingent
+WorkingDirectory=/opt/jingent/backend
 
 # 生产环境配置从这里读（不进 git）。至少要设置：
 #   SECRET_KEY=<高强度随机串>

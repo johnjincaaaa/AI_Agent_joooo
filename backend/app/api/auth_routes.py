@@ -1,0 +1,482 @@
+"""
+认证与用户信息 — extracted from main.py.
+
+Sections:
+- 手机号注册+验证码 (L1617-L1720)
+- 用户信息 (L1722-L1796: /user/info, /user/nickname, /user/password)
+- 短信验证码登录 (L1798-L1837)
+- 用户名登录 + 注册 (L1839-L1900)
+"""
+import logging
+import random
+import time as _time_mod
+import uuid as _uuid
+from typing import Optional
+
+from fastapi import (
+    APIRouter, Depends, Response, UploadFile, File,
+)
+from fastapi.responses import JSONResponse
+from pydantic import BaseModel
+from sqlalchemy.orm import Session
+
+from app.core.db import get_db, User
+from app.core.token_utils import verify_token, get_optional_user_id, create_access_token, TOKEN_COOKIE_KEY
+from app.core.password_utils import hash_password, verify_password, needs_rehash
+from app.config import ACCESS_TOKEN_EXPIRE_MINUTES
+
+
+logger = logging.getLogger(__name__)
+router = APIRouter()
+
+
+def _token_response(payload: dict, token: str, status_code: int = 200) -> JSONResponse:
+    """统一的登录/注册返回：JSON body + HTTP-only Cookie 双写，便于跨页面共享登录态。"""
+    resp = JSONResponse(status_code=status_code, content=payload)
+    # 把 token 写进 cookie：过期时间与 JWT exp 对齐（分钟→秒），兜底 30 天
+    max_age = max(60, int(ACCESS_TOKEN_EXPIRE_MINUTES) * 60)
+    # 安全说明：开发环境用 HTTP，所以 secure=False；生产部署 HTTPS 时可改为 True
+    resp.set_cookie(
+        key=TOKEN_COOKIE_KEY,
+        value=token,
+        max_age=max_age,
+        httponly=True,
+        samesite="lax",
+        secure=False,
+        path="/",
+    )
+    # 再写一个可读 cookie 给旧代码（前端 localStorage 同步）：非 HTTP-only
+    resp.set_cookie(
+        key="auth_token",
+        value=token,
+        max_age=max_age,
+        httponly=False,
+        samesite="lax",
+        secure=False,
+        path="/",
+    )
+    return resp
+
+
+# 内存存储验证码：{phone: {"code": "123456", "expire": 时间戳}}
+_sms_codes: dict = {}
+
+
+def _gen_verify_code() -> str:
+    return "".join(random.choices("0123456789", k=6))
+
+
+def _is_valid_phone(phone: str) -> bool:
+    return bool(phone and phone.isdigit() and len(phone) == 11 and phone.startswith("1"))
+
+
+# ==================================================================
+# Pydantic 模型
+# ==================================================================
+
+class SendCodeForm(BaseModel):
+    phone: str
+
+
+class RegisterByPhoneForm(BaseModel):
+    phone: str
+    code: str
+    password: str
+    confirm_password: str
+
+
+class UpdateNicknameForm(BaseModel):
+    nickname: str
+
+
+class UpdatePasswordForm(BaseModel):
+    old_password: str
+    new_password: str
+    confirm_password: str
+
+
+class SmsLoginForm(BaseModel):
+    phone: str
+    code: str
+
+
+class LoginForm(BaseModel):
+    username: str
+    password: str
+
+
+class RegisterForm(BaseModel):
+    username: str
+    password: str
+
+
+# ==================================================================
+# 手机号注册 + 验证码
+# ==================================================================
+
+@router.post('/sms/send-code', summary='发送手机验证码')
+def send_sms_code(form: SendCodeForm):
+    phone = form.phone.strip()
+    if not _is_valid_phone(phone):
+        return {"code": 400, "msg": "手机号格式不正确"}
+    now = _time_mod.time()
+    cached = _sms_codes.get(phone)
+    if cached and now - cached.get("sent_at", 0) < 60:
+        return {"code": 429, "msg": "发送太频繁，请稍后再试"}
+    code = _gen_verify_code()
+    _sms_codes[phone] = {
+        "code": code,
+        "expire": now + 300,
+        "sent_at": now,
+    }
+    return {"code": 200, "msg": "验证码已发送", "debug_code": code}
+
+
+@router.post('/register/phone', summary='手机号注册')
+def register_by_phone(
+    form: RegisterByPhoneForm,
+    db: Session = Depends(get_db),
+):
+    phone = form.phone.strip()
+    if not _is_valid_phone(phone):
+        return {"code": 400, "msg": "手机号格式不正确"}
+    if len(form.password) < 6:
+        return {"code": 400, "msg": "密码至少6位"}
+    if form.password != form.confirm_password:
+        return {"code": 400, "msg": "两次密码不一致"}
+
+    cached = _sms_codes.get(phone)
+    now = _time_mod.time()
+    if not cached or cached.get("expire", 0) < now:
+        return {"code": 400, "msg": "验证码已过期，请重新获取"}
+    if cached.get("code") != form.code.strip():
+        return {"code": 400, "msg": "验证码错误"}
+
+    exist = db.query(User).filter(User.phone == phone).first()
+    if exist:
+        return {"code": 400, "msg": "该手机号已注册"}
+
+    suffix = _uuid.uuid4().hex[:6].lower()
+    default_username = f"Jingent_{suffix}"
+    while db.query(User).filter(User.username == default_username).first():
+        suffix = _uuid.uuid4().hex[:6].lower()
+        default_username = f"Jingent_{suffix}"
+
+    new_user = User(
+        username=default_username,
+        phone=phone,
+        nickname=default_username,
+        password=hash_password(form.password),
+    )
+    db.add(new_user)
+    db.commit()
+    db.refresh(new_user)
+
+    _sms_codes.pop(phone, None)
+
+    token = create_access_token({'user_id': new_user.id})
+    return _token_response({
+        "code": 200,
+        "msg": "注册成功",
+        "token": token,
+        "user_id": new_user.id,
+        "username": new_user.username,
+        "nickname": new_user.nickname,
+    }, token)
+
+
+# ==================================================================
+# 用户信息
+# ==================================================================
+
+@router.get('/user/info', summary='获取当前用户信息')
+def get_user_info(
+    user_id: Optional[int] = Depends(get_optional_user_id),
+    db: Session = Depends(get_db),
+):
+    if not user_id:
+        return {"code": 401, "msg": "未登录"}
+    user = db.query(User).filter(User.id == user_id).first()
+    if not user:
+        return {"code": 404, "msg": "用户不存在"}
+    return {
+        "code": 200,
+        "data": {
+            "user_id": user.id,
+            "username": user.username,
+            "nickname": user.nickname or user.username,
+            "phone": user.phone,
+            "avatar": user.avatar,
+            "register_time": user.register_time.isoformat() if user.register_time else None,
+        }
+    }
+
+
+@router.post('/user/nickname', summary='修改用户昵称')
+def update_nickname(
+    form: UpdateNicknameForm,
+    user_id: Optional[int] = Depends(get_optional_user_id),
+    db: Session = Depends(get_db),
+):
+    if not user_id:
+        return {"code": 401, "msg": "未登录"}
+    nickname = form.nickname.strip()
+    if not nickname:
+        return {"code": 400, "msg": "昵称不能为空"}
+    if len(nickname) > 20:
+        return {"code": 400, "msg": "昵称长度不能超过20个字符"}
+    user = db.query(User).filter(User.id == user_id).first()
+    if not user:
+        return {"code": 404, "msg": "用户不存在"}
+    user.nickname = nickname
+    db.commit()
+    return {"code": 200, "msg": "昵称修改成功", "nickname": nickname}
+
+
+@router.post('/user/avatar', summary='上传自定义头像（类型/大小校验，存 ops/uploads）')
+def upload_avatar(
+    file: UploadFile = File(...),
+    user_id: Optional[int] = Depends(get_optional_user_id),
+    db: Session = Depends(get_db),
+):
+    if not user_id:
+        return {"code": 401, "msg": "未登录"}
+    ALLOWED_EXT = {"png", "jpg", "jpeg", "webp", "gif"}
+    filename = file.filename or ""
+    ext = filename.rsplit(".", 1)[-1].lower() if "." in filename else ""
+    if ext not in ALLOWED_EXT:
+        return {"code": 400, "msg": "仅支持 PNG/JPG/JPEG/WEBP/GIF 格式的图片"}
+    MAX_SIZE = 2 * 1024 * 1024  # 2MB
+    content = file.file.read()
+    if len(content) > MAX_SIZE:
+        return {"code": 400, "msg": "头像图片不能超过 2MB"}
+    if not content:
+        return {"code": 400, "msg": "文件内容为空"}
+
+    from app.core.paths import uploads_dir
+    dest = uploads_dir() / f"{_uuid.uuid4().hex}.{ext}"
+    dest.write_bytes(content)
+
+    user = db.query(User).filter(User.id == user_id).first()
+    if not user:
+        return {"code": 404, "msg": "用户不存在"}
+    user.avatar = f"/uploads/{dest.name}"
+    db.commit()
+    return {"code": 200, "msg": "头像已更新", "url": user.avatar}
+
+
+class AvatarSelectForm(BaseModel):
+    avatar: str  # 内置煤球头像路径，如 /static/avatars/1.png
+
+
+@router.post('/user/avatar/select', summary='选择内置煤球头像')
+def select_avatar(
+    form: AvatarSelectForm,
+    user_id: Optional[int] = Depends(get_optional_user_id),
+    db: Session = Depends(get_db),
+):
+    if not user_id:
+        return {"code": 401, "msg": "未登录"}
+    avatar = form.avatar.strip()
+    if not avatar.startswith("/static/avatars/"):
+        return {"code": 400, "msg": "非法头像路径"}
+    user = db.query(User).filter(User.id == user_id).first()
+    if not user:
+        return {"code": 404, "msg": "用户不存在"}
+    user.avatar = avatar
+    db.commit()
+    return {"code": 200, "msg": "头像已更新", "url": user.avatar}
+
+
+@router.post('/user/password', summary='修改密码')
+def update_password(
+    form: UpdatePasswordForm,
+    user_id: Optional[int] = Depends(get_optional_user_id),
+    db: Session = Depends(get_db),
+):
+    if not user_id:
+        return {"code": 401, "msg": "未登录"}
+    if len(form.new_password) < 6:
+        return {"code": 400, "msg": "新密码至少6位"}
+    if form.new_password != form.confirm_password:
+        return {"code": 400, "msg": "两次新密码不一致"}
+    user = db.query(User).filter(User.id == user_id).first()
+    if not user:
+        return {"code": 404, "msg": "用户不存在"}
+    if not verify_password(form.old_password, user.password):
+        return {"code": 400, "msg": "原密码错误"}
+    user.password = hash_password(form.new_password)
+    db.commit()
+    return {"code": 200, "msg": "密码修改成功"}
+
+
+# ==================================================================
+# 短信验证码登录
+# ==================================================================
+
+@router.post('/login/sms', summary='短信验证码登录')
+def login_by_sms(
+        form: SmsLoginForm,
+        db: Session = Depends(get_db),
+):
+    phone = form.phone.strip()
+    if not _is_valid_phone(phone):
+        return {"code": 400, "msg": "手机号格式不正确"}
+
+    cached = _sms_codes.get(phone)
+    now = _time_mod.time()
+    if not cached or cached.get("expire", 0) < now:
+        return {"code": 400, "msg": "验证码已过期，请重新获取"}
+    if cached.get("code") != form.code.strip():
+        return {"code": 400, "msg": "验证码错误"}
+
+    existing_user = db.query(User).filter(User.phone == phone).first()
+    if not existing_user:
+        return {"code": 404, "msg": "该手机号未注册，请先注册"}
+
+    _sms_codes.pop(phone, None)
+
+    token: str = create_access_token({'user_id': existing_user.id})
+    return _token_response({
+        "code": 200,
+        "msg": "登录成功",
+        "token": token,
+        "user_id": existing_user.id,
+        "username": existing_user.nickname or existing_user.username,
+    }, token)
+
+
+# ==================================================================
+# 用户名登录 + 注册
+# ==================================================================
+
+@router.post('/login', summary='登录')
+def login(
+        form: LoginForm,
+        db: Session = Depends(get_db),
+
+):
+    existing_user = db.query(User).filter(
+        (User.username == form.username) | (User.phone == form.username),
+    ).first()
+    if existing_user and verify_password(form.password, existing_user.password):
+        if needs_rehash(existing_user.password):
+            existing_user.password = hash_password(form.password)
+            db.commit()
+        token: str = create_access_token({'user_id': existing_user.id})
+        return _token_response({
+            "code": 200,
+            "msg": "登录成功",
+            "token": token,
+            "user_id": existing_user.id,
+            "username": existing_user.nickname or existing_user.username,
+        }, token)
+    else:
+        return {
+            "code": 401,
+            "msg": "用户名或密码错误"
+        }
+
+
+@router.post('/register', summary='注册')
+def register(
+        form: RegisterForm,
+        db: Session = Depends(get_db)
+):
+    existed_user = db.query(User).filter(
+        User.username == form.username,
+    ).first()
+    if existed_user:
+        return {'code': 401, "msg": "已存在用户名"}
+    else:
+        new_user = User(
+            username=form.username,
+            password=hash_password(form.password),
+        )
+        db.add(new_user)
+        db.commit()
+        db.refresh(new_user)
+        token: str = create_access_token({'user_id': new_user.id})
+        return _token_response({
+            "code": 200,
+            "msg": "注册成功",
+            "token": token,
+            "user_id": new_user.id,
+            "username": new_user.nickname or new_user.username,
+        }, token)
+
+
+# ==================================================================
+# LLM 设置（桌面端引导填写 API Key）
+# ==================================================================
+
+class LLMSettingsForm(BaseModel):
+    llm_api_key: str = ""
+    llm_base_url: str = ""
+    llm_model: str = ""
+
+
+def _read_env_dict() -> dict:
+    """读取 data_dir/.env 为 dict（保留注释行靠后处理）。"""
+    from app.core.paths import env_file
+    p = env_file()
+    if not p.exists():
+        return {}
+    d = {}
+    for line in p.read_text(encoding="utf-8").splitlines():
+        line = line.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        k, _, v = line.partition("=")
+        d[k.strip()] = v.strip()
+    return d
+
+
+def _write_env_updates(updates: dict):
+    """把 key=value 写回 data_dir/.env，保留已有行，仅更新/追加。"""
+    from app.core.paths import env_file
+    p = env_file()
+    lines = p.read_text(encoding="utf-8").splitlines() if p.exists() else []
+    out = []
+    seen = set()
+    for line in lines:
+        s = line.strip()
+        if s and not s.startswith("#") and "=" in s:
+            k = s.split("=", 1)[0].strip()
+            if k in updates:
+                out.append(f"{k}={updates[k]}")
+                seen.add(k)
+                continue
+        out.append(line)
+    for k, v in updates.items():
+        if k not in seen:
+            out.append(f"{k}={v}")
+    p.write_text("\n".join(out) + "\n", encoding="utf-8")
+
+
+@router.get('/api/settings/llm', summary='获取当前 LLM 配置（key 脱敏）')
+def get_llm_settings():
+    from app.config import LLM_API_KEY, LLM_BASE_URL, LLM_MODEL
+    masked = LLM_API_KEY[:4] + "****" + LLM_API_KEY[-4:] if len(LLM_API_KEY) > 8 else ("已配置" if LLM_API_KEY else "")
+    return {
+        "code": 200,
+        "llm_api_key_masked": masked,
+        "llm_base_url": LLM_BASE_URL,
+        "llm_model": LLM_MODEL,
+        "configured": bool(LLM_API_KEY),
+    }
+
+
+@router.post('/api/settings/llm', summary='保存 LLM 配置到本地 .env')
+def set_llm_settings(form: LLMSettingsForm):
+    updates = {}
+    if form.llm_api_key.strip():
+        updates["LLM_API_KEY"] = form.llm_api_key.strip()
+    if form.llm_base_url.strip():
+        updates["LLM_BASE_URL"] = form.llm_base_url.strip()
+    if form.llm_model.strip():
+        updates["LLM_MODEL"] = form.llm_model.strip()
+    if not updates:
+        return {"code": 400, "msg": "没有需要保存的配置"}
+    _write_env_updates(updates)
+    return {"code": 200, "msg": "已保存，重启后生效（或刷新页面重新加载配置）"}
