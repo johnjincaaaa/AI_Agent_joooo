@@ -1,0 +1,207 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <title>捏小人 · Jingent创作中心</title>
+    <script>
+        (function () {
+            try {
+                var saved = localStorage.getItem('jingent_colormode') || localStorage.getItem('app_theme');
+                if (saved === 'light') {
+                    document.documentElement.setAttribute('data-theme', 'light');
+                    document.documentElement.setAttribute('data-color-mode', 'light');
+                } else if (saved === 'dark') {
+                    document.documentElement.setAttribute('data-color-mode', 'dark');
+                }
+            } catch (e) {}
+        })();
+    </script>
+    <link rel="stylesheet" href="/static/css/page_chat.css?v={{ ASSET_VERSION }}">
+    <link rel="stylesheet" href="/static/css/page_home.css?v={{ ASSET_VERSION }}">
+    <link rel="stylesheet" href="/static/css/create.css?v={{ ASSET_VERSION }}">
+    <link rel="icon" href="/static/c.ico" type="image/x-icon">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+</head>
+<body class="page-create-edit">
+
+<!-- 顶部栏：返回 + 标题 + 保存 -->
+<div class="top-bar" id="topBar">
+    <div class="top-bar-left">
+        <a href="/chat/create" class="create-back" title="返回创作中心">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                <polyline points="15 18 9 12 15 6"></polyline>
+            </svg>
+            <span>返回</span>
+        </a>
+        <div class="create-title">
+            <h1 class="create-title-main" id="editTitle">捏小人</h1>
+            <span class="create-title-sub" id="editSub">独立记忆体创建 + 宠物模型</span>
+        </div>
+    </div>
+    <div class="top-bar-right">
+        <button class="create-save-btn" id="saveDraftBtn">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"></path>
+                <polyline points="17 21 17 13 7 13 7 21"></polyline>
+                <polyline points="7 3 7 8 15 8"></polyline>
+            </svg>
+            <span>保存为草稿</span>
+        </button>
+    </div>
+</div>
+
+<div class="app-shell">
+    <!-- 单页独立界面：独立记忆体创建 + 宠物模型 合并展示，左表单 + 右实时预览 -->
+    <div class="create-main create-edit-main create-edit-split">
+      <div class="create-edit-forms">
+        <!-- 独立记忆体创建面板 -->
+        <div class="edit-pane active" id="paneSoul">
+            <div class="edit-pane-title">独立记忆体创建</div>
+            <div class="edit-section">
+                <label class="edit-label">角色名称 <span class="edit-required">*</span></label>
+                <input class="edit-input" id="inputName" placeholder="给你的小人起个名字" maxlength="50">
+            </div>
+            <div class="edit-section">
+                <label class="edit-label">一句话简介</label>
+                <input class="edit-input" id="inputDesc" placeholder="卡片上展示的一句话介绍" maxlength="200">
+            </div>
+            <div class="edit-section">
+                <label class="edit-label">独立记忆体创建 <span class="edit-required">*</span></label>
+                <textarea class="edit-textarea" id="inputPersona" rows="8" placeholder="写清楚小人的性格、说话方式、背景故事…（提交审核前必填）"></textarea>
+            </div>
+            <div class="edit-section">
+                <label class="edit-label">开场白</label>
+                <textarea class="edit-textarea" id="inputOpening" rows="3" placeholder="第一次见面时 TA 会说什么" maxlength="300"></textarea>
+            </div>
+            <div class="edit-section">
+                <label class="edit-label">硬性规则（一行一条）</label>
+                <textarea class="edit-textarea" id="inputRules" rows="4" placeholder="例如：&#10;篇幅优先短句，大多 1~2 行&#10;全程伪装成真人，不说自己是 AI"></textarea>
+            </div>
+            <div class="edit-section">
+                <label class="edit-label">人设参数</label>
+                <div class="edit-param-item">
+                    <div class="edit-param-label">
+                        <span class="edit-param-name">主动发消息</span>
+                        <span class="edit-param-desc">关闭后角色不再主动找你聊天</span>
+                    </div>
+                    <label class="char-switch">
+                        <input type="checkbox" id="inputActive">
+                        <span class="char-switch-slider"></span>
+                    </label>
+                </div>
+                <div class="edit-param-item">
+                    <div class="edit-param-label">
+                        <span class="edit-param-name">语气浓度</span>
+                        <span class="edit-param-desc">清淡 · 自然 · 黏人</span>
+                    </div>
+                    <div class="char-seg" id="inputToneSeg">
+                        <button data-value="light">清淡</button>
+                        <button data-value="normal" class="active">自然</button>
+                        <button data-value="clingy">黏人</button>
+                    </div>
+                </div>
+                <div class="edit-param-item">
+                    <div class="edit-param-label">
+                        <span class="edit-param-name">表情包频率</span>
+                        <span class="edit-param-desc">少 · 适中 · 多</span>
+                    </div>
+                    <div class="char-seg" id="inputMemeSeg">
+                        <button data-value="low">少</button>
+                        <button data-value="normal" class="active">适中</button>
+                        <button data-value="high">多</button>
+                    </div>
+                </div>
+                <div class="edit-param-item">
+                    <div class="edit-param-label">
+                        <span class="edit-param-name">记忆敏感度</span>
+                        <span class="edit-param-desc">低只记大事，高记住细碎小事</span>
+                    </div>
+                    <div class="char-seg" id="inputMemorySeg">
+                        <button data-value="low">低</button>
+                        <button data-value="high" class="active">高</button>
+                    </div>
+                </div>
+                <div class="edit-param-item">
+                    <div class="edit-param-label">
+                        <span class="edit-param-name">音色（记忆体语音）</span>
+                        <span class="edit-param-desc">这个小人说话的声音，可选默认或自定义音色</span>
+                    </div>
+                    <div class="edit-voice-row">
+                        <select class="edit-select" id="inputVoice">
+                            <option value="">默认音色</option>
+                        </select>
+                        <button class="create-secondary-btn" id="refreshVoiceBtn" type="button">刷新</button>
+                    </div>
+                    <div class="edit-voice-tip" id="voiceTip">音色来自本地 VoiceStudio 服务</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 宠物模型面板 -->
+        <div class="edit-pane active" id="paneModel">
+            <div class="edit-pane-title">宠物模型</div>
+            <div class="edit-section">
+                <label class="edit-label">形象图片</label>
+                <div class="edit-avatar-row">
+                    <div class="edit-avatar-preview" id="avatarPreview">
+                        <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                            <circle cx="12" cy="12" r="10"></circle>
+                            <circle cx="12" cy="10" r="3"></circle>
+                            <path d="M7 20.66V19a5 5 0 0 1 10 0v1.66"></path>
+                        </svg>
+                    </div>
+                    <button class="create-secondary-btn" id="uploadAvatarBtn">上传形象</button>
+                    <input type="file" id="avatarFileInput" accept="image/*" hidden>
+                </div>
+            </div>
+            <div class="edit-section">
+                <label class="edit-label">外观描述（形象描述生成）</label>
+                <textarea class="edit-textarea" id="inputAppearance" rows="6" placeholder="描述 TA 长什么样：发色、瞳色、服装、气质…"></textarea>
+            </div>
+            <div class="edit-section">
+                <label class="edit-label">标签（逗号分隔）</label>
+                <input class="edit-input" id="inputTags" placeholder="例如：傲娇, 陪伴, 治愈" maxlength="100">
+            </div>
+        </div>
+      </div>
+
+      <!-- 实时预览：边填边看效果 -->
+      <aside class="create-edit-preview" id="editPreview">
+        <div class="edit-preview-label">实时预览</div>
+        <div class="edit-preview-card">
+            <div class="edit-preview-avatar" id="pvAvatar">
+                <svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                    <circle cx="12" cy="12" r="10"></circle>
+                    <circle cx="12" cy="10" r="3"></circle>
+                    <path d="M7 20.66V19a5 5 0 0 1 10 0v1.66"></path>
+                </svg>
+            </div>
+            <div class="edit-preview-name" id="pvName">未命名小人</div>
+            <div class="edit-preview-desc" id="pvDesc">这个人很懒，还没写简介</div>
+            <div class="edit-preview-tags" id="pvTags"></div>
+        </div>
+        <div class="edit-preview-chat">
+            <div class="edit-preview-bubble-row">
+                <div class="edit-preview-bubble-avatar" id="pvBubbleAvatar">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                        <circle cx="12" cy="12" r="10"></circle>
+                        <circle cx="12" cy="10" r="3"></circle>
+                        <path d="M7 20.66V19a5 5 0 0 1 10 0v1.66"></path>
+                    </svg>
+                </div>
+                <div class="edit-preview-bubble" id="pvOpening">你好呀，很高兴认识你～</div>
+            </div>
+        </div>
+        <div class="edit-preview-chips" id="pvChips"></div>
+      </aside>
+    </div>
+</div>
+
+<script src="/static/js/config.js?v={{ ASSET_VERSION }}"></script>
+<script src="/static/js/theme-bar.js?v={{ ASSET_VERSION }}"></script>
+<script src="/static/js/theme.js?v={{ ASSET_VERSION }}"></script>
+<script src="/static/js/showLoginExpiredModal.js?v={{ ASSET_VERSION }}"></script>
+<script src="/static/js/create_edit.js?v={{ ASSET_VERSION }}"></script>
+{{ plugin_scripts(request.url.path) | safe }}
+</body>
+</html>

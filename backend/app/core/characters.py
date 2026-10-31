@@ -12,7 +12,7 @@ from pathlib import Path
 from typing import Dict, List, Optional
 
 from app.core.db import SessionLocal
-from app.core.db.models import User
+from app.core.db.models import User, CustomCharacter
 
 logger = logging.getLogger(__name__)
 
@@ -59,6 +59,45 @@ def load_character(char_id: str) -> Optional[dict]:
         return None
 
 
+def _load_custom_character(char_id: str) -> Optional[dict]:
+    """从数据库加载自定义角色（npc_ 前缀），转成与内置角色包一致的 dict。
+
+    CustomCharacter 与内置 JSON 结构对齐，build_character_prompt 需要的字段：
+    persona / rules / style / opening / name / description / voice / tags。
+    """
+    if not char_id.startswith("npc_"):
+        return None
+    npc_id = char_id[len("npc_"):]
+    db = SessionLocal()
+    try:
+        from app.core.db.models import CustomCharacter as CC
+        cc = db.query(CC).filter(CC.npc_id == npc_id).first()
+        if not cc:
+            return None
+        # 只有审核通过（approved）的角色才能参与对话；草稿/审核中/拒绝不可用
+        if cc.status != "approved":
+            return None
+        return {
+            "id": char_id,
+            "name": cc.name or "自定义角色",
+            "description": cc.description or "",
+            "persona": cc.persona or "",
+            "opening": cc.opening or "",
+            "rules": cc.rules or [],
+            "style": cc.style or {},
+            "avatar": cc.avatar or "",
+            "appearance": cc.appearance or "",
+            "tags": cc.tags or [],
+            "voice": cc.voice or "",
+            "builtin": False,
+        }
+    except Exception as e:
+        logger.warning("[characters] 加载自定义角色 %s 失败: %s", char_id, e)
+        return None
+    finally:
+        db.close()
+
+
 def list_characters() -> List[dict]:
     """列出所有内置角色（按置顶优先，其余按文件名排序）。"""
     chars = []
@@ -98,13 +137,17 @@ def build_character_prompt(char: dict, settings: Optional[dict] = None) -> str:
         parts += [f"{i+1}. {r}" for i, r in enumerate(rules)]
 
     # ── 人设参数开关注入 ──
+    # 人设参数已收进捏小人编辑器，跟随角色走：角色 style 优先，全局 settings 兜底
     style = char.get("style", {})
-    tone = settings.get("tone") or style.get("tone") or "normal"
-    meme = settings.get("meme_frequency") or style.get("meme_frequency") or "normal"
-    active = settings.get("active_message")
+    tone = style.get("tone") or settings.get("tone") or "normal"
+    meme = style.get("meme_frequency") or settings.get("meme_frequency") or "normal"
+    active = style.get("active_topics")
     if active is None:
-        active = style.get("active_topics", True)
-    mem_sens = settings.get("memory_sensitivity", "high")
+        active = settings.get("active_message")
+    if active is None:
+        active = True
+    # 记忆敏感度：角色 style 自带（捏小人编辑器保存）优先，其次全局 settings，最后默认 high
+    mem_sens = style.get("memory_sensitivity") or settings.get("memory_sensitivity") or "high"
 
     extra = []
 
@@ -197,11 +240,40 @@ def get_current_character_id(user_id: Optional[int]) -> str:
 
 
 def resolve_character(char_id: Optional[str], user_id: Optional[int] = None) -> Optional[dict]:
-    """解析角色：优先用指定 char_id，否则用用户当前绑定角色，最后回退默认女仆。"""
+    """解析角色：优先用指定 char_id，否则用用户当前绑定角色，最后回退默认女仆。
+
+    支持三类角色：
+      1. 内置角色（JSON 包，如 maid/senpai/cool/heal/brat）
+      2. 自定义角色（npc_ 前缀，存数据库 CustomCharacter）
+      3. 都找不到时回退默认女仆 maid
+    """
     cid = char_id or get_current_character_id(user_id) or DEFAULT_CHARACTER_ID
+    # 内置角色包优先
     char = load_character(cid)
+    # 自定义角色（npc_ 前缀）从数据库加载
+    if not char:
+        char = _load_custom_character(cid)
+    # 兜底：默认女仆
     if not char:
         char = load_character(DEFAULT_CHARACTER_ID)
+    return char
+
+
+def save_character_voice(char_id: str, voice: str) -> Optional[dict]:
+    """给角色 JSON 写入音色绑定（内置 + 自定义统一走 JSON 的 voice 字段）。
+
+    返回更新后的角色 dict；角色不存在返回 None。voice 为空字符串表示清除绑定。
+    """
+    char = load_character(char_id)
+    if not char:
+        return None
+    path = CHARACTERS_DIR / f"{char_id}.json"
+    char["voice"] = (voice or "").strip()
+    try:
+        path.write_text(json.dumps(char, ensure_ascii=False, indent=2), encoding="utf-8")
+    except Exception as e:
+        logger.warning("[characters] 保存角色 %s 音色失败: %s", char_id, e)
+        return None
     return char
 
 

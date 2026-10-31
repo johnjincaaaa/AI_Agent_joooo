@@ -171,7 +171,8 @@
     border-color: #9D7BEA;
     box-shadow: 0 0 0 3px rgba(157, 123, 234, 0.18);
     outline: none;
-    background: rgba(13, 15, 19, 0.9);
+    background: var(--field-bg);
+    color: var(--modal-title);
 }
 
 /* 密码输入框 + 可视切换 */
@@ -189,7 +190,7 @@
 .password-field:focus-within {
     border-color: #9D7BEA;
     box-shadow: 0 0 0 3px rgba(157, 123, 234, 0.18);
-    background: rgba(13, 15, 19, 0.9);
+    background: var(--field-bg);
 }
 .password-field input {
     flex: 1;
@@ -199,6 +200,7 @@
     border: none;
     border-radius: 12px;
     background: transparent;
+    color: var(--modal-title);
     padding: 13px 44px 13px 16px;
     box-shadow: none;
 }
@@ -206,6 +208,7 @@
     border: none;
     box-shadow: none;
     background: transparent;
+    color: var(--modal-title);
 }
 .pwd-toggle-btn {
     position: absolute;
@@ -459,6 +462,13 @@
     align-items: center;
 }
 .memory-add-row input { flex: 1; }
+.memory-add-row .submit-btn {
+    width: auto;
+    flex-shrink: 0;
+    margin-top: 0;
+    padding: 10px 18px;
+    white-space: nowrap;
+}
 .memory-section {
     margin-top: 14px;
 }
@@ -486,6 +496,12 @@
     padding: 8px 10px;
     font-size: 13px;
     line-height: 1.5;
+}
+.memory-item[style*="--fam"] {
+    /* 熟悉度可视化：--fam 越大（越熟悉）背景越偏紫、越深；越小（陌生）越接近默认灰 */
+    background: linear-gradient(90deg,
+        rgba(157, 123, 234, calc(var(--fam) * 0.28)) 0%,
+        var(--bg-elevated, #1c2027) 70%);
 }
 .memory-item .memory-content { flex: 1; word-break: break-word; }
 .memory-item .memory-cat {

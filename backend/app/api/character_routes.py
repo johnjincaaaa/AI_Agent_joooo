@@ -11,8 +11,8 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
-from app.core.db import get_db, ChatSession
-from app.core.db.models import User
+from app.core.db import get_db, ChatSession, SessionLocal
+from app.core.db.models import User, CustomCharacter
 from app.core.token_utils import get_optional_user_id, verify_token
 from app.core import characters as charsvc
 
@@ -47,6 +47,10 @@ class PinReq(BaseModel):
     pin: bool = True
 
 
+class SetVoiceReq(BaseModel):
+    voice: str = ""            # 音色 ID/名字，空字符串 = 清除绑定
+
+
 # ── 工具函数 ────────────────────────────────────────────────
 
 def _public_view(char: dict, prefs: dict) -> dict:
@@ -61,6 +65,7 @@ def _public_view(char: dict, prefs: dict) -> dict:
         "builtin": char.get("builtin", False),
         "opening": char.get("opening", ""),
         "style": char.get("style", {}),
+        "voice": char.get("voice", ""),
         "is_favorite": char.get("id") in (prefs.get("favorites") or []),
         "is_pinned": char.get("id") in (prefs.get("pinned") or []),
         "is_current": char.get("id") == (prefs.get("current_character") or charsvc.DEFAULT_CHARACTER_ID),
@@ -96,6 +101,43 @@ def get_character(char_id: str, user_id: Optional[int] = Depends(get_optional_us
         raise HTTPException(status_code=404, detail="角色不存在")
     prefs = charsvc.get_user_prefs(user_id)
     return _public_view(char, prefs)
+
+
+@router.delete("/ai/characters/{char_id}")
+def delete_character(char_id: str, user_id: Optional[int] = Depends(get_optional_user_id), db: Session = Depends(get_db)):
+    """删除角色包 JSON（用户上传角色）。默认角色不可删除。"""
+    if not user_id:
+        raise HTTPException(status_code=401, detail="请先登录")
+    char = charsvc.load_character(char_id)
+    if not char:
+        raise HTTPException(status_code=404, detail="角色不存在")
+    # 默认角色兜底保护：系统至少保留一个可回退的角色
+    if char_id == charsvc.DEFAULT_CHARACTER_ID:
+        raise HTTPException(status_code=400, detail="默认角色不可删除，请先切换到其他角色")
+
+    path = charsvc.CHARACTERS_DIR / f"{char_id}.json"
+    try:
+        if path.exists():
+            path.unlink()
+    except Exception as e:
+        logger.warning("[characters] 删除角色 %s 失败: %s", char_id, e)
+        raise HTTPException(status_code=500, detail=f"删除失败：{e}")
+
+    # 若当前用户绑定的是被删角色，重置回默认角色
+    prefs = charsvc.get_user_prefs(user_id)
+    if prefs.get("current_character") == char_id:
+        charsvc.save_user_prefs(user_id, {"current_character": charsvc.DEFAULT_CHARACTER_ID})
+        main_session = (
+            db.query(ChatSession)
+            .filter(ChatSession.user_id == user_id, ChatSession.chat_type == "main")
+            .order_by(ChatSession.id.asc())
+            .first()
+        )
+        if main_session:
+            main_session.character_id = charsvc.DEFAULT_CHARACTER_ID
+            db.commit()
+
+    return {"ok": True, "character_id": char_id}
 
 
 # ── 导入角色 ────────────────────────────────────────────────
@@ -176,6 +218,30 @@ def share_character(char_id: str, request: Request):
     }
 
 
+# ── 设置角色音色（独立记忆体语音绑定） ─────────────────────
+
+@router.post("/ai/characters/{char_id}/voice")
+def set_character_voice(char_id: str, req: SetVoiceReq, user_id: Optional[int] = Depends(get_optional_user_id)):
+    """给角色（内置/自定义）绑定音色，写入角色 JSON 的 voice 字段。"""
+    if not user_id:
+        raise HTTPException(status_code=401, detail="请先登录")
+    char = charsvc.save_character_voice(char_id, req.voice)
+    if not char:
+        raise HTTPException(status_code=404, detail="角色不存在")
+    # 自定义角色（npc_ 前缀）同步数据库 CustomCharacter.voice，保证捏小人编辑页回显一致
+    if char_id.startswith("npc_"):
+        npc_id = char_id[len("npc_"):]
+        db = SessionLocal()
+        try:
+            cc = db.query(CustomCharacter).filter(CustomCharacter.npc_id == npc_id).first()
+            if cc:
+                cc.voice = (req.voice or "").strip()
+                db.commit()
+        finally:
+            db.close()
+    return {"ok": True, "character_id": char_id, "voice": (req.voice or "").strip()}
+
+
 # ── 绑定角色到主对话 ────────────────────────────────────────
 
 @router.post("/ai/characters/select")
@@ -203,16 +269,15 @@ def select_character(req: SelectCharacterReq, user_id: Optional[int] = Depends(g
             .first()
         )
         if main_session:
-            from app.core.db import Message
             main_session.character_id = req.character_id
-            # 清空该主对话下的所有历史消息（旧人格对话作废）
-            db.query(Message).filter(Message.session_id == main_session.id).delete()
             db.commit()
 
     return {
         "character_id": req.character_id,
         "name": char.get("name"),
+        "avatar": char.get("avatar", ""),
         "opening": char.get("opening", ""),
+        "voice": char.get("voice", ""),
     }
 
 

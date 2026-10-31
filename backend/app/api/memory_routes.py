@@ -22,15 +22,16 @@ from app.core.token_utils import verify_token
 logger = logging.getLogger(__name__)
 router = APIRouter()
 
-# 抽取提示词：只提取“关于用户本人”的稳定信息
+# 抽取提示词：只提取“关于用户本人”的稳定信息（docs 模块1 Schema）
 EXTRACT_PROMPT = (
-    "你是记忆提取器。从下面的对话中，提取关于【用户本人】的值得长期记住的稳定信息。\n"
-    "提取范围：个人信息（姓名/职业/所在地等）、长期喜好与偏好、习惯、目标与计划、"
-    "情绪状态、重要生活事件。\n"
-    "不提取：一次性寒暄、临时请求、AI 的自我介绍、明显冲突的临时情绪。\n"
-    "对每条信息用一句话概括，客观陈述，不要出现『用户说/表示』等转述词。\n"
+    "你是记忆提取器。从下面的对话里提取值得长期记住的事实、偏好、人设细节。\n"
+    "过滤临时一次性内容：禁止提取临时问答、单次任务结果、转瞬即逝的闲聊。\n"
+    "对每条信息用一句话客观概括，不要出现『用户说/表示』等转述词；\n"
+    "事件类记忆要结合时间一起存储（例：2025年10月开始在深圳实习），但不要刻意，允许记忆模糊。\n"
+    "tag 只能三选一：个人信息、喜好偏好、其他。\n"
+    "判断是否和已有记忆重复，动作只能是：ADD / UPDATE / SKIP。\n"
     "只输出 JSON 数组，不要多余文字：\n"
-    '[{"content": "一句话事实", "category": "个人信息|喜好偏好|目标计划|情绪状态|重要事件|其他"}]'
+    '[{"content": "一句话事实", "tag": "个人信息|喜好偏好|其他", "action": "ADD|UPDATE|SKIP"}]'
 )
 
 
@@ -39,6 +40,7 @@ class MemoryCreate(BaseModel):
     content: str
     category: Optional[str] = None
     source: str = "manual"
+    character_id: Optional[str] = None  # 角色 ID；缺省用当前绑定角色
 
 
 class ExtractRequest(BaseModel):
@@ -90,6 +92,42 @@ def _init_extract_llm(base_url: str, model: str, api_key: str):
     )
 
 
+def extract_facts_from_history_sync(
+        history_text: str,
+        base_url: str,
+        model: str,
+        api_key: str,
+) -> List[dict]:
+    """从完整对话历史里同步抽取事实（供后台任务/手动端点复用）。
+
+    history_text：多轮对话拼接文本（含角色标注）。
+    """
+    try:
+        llm = _init_extract_llm(base_url, model, api_key)
+        resp = llm.invoke(
+            [
+                {"role": "system", "content": EXTRACT_PROMPT},
+                {"role": "user", "content": history_text},
+            ]
+        )
+        facts = _parse_json_array(getattr(resp, "content", "") or "")
+        # 归一化：兼容 tag/category 两种字段，动作 SKIP 的丢弃
+        normalized = []
+        for f in facts:
+            content = (f.get("content") or "").strip()
+            if not content:
+                continue
+            action = (f.get("action") or "ADD").upper()
+            if action == "SKIP":
+                continue
+            tag = f.get("tag") or f.get("category") or "其他"
+            normalized.append({"content": content, "category": tag[:30], "action": action})
+        return normalized
+    except Exception as e:
+        logger.warning("[memory] 抽取失败: %s", e)
+        return []
+
+
 def extract_facts_sync(
         user_message: str,
         ai_reply: str,
@@ -97,41 +135,68 @@ def extract_facts_sync(
         model: str,
         api_key: str,
 ) -> List[dict]:
-    """同步抽取一条对话里的用户事实（供后台任务/手动端点复用）。"""
+    """同步抽取一条对话里的用户事实（供手动端点复用）。"""
+    return extract_facts_from_history_sync(
+        f"用户：{user_message}\n\nAI：{ai_reply}",
+        base_url, model, api_key,
+    )
+
+
+def _resolve_character_id(user_id: int, explicit_cid: Optional[str] = None) -> str:
+    """解析记忆归属角色：显式传入优先，否则用用户当前绑定角色，最后回退默认女仆。"""
+    if explicit_cid:
+        return explicit_cid
     try:
-        llm = _init_extract_llm(base_url, model, api_key)
-        resp = llm.invoke(
-            [
-                {"role": "system", "content": EXTRACT_PROMPT},
-                {"role": "user", "content": f"用户：{user_message}\n\nAI：{ai_reply}"},
-            ]
-        )
-        return _parse_json_array(getattr(resp, "content", "") or "")
-    except Exception as e:
-        logger.warning("[memory] 抽取失败: %s", e)
-        return []
+        from app.core import characters as charsvc
+        return charsvc.get_current_character_id(user_id)
+    except Exception:
+        return "maid"
 
 
-def save_extracted_facts(db: Session, user_id: int, facts: List[dict]) -> int:
-    """把抽取到的事实入库（content 去重），返回新增条数。"""
+def save_extracted_facts(db: Session, user_id: int, facts: List[dict], character_id: Optional[str] = None) -> int:
+    """把抽取到的事实入库（embedding 相似度去重 + 精确去重，按角色隔离），返回新增条数。
+
+    去重策略（docs/memory-system-design.md 模块1）：
+    1. 先按 content 精确匹配去重（零成本）
+    2. 再用 embedding 余弦相似度 > 0.85 判定重复，跳过新增
+    """
+    from app.core import memory_engine as me
+    cid = _resolve_character_id(user_id, character_id)
     added = 0
     for fact in facts:
         content = (fact.get("content") or "").strip()
         if not content or len(content) > 500:
             continue
+        # 精确去重
         exists = (
             db.query(Memory)
-            .filter(Memory.user_id == user_id, Memory.type == "detail", Memory.content == content)
+            .filter(Memory.user_id == user_id, Memory.character_id == cid,
+                    Memory.type == "detail", Memory.content == content)
             .first()
         )
         if exists:
             continue
+        # embedding 相似度去重（后台线程内同步算，不影响流式回复）
+        vec = me.embed_text(content)
+        if vec and me.find_duplicate(db, user_id, cid, vec):
+            logger.info("[memory] 相似记忆已存在，跳过: %s", content[:40])
+            continue
+        # importance：抽取的事实默认 0.5；含强烈个人标识（姓名/职业/目标）可略高
+        importance = 0.5
+        cat = (fact.get("category") or "其他")[:30]
+        if cat in ("个人信息", "目标计划", "重要事件"):
+            importance = 0.7
         db.add(Memory(
             user_id=user_id,
             type="detail",
-            category=(fact.get("category") or "其他")[:30],
+            category=cat,
             content=content,
             source="extract",
+            character_id=cid,
+            importance=importance,
+            weight=1.0,
+            access_count=0,
+            embedding=me.encode_embedding(vec),
         ))
         added += 1
     db.commit()
@@ -142,16 +207,29 @@ def save_extracted_facts(db: Session, user_id: int, facts: List[dict]) -> int:
 # 端点
 # ==================================================================
 
-@router.get("/ai/memories", summary="获取我的记忆（全局 + 细节）")
+@router.get("/ai/memories", summary="获取我的记忆（全局 + 细节，按角色隔离）")
 def list_memories(
         user_id: int = Depends(verify_token),
         type: Optional[str] = Query(None, pattern="^(global|detail)$"),
+        character_id: Optional[str] = Query(None, description="角色 ID；缺省用当前绑定角色"),
         limit: int = Query(50, ge=1, le=200),
         db: Session = Depends(get_db),
 ):
+    cid = _resolve_character_id(user_id, character_id)
     q = db.query(Memory).filter(Memory.user_id == user_id)
-    if type:
-        q = q.filter(Memory.type == type)
+    if type == "global":
+        # 全局画像跨角色共享（不按 character_id 过滤）
+        q = q.filter(Memory.type == "global")
+    elif type == "detail":
+        # 细节记忆按角色隔离
+        q = q.filter(Memory.type == "detail", Memory.character_id == cid)
+    else:
+        # 不指定 type：global 全量 + 当前角色的 detail
+        from sqlalchemy import or_
+        q = q.filter(or_(
+            Memory.type == "global",
+            (Memory.type == "detail") & (Memory.character_id == cid),
+        ))
     rows = q.order_by(Memory.id.desc()).limit(limit).all()
     return {
         "code": 200,
@@ -162,6 +240,10 @@ def list_memories(
                 "category": m.category,
                 "content": m.content,
                 "source": m.source,
+                "character_id": m.character_id,
+                "importance": m.importance,
+                "weight": m.weight,
+                "access_count": m.access_count,
                 "created_at": m.created_at.isoformat() if m.created_at else None,
             }
             for m in rows
@@ -180,12 +262,18 @@ def create_memory(
         raise HTTPException(status_code=400, detail="记忆内容不能为空")
     if len(content) > 500:
         raise HTTPException(status_code=400, detail="记忆内容过长（<=500字）")
+    mem_type = body.type if body.type in ("global", "detail") else "detail"
     mem = Memory(
         user_id=user_id,
-        type=body.type if body.type in ("global", "detail") else "detail",
+        type=mem_type,
         category=(body.category or "其他")[:30] if body.category else None,
         content=content,
         source=body.source or "manual",
+        # 全局画像 = 用户级（不绑定角色）；细节记忆 = 绑定当前角色
+        character_id=None if mem_type == "global" else _resolve_character_id(user_id, body.character_id),
+        importance=0.8 if mem_type == "global" else 0.5,
+        weight=1.0,
+        access_count=0,
     )
     db.add(mem)
     db.commit()

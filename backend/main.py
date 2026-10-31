@@ -47,7 +47,7 @@ from app.tools.skills_registry import get_skill_catalog, resolve_tools
 from app.services.job_mock_data import RESUME_TEMPLATES, MOCK_JOBS, match_jobs
 
 # 路由模块
-from app.api import chat_routes, job_routes, admin_routes, auth_routes, memory_routes, character_routes
+from app.api import chat_routes, job_routes, admin_routes, auth_routes, memory_routes, character_routes, create_routes, pet_market_routes, tts_routes
 
 # Middleware
 from app.core.middleware import add_request_middleware
@@ -70,10 +70,20 @@ app.mount("/static", StaticFiles(directory=str(resource_path("static"))), name="
 UPLOAD_DIR = uploads_dir()
 app.mount("/uploads", StaticFiles(directory=str(UPLOAD_DIR)), name="uploads")
 
-# 角色系统头像静态资源（/plugins/characters/avatars/xxx.svg）
-_characters_avatars = resource_path("static") / "plugins" / "characters" / "avatars"
+# 角色系统头像静态资源（/plugins/avatars/xxx.png|webp，与 characters 同级）
+_characters_avatars = resource_path("static") / "plugins" / "avatars"
 _characters_avatars.mkdir(parents=True, exist_ok=True)
-app.mount("/plugins/characters/avatars", StaticFiles(directory=str(_characters_avatars)), name="character-avatars")
+app.mount("/plugins/avatars", StaticFiles(directory=str(_characters_avatars)), name="character-avatars")
+
+# 宠物自定义资源（/plugins/dsh-pet/user-assets/<user_id>/webm|memes|sound/xxx）
+from app.core.pet_assets import PET_ASSETS_ROOT
+PET_ASSETS_ROOT.mkdir(parents=True, exist_ok=True)
+app.mount("/plugins/dsh-pet/user-assets", StaticFiles(directory=str(PET_ASSETS_ROOT)), name="pet-user-assets")
+
+# 宠物插件市场资源（/plugins/pets/<pet_id>/webm|preview.png，与 dsh-pet 同级）
+from app.core.pet_market import PETS_ROOT
+PETS_ROOT.mkdir(parents=True, exist_ok=True)
+app.mount("/plugins/pets", StaticFiles(directory=str(PETS_ROOT)), name="pet-market-pets")
 from fastapi.templating import Jinja2Templates
 templates = Jinja2Templates(directory=str(resource_path("templates")))
 
@@ -140,6 +150,18 @@ logger.info("[Boot] Memory routes loaded (api/memory_routes.py)")
 # 角色系统（角色市场 / 导入 / 收藏 / 置顶 / 分享 / 绑定 / 人设参数开关）
 app.include_router(character_routes.router)
 logger.info("[Boot] Character routes loaded (api/character_routes.py)")
+
+# Jingent 创作中心（/chat/create：自定义角色创建 / 草稿 / 审核 / 使用）
+app.include_router(create_routes.router)
+logger.info("[Boot] Create-center routes loaded (api/create_routes.py)")
+
+# DSH 宠物插件市场（git 导入 / AI 安装 / 切换 / 卸载）
+app.include_router(pet_market_routes.router)
+logger.info("[Boot] Pet-market routes loaded (api/pet_market_routes.py)")
+
+# 记忆体语音（VoiceStudio 本地语音服务代理：合成 / 音色 / 转录 / 健康检查）
+app.include_router(tts_routes.router)
+logger.info("[Boot] TTS routes loaded (api/tts_routes.py)")
 
 # 主动发消息（主对话 AI 定时主动开启话题）
 from app.core.active_chat import start_active_chat_worker

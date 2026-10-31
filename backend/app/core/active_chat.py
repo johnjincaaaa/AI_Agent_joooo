@@ -157,6 +157,7 @@ def _check_and_activate():
                 role="ai",
                 content=text,
                 reactions={},
+                character_id=session.character_id,
             ))
             # 记录发送时间 + 连续未回应计数 +1（持久化）
             _last_active_sent[user_id] = time.time()

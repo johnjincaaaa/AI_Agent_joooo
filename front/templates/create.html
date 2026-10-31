@@ -1,0 +1,202 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <title>Jingent创作中心</title>
+    <script>
+        (function () {
+            try {
+                var saved = localStorage.getItem('jingent_colormode') || localStorage.getItem('app_theme');
+                if (saved === 'light') {
+                    document.documentElement.setAttribute('data-theme', 'light');
+                    document.documentElement.setAttribute('data-color-mode', 'light');
+                } else if (saved === 'dark') {
+                    document.documentElement.setAttribute('data-color-mode', 'dark');
+                }
+            } catch (e) {}
+        })();
+    </script>
+    <link rel="stylesheet" href="/static/css/page_chat.css?v={{ ASSET_VERSION }}">
+    <link rel="stylesheet" href="/static/css/page_home.css?v={{ ASSET_VERSION }}">
+    <link rel="stylesheet" href="/static/css/character.css?v={{ ASSET_VERSION }}">
+    <link rel="stylesheet" href="/static/css/create.css?v={{ ASSET_VERSION }}">
+    <link rel="icon" href="/static/c.ico" type="image/x-icon">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+</head>
+<body class="page-create">
+
+<!-- 顶部栏：返回 + 标题 -->
+<div class="top-bar" id="topBar">
+    <div class="top-bar-left">
+        <a href="/chat" class="create-back" title="返回主对话">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                <polyline points="15 18 9 12 15 6"></polyline>
+            </svg>
+            <span>返回</span>
+        </a>
+        <div class="create-title">
+            <h1 class="create-title-main">Jingent 创作中心</h1>
+            <span class="create-title-sub">独立记忆体创建 · 宠物模型 · 自定义角色</span>
+        </div>
+    </div>
+    <div class="top-bar-right"></div>
+</div>
+
+<div class="app-shell">
+    <!-- 左侧边栏：分类切换 -->
+    <div class="sidebar-wrap">
+        <div class="sidebar" id="sideBar">
+            <div class="sidebar-section-label">创作分类</div>
+            <div class="sidebar-nav-item active" id="catSoul" data-cat="soul">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"></path>
+                </svg>
+                <span>独立记忆体创建</span>
+            </div>
+            <div class="sidebar-nav-item" id="catModel" data-cat="model">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <circle cx="12" cy="12" r="10"></circle>
+                    <circle cx="12" cy="12" r="4"></circle>
+                    <line x1="12" y1="2" x2="12" y2="22"></line>
+                    <line x1="2" y1="12" x2="22" y2="12"></line>
+                </svg>
+                <span>宠物模型</span>
+            </div>
+        </div>
+    </div>
+
+    <!-- 右侧主区域 -->
+    <div class="create-main">
+
+        <!-- 面板 1：独立记忆体创建 -->
+        <div class="create-pane active" id="paneSoul">
+            <!-- 顶部操作条：状态 Tab + 捏小人 -->
+            <div class="create-toolbar">
+                <div class="create-status-tabs" id="statusTabs">
+                    <button class="create-status-tab active" data-status="all">全部</button>
+                    <button class="create-status-tab" data-status="favorite">收藏</button>
+                    <button class="create-status-tab" data-status="draft">草稿</button>
+                    <button class="create-status-tab" data-status="pending">审核中</button>
+                </div>
+                <button class="create-craft-btn" id="craftBtn">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <line x1="12" y1="5" x2="12" y2="19"></line>
+                        <line x1="5" y1="12" x2="19" y2="12"></line>
+                    </svg>
+                    <span>捏小人</span>
+                </button>
+                <button class="create-import-btn" id="importLinkBtn">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"></path>
+                        <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"></path>
+                    </svg>
+                    <span>导入链接</span>
+                </button>
+            </div>
+
+            <!-- 角色卡片流（内置 + 自定义） -->
+            <div class="create-grid" id="createGrid"></div>
+            <div class="create-empty hidden" id="createEmpty">
+                <div class="create-empty-icon">
+                    <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                        <circle cx="12" cy="12" r="10"></circle>
+                        <circle cx="12" cy="12" r="4"></circle>
+                    </svg>
+                </div>
+                <p>还没有作品，点右上角「捏小人」开始创作</p>
+            </div>
+
+        </div>
+
+        <!-- 面板 2：宠物模型 -->
+        <div class="create-pane" id="paneModel">
+            <!-- 插件市场 -->
+            <div class="pet-section pet-market-section">
+                <div class="pet-section-title">宠物插件市场</div>
+                <div class="pet-section-desc">贴一个 git 链接一键导入 DSH 宠物包，或让 AI 帮你装</div>
+                <div class="pet-market-install-row">
+                    <input class="pet-market-input" id="petMarketGitUrl" placeholder="https://github.com/xxx/xxx-pet.git" spellcheck="false">
+                    <button class="submit-btn" id="petMarketInstallBtn">导入</button>
+                    <button class="submit-btn secondary" id="petMarketAiInstallBtn" title="AI 自动识别仓库结构并安装">AI 安装</button>
+                </div>
+                <div class="pet-market-tip" id="petMarketTip"></div>
+                <!-- 已安装宠物 -->
+                <div class="pet-market-subtitle">已安装</div>
+                <div class="pet-market-list" id="petMarketInstalled"></div>
+                <!-- 预置市场 -->
+                <div class="pet-market-subtitle">社区市场（点击卡片一键安装）</div>
+                <div class="pet-market-list" id="petMarketPreset"></div>
+            </div>
+
+            <div class="pet-section">
+                <div class="pet-section-title">宠物模型（透明 WebM 动画）</div>
+                <div class="pet-section-desc">上传透明底的 .webm 动画，用作宠物模型动作</div>
+                <div class="pet-upload-row">
+                    <input type="file" id="petWebmInput" accept=".webm,video/webm" multiple>
+                    <button class="submit-btn secondary" id="petUploadWebmBtn">上传动画</button>
+                </div>
+                <div class="pet-asset-list" id="petWebmList"></div>
+            </div>
+
+            <div class="pet-section">
+                <div class="pet-section-title">表情包（Memes）</div>
+                <div class="pet-section-desc">上传 PNG/GIF，配一句描述供模型选图</div>
+                <div class="pet-upload-row">
+                    <input type="file" id="petMemeInput" accept=".png,.gif,.jpg,.jpeg,.webp" multiple>
+                    <button class="submit-btn secondary" id="petUploadMemeBtn">上传表情</button>
+                </div>
+                <div class="pet-asset-list" id="petMemeList"></div>
+            </div>
+
+            <div class="pet-section">
+                <div class="pet-section-title">音效（Sound）</div>
+                <div class="pet-section-desc">上传 webm/wav/mp3 音效，可设为点击音效</div>
+                <div class="pet-upload-row">
+                    <input type="file" id="petSoundInput" accept=".webm,.wav,.mp3,.ogg" multiple>
+                    <button class="submit-btn secondary" id="petUploadSoundBtn">上传音效</button>
+                </div>
+                <div class="pet-asset-list" id="petSoundList"></div>
+            </div>
+
+            <div class="pet-section">
+                <div class="pet-section-title">触发条件配置</div>
+                <div class="pet-section-desc">把上传的动画分配到触发池，保存后生效</div>
+                <div id="petTriggerConfig"></div>
+                <div class="pet-save-row">
+                    <button class="submit-btn" id="petSaveConfigBtn">保存外观配置</button>
+                    <span class="pet-save-tip" id="petSaveTip"></span>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- 音色选择弹窗（独立记忆体语音绑定） -->
+<div class="voice-modal" id="voiceModal" style="display:none;">
+    <div class="modal-overlay" id="voiceModalOverlay"></div>
+    <div class="voice-modal-content">
+        <div class="voice-modal-title">设置音色 <span id="voiceModalCharName"></span></div>
+        <div class="voice-modal-desc">这个记忆体说话的声音（来自本地 VoiceStudio）</div>
+        <select class="edit-select" id="voiceModalSelect">
+            <option value="">默认音色</option>
+        </select>
+        <div class="voice-modal-tip" id="voiceModalTip"></div>
+        <div class="voice-clone-row">
+            <button class="create-secondary-btn" id="voiceCloneBtn" type="button">🎙 克隆新音色</button>
+            <span class="voice-clone-hint">上传有授权的录音生成专属音色</span>
+        </div>
+        <input type="file" id="voiceCloneFile" accept="audio/*,video/*" hidden>
+        <div class="voice-modal-actions">
+            <button class="create-secondary-btn" id="voiceModalCancel">取消</button>
+            <button class="submit-btn" id="voiceModalSave">保存</button>
+        </div>
+    </div>
+</div>
+
+<script src="/static/js/config.js?v={{ ASSET_VERSION }}"></script>
+<script src="/static/js/theme-bar.js?v={{ ASSET_VERSION }}"></script>
+<script src="/static/js/theme.js?v={{ ASSET_VERSION }}"></script>
+<script src="/static/js/create.js?v={{ ASSET_VERSION }}"></script>
+{{ plugin_scripts(request.url.path) | safe }}
+</body>
+</html>

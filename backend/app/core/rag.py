@@ -105,37 +105,41 @@ class RAGStore:
                 metadata={"hnsw:space": "cosine"},
             )
 
-    def add_message(self, user_id: int, message_id: int, content: str) -> None:
-        """把一条主对话消息写入向量库。"""
+    def add_message(self, user_id: int, message_id: int, content: str, character_id: Optional[str] = None) -> None:
+        """把一条主对话消息写入向量库（按角色隔离）。"""
         if not content or not content.strip():
             return
         self._ensure()
+        cid = character_id or "maid"
         try:
             emb = _embed_texts([content])[0]
             self._collection.upsert(
                 ids=[f"msg_{message_id}"],
                 embeddings=[emb],
                 documents=[content[:2000]],  # 截断超长内容
-                metadatas=[{"user_id": user_id}],
+                metadatas=[{"user_id": user_id, "character_id": cid}],
             )
         except Exception as e:
             logger.warning("[rag] 写入向量失败 msg=%s: %s", message_id, e)
 
-    def search(self, user_id: int, query: str, k: int = 5, embedding_cfg: Optional[dict] = None) -> List[str]:
-        """语义检索主对话历史，返回相关消息文本列表。
+    def search(self, user_id: int, query: str, k: int = 5, embedding_cfg: Optional[dict] = None,
+               character_id: Optional[str] = None) -> List[str]:
+        """语义检索主对话历史，返回相关消息文本列表（按角色隔离）。
 
         embedding_cfg：可选 {base_url, model, api_key}，用户前端自定义向量模型；
         不传则用 .env 全局配置。仅影响本次 query 的向量化。
+        character_id：角色 ID；不传默认 "maid"（兼容旧数据）。
         """
         if not query or not query.strip():
             return []
         self._ensure()
+        cid = character_id or "maid"
         try:
             emb = _embed_texts([query], embedding_cfg)[0]
             results = self._collection.query(
                 query_embeddings=[emb],
                 n_results=k,
-                where={"user_id": user_id},
+                where={"user_id": user_id, "character_id": cid},
             )
             docs = results.get("documents") or [[]]
             return [d for d in docs[0] if d]

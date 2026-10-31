@@ -1,7 +1,9 @@
 /* global config */
-/* 角色系统前端 —— 角色市场 + 人设参数设置 + 会话绑定角色 */
+/* 角色系统前端 —— 独立记忆体创建 + 人设参数设置 + 会话绑定角色 */
 
 window.currentCharacterId = window.currentCharacterId || null;
+// 当前角色的完整信息（含 avatar），供对话页 AI 头像使用
+window.currentCharacter = window.currentCharacter || null;
 
 const CharacterAPI = {
     list: () => `${config.API_BASE_URL}/ai/characters`,
@@ -12,7 +14,7 @@ const CharacterAPI = {
     settings: () => `${config.API_BASE_URL}/ai/character-settings`,
 };
 
-// ── 角色市场：加载 + 渲染 ──────────────────────────────────
+// ── 独立记忆体创建：加载 + 渲染 ──────────────────────────────────
 async function loadCharacters() {
     const listEl = document.getElementById('characterMarketList');
     if (!listEl) return;
@@ -21,7 +23,10 @@ async function loadCharacters() {
         const res = await fetch(CharacterAPI.list(), { headers: buildAuthHeaders() });
         const data = await res.json();
         if (!res.ok) throw new Error(data.detail || '加载失败');
-        window.currentCharacterId = data.current_character || null;
+        // 注意：不要在这里覆盖 window.currentCharacterId。
+        // 未登录用户切换角色时后端不持久化 current_character（仍返回默认 maid），
+        // 若此处覆盖会把用户刚选的新角色冲掉，导致「切换后还是蓝发女仆」。
+        // 当前角色 ID 由 initCharacterSystem 预取 + selectCharacter 显式维护。
         renderCharacterList(data.characters || []);
     } catch (err) {
         listEl.innerHTML = '<div class="memory-empty">加载失败，请刷新重试</div>';
@@ -36,7 +41,14 @@ function renderCharacterList(chars) {
         listEl.innerHTML = '<div class="memory-empty">暂无角色</div>';
         return;
     }
-    listEl.innerHTML = chars.map(c => characterCardHTML(c)).join('');
+    // 以前端本地 currentCharacterId 为准判断「使用中」，
+    // 未登录用户切换角色后后端不持久化，仍返回默认 maid，会导致 UI 高亮错位。
+    const localCurrent = window.currentCharacterId;
+    const cards = chars.map(c => ({
+        ...c,
+        is_current: c.id === localCurrent,
+    }));
+    listEl.innerHTML = cards.map(c => characterCardHTML(c)).join('');
 
     // 绑定卡片事件
     listEl.querySelectorAll('.character-card').forEach(card => {
@@ -70,7 +82,7 @@ function characterCardHTML(c) {
     return `
     <div class="character-card ${isCurrent ? 'current' : ''} ${c.is_pinned ? 'pinned' : ''}" data-id="${c.id}">
         <div class="character-avatar">
-            <img src="${c.avatar}" alt="${c.name}" onerror="this.src='../static/a.png'">
+            <img src="${c.avatar}" alt="${c.name}" onerror="this.onerror=null;this.src='/static/a.png'">
         </div>
         <div class="character-info">
             <div class="character-name-row">
@@ -105,7 +117,15 @@ async function selectCharacter(cid) {
         const data = await res.json();
         if (!res.ok) throw new Error(data.detail || '选择失败');
         window.currentCharacterId = cid;
-        // 刷新角色市场状态
+        // 更新当前角色完整信息（含 avatar），供对话页 AI 头像使用
+        window.currentCharacter = {
+            id: cid,
+            name: data.name || cid,
+            avatar: data.avatar || '',
+            opening: data.opening || '',
+            voice: data.voice || '',
+        };
+        // 刷新角色系统状态
         await loadCharacters();
         // 换角色 → 重新渲染主对话：清空旧角色的本地缓存与当前对话，展示新角色开场白
         reRenderMainChatForCharacter(data);
@@ -117,22 +137,21 @@ async function selectCharacter(cid) {
 }
 
 function reRenderMainChatForCharacter(data) {
-    // 1. 清空旧角色主对话的本地缓存（session_time=0），避免读回旧人格的历史
-    if (isLoggedIn()) {
-        try { localStorage.removeItem('0'); } catch (e) {}
-    }
-    // 2. 切到主对话视图（清空 chatData + DOM，session_time=0）
+    // 切到主对话视图：chatData 清空 + DOM 清空，然后按「新灵魂」加载它的历史。
+    // 注意：不要 removeItem('0')——现在主对话按灵魂分 key 缓存（0_<character_id>），
+    // 删 '0' 既删不干净新灵魂的缓存，还可能误伤；直接走 backToMainChat 即可，
+    // 它内部的 loadMainChatHistory 会按 window.currentCharacterId 读对应灵魂的历史。
     if (typeof backToMainChat === 'function') {
-        // 先清掉缓存再走 backToMainChat，它内部 loadMainChatHistory 拉不到旧缓存就显示空态
         backToMainChat();
     } else {
         // 兜底：手动清空
         if (typeof chatData !== 'undefined') chatData = [];
         document.querySelectorAll('#chatBox .message').forEach(el => el.remove());
     }
-    // 3. 展示新角色开场白（作为第一条 AI 消息）
+    // 展示新角色开场白（仅当该灵魂没有历史时，作为空对话引导）
     setTimeout(() => {
-        if (data && data.opening) {
+        const hasHistory = typeof chatData !== 'undefined' && Array.isArray(chatData) && chatData.length > 0;
+        if (data && data.opening && !hasHistory) {
             if (typeof addMessage === 'function') {
                 addMessage(data.opening, 'ai');
             }
@@ -189,29 +208,10 @@ async function shareCharacter(cid) {
 // ── 导入角色 ───────────────────────────────────────────────
 function initCharacterImport() {
     const btn = document.getElementById('importCharacterBtn');
-    const fileInput = document.getElementById('characterImportFile');
-    if (!btn || !fileInput) return;
-    btn.addEventListener('click', () => fileInput.click());
-    fileInput.addEventListener('change', async (e) => {
-        const file = e.target.files[0];
-        if (!file) return;
-        try {
-            const text = await file.text();
-            const json = JSON.parse(text);
-            const res = await fetch(CharacterAPI.import(), {
-                method: 'POST',
-                headers: buildAuthHeaders(),
-                body: JSON.stringify({ json_data: json }),
-            });
-            const data = await res.json();
-            if (!res.ok) throw new Error(data.detail || '导入失败');
-            showCharToast(data.preview ? '未登录，仅预览' : '导入成功');
-            await loadCharacters();
-        } catch (err) {
-            showCharToast(err.message || '导入失败，JSON 格式错误');
-        } finally {
-            fileInput.value = '';
-        }
+    if (!btn) return;
+    // 【导入角色】→ 跳转 Jingent 创作中心（/chat/create），当前标签页直接跳转
+    btn.addEventListener('click', () => {
+        window.location.href = '/chat/create';
     });
 }
 
@@ -288,41 +288,209 @@ function getSegValue(containerId) {
 
 // ── 弹窗开关 ───────────────────────────────────────────────
 function initCharacterModals() {
-    const marketModal = document.getElementById('characterMarketModal');
     const settingsModal = document.getElementById('characterSettingsModal');
-
-    const marketEntry = document.getElementById('characterMarketEntry');
     const settingsEntry = document.getElementById('characterSettingsEntry');
-
-    const closeMarket = document.getElementById('closeCharacterMarketBtn');
     const closeSettings = document.getElementById('closeCharacterSettingsBtn');
 
-    if (marketEntry && marketModal) {
-        marketEntry.addEventListener('click', () => {
-            document.querySelectorAll('.sidebar-nav-item').forEach(n => n.classList.remove('active'));
-            marketEntry.classList.add('active');
-            marketModal.style.display = 'block';
-            loadCharacters();
-        });
-    }
     if (settingsEntry && settingsModal) {
         settingsEntry.addEventListener('click', () => {
             document.querySelectorAll('.sidebar-nav-item').forEach(n => n.classList.remove('active'));
             settingsEntry.classList.add('active');
             settingsModal.style.display = 'block';
+            loadCharacters();
             loadCharacterSettings();
+            loadPetConfig();
         });
     }
-    if (closeMarket && marketModal) closeMarket.addEventListener('click', () => { marketModal.style.display = 'none'; });
     if (closeSettings && settingsModal) closeSettings.addEventListener('click', () => { settingsModal.style.display = 'none'; });
 
     // 点击遮罩关闭
-    if (marketModal) {
-        marketModal.querySelector('.modal-overlay')?.addEventListener('click', () => { marketModal.style.display = 'none'; });
-    }
     if (settingsModal) {
         settingsModal.querySelector('.modal-overlay')?.addEventListener('click', () => { settingsModal.style.display = 'none'; });
     }
+
+    // 标签页切换
+    initCharTabs();
+}
+
+function initCharTabs() {
+    const tabs = document.querySelectorAll('#charTabs .char-tab');
+    tabs.forEach(tab => {
+        tab.addEventListener('click', () => {
+            tabs.forEach(t => t.classList.remove('active'));
+            tab.classList.add('active');
+            const target = tab.dataset.tab;
+            document.querySelectorAll('.char-tab-pane').forEach(p => p.classList.remove('active'));
+            const pane = document.getElementById('charPane-' + target);
+            if (pane) pane.classList.add('active');
+        });
+    });
+}
+
+// ── 宠物模型自定义 ─────────────────────────────────────────────
+const PetAPI = {
+    upload: () => `${config.API_BASE_URL}/plugins/dsh-pet/upload`,
+    userConfig: () => `${config.API_BASE_URL}/plugins/dsh-pet/user-config`,
+    resource: () => `${config.API_BASE_URL}/plugins/dsh-pet/resource`,
+};
+
+let petCfg = null;  // 用户配置缓存（pools/memes/sounds/settings）
+
+async function loadPetConfig() {
+    try {
+        const res = await fetch(PetAPI.userConfig(), { headers: buildAuthHeaders() });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || data.detail || '加载失败');
+        petCfg = data.config || {};
+        renderPetAssets(data.merged || {});
+        renderTriggerConfig(data.merged || {});
+    } catch (err) {
+        console.error(err);
+    }
+}
+
+function renderPetAssets(merged) {
+    const ua = merged.userAssets || { webm: [], memes: [], sound: [] };
+    renderAssetList('petWebmList', ua.webm || [], 'webm');
+    renderAssetList('petMemeList', ua.memes || [], 'meme');
+    renderAssetList('petSoundList', ua.sound || [], 'sound');
+}
+
+function renderAssetList(listId, items, kind) {
+    const el = document.getElementById(listId);
+    if (!el) return;
+    if (!items.length) {
+        el.innerHTML = '<div class="pet-asset-empty">暂无上传</div>';
+        return;
+    }
+    el.innerHTML = items.map(name => `
+        <div class="pet-asset-item" data-kind="${kind}" data-name="${name}">
+            <span class="pet-asset-name">${name}</span>
+            <button class="pet-asset-del" title="删除">删除</button>
+        </div>`).join('');
+    el.querySelectorAll('.pet-asset-del').forEach(btn => {
+        btn.addEventListener('click', async (e) => {
+            const item = e.target.closest('.pet-asset-item');
+            const kind = item.dataset.kind;
+            const name = item.dataset.name;
+            await deletePetAsset(kind, name);
+        });
+    });
+}
+
+async function deletePetAsset(kind, name) {
+    try {
+        const res = await fetch(`${PetAPI.resource()}?kind=${encodeURIComponent(kind)}&name=${encodeURIComponent(name)}`, {
+            method: 'DELETE',
+            headers: buildAuthHeaders(),
+        });
+        const data = await res.json();
+        if (!res.ok || !data.ok) throw new Error(data.error || '删除失败');
+        showCharToast('已删除 ' + name);
+        await loadPetConfig();
+    } catch (err) {
+        showCharToast(err.message || '删除失败');
+    }
+}
+
+function renderTriggerConfig(merged) {
+    const el = document.getElementById('petTriggerConfig');
+    if (!el) return;
+    const pools = merged.pools || {};
+    const labels = merged.poolLabels || {};
+    const userWebms = (merged.userAssets && merged.userAssets.webm) || [];
+    const userPools = (petCfg && petCfg.pools) || {};
+
+    const html = Object.keys(labels).map(poolKey => {
+        const label = labels[poolKey];
+        const items = pools[poolKey] || [];
+        const userSelected = userPools[poolKey] || [];
+        // 只允许给用户上传的动画打勾（内置动画已在池里，不重复）
+        const checkable = userWebms.filter(w => items.indexOf(w) < 0);
+        const checkboxes = checkable.map(w => `
+            <label class="pet-trigger-item">
+                <input type="checkbox" data-pool="${poolKey}" data-name="${w}" ${userSelected.indexOf(w) >= 0 ? 'checked' : ''}>
+                <span>${w}</span>
+            </label>`).join('');
+        const builtinCount = items.length - userWebms.filter(w => items.indexOf(w) >= 0).length;
+        return `
+        <div class="pet-trigger-group">
+            <div class="pet-trigger-label">${label} <span class="pet-trigger-count">${items.length} 个动画</span></div>
+            <div class="pet-trigger-items">
+                ${checkboxes || '<span class="pet-asset-empty">该池暂无内置动画，可勾选下方上传的动画</span>'}
+            </div>
+        </div>`;
+    }).join('');
+
+    el.innerHTML = html;
+}
+
+async function uploadPetAssets(kind, inputId) {
+    const input = document.getElementById(inputId);
+    if (!input || !input.files.length) return;
+    const files = Array.from(input.files);
+    for (const file of files) {
+        try {
+            const fd = new FormData();
+            fd.append('kind', kind);
+            fd.append('file', file);
+            const res = await fetch(PetAPI.upload(), {
+                method: 'POST',
+                headers: { 'Authorization': buildAuthHeaders()['Authorization'] || '' },
+                body: fd,
+            });
+            const data = await res.json();
+            if (!res.ok || !data.ok) throw new Error(data.error || '上传失败');
+            showCharToast('已上传 ' + data.name);
+        } catch (err) {
+            showCharToast(err.message || '上传失败');
+        }
+    }
+    input.value = '';
+    await loadPetConfig();
+}
+
+async function savePetConfig() {
+    const pools = {};
+    document.querySelectorAll('#petTriggerConfig input[type=checkbox]').forEach(cb => {
+        const pool = cb.dataset.pool;
+        if (!pools[pool]) pools[pool] = [];
+        if (cb.checked) pools[pool].push(cb.dataset.name);
+    });
+    const payload = {
+        pools,
+        memes: (petCfg && petCfg.memes) || {},
+        sounds: (petCfg && petCfg.sounds) || {},
+        settings: (petCfg && petCfg.settings) || {},
+    };
+    const tip = document.getElementById('petSaveTip');
+    try {
+        const res = await fetch(PetAPI.userConfig(), {
+            method: 'POST',
+            headers: buildAuthHeaders(),
+            body: JSON.stringify(payload),
+        });
+        const data = await res.json();
+        if (res.status === 401) { if (tip) tip.textContent = '请先登录'; return; }
+        if (!res.ok || !data.ok) throw new Error(data.error || '保存失败');
+        if (tip) { tip.textContent = '已保存，刷新页面后桌宠生效'; setTimeout(() => { tip.textContent = ''; }, 2500); }
+        await loadPetConfig();
+    } catch (err) {
+        if (tip) tip.textContent = err.message || '保存失败';
+    }
+}
+
+function initPetUpload() {
+    const bind = (btnId, inputId, kind) => {
+        const btn = document.getElementById(btnId);
+        if (btn) btn.addEventListener('click', () => uploadPetAssets(kind, inputId));
+    };
+    bind('petUploadWebmBtn', 'petWebmInput', 'webm');
+    bind('petUploadMemeBtn', 'petMemeInput', 'meme');
+    bind('petUploadSoundBtn', 'petSoundInput', 'sound');
+
+    const saveBtn = document.getElementById('petSaveConfigBtn');
+    if (saveBtn) saveBtn.addEventListener('click', savePetConfig);
 }
 
 // ── 轻提示 ─────────────────────────────────────────────────
@@ -345,10 +513,38 @@ function initCharacterSystem() {
     initCharacterModals();
     initCharacterImport();
     initCharacterSettings();
-    // 页面加载时预取当前角色 ID，供 sendMessage 携带
+    initPetUpload();
+    // 页面加载时预取当前角色 ID + 完整信息，供 sendMessage 携带 & 对话页 AI 头像使用
+    const prevCid = window.currentCharacterId;
     fetch(CharacterAPI.list(), { headers: buildAuthHeaders() })
         .then(r => r.json())
-        .then(d => { if (d && d.current_character) window.currentCharacterId = d.current_character; })
+        .then(d => {
+            if (!d) return;
+            if (d.current_character) window.currentCharacterId = d.current_character;
+            const chars = d.characters || [];
+            const cur = chars.find(c => c.id === window.currentCharacterId)
+                || chars.find(c => c.id === 'maid');
+            if (cur) {
+                window.currentCharacter = {
+                    id: cur.id,
+                    name: cur.name || cur.id,
+                    avatar: cur.avatar || '',
+                    opening: cur.opening || '',
+                    voice: cur.voice || '',
+                };
+            }
+            // 关键：预取完成后角色 ID 才确定。此前 loadMainChatHistory 可能
+            // 用 '0_default' 共享 key 读/写缓存导致「各角色历史串号、头像一样」。
+            // 现在重新加载主对话历史（用正确的 '0_<cid>' key），并刷新 AI 头像。
+            if (prevCid !== window.currentCharacterId
+                && typeof loadMainChatHistory === 'function') {
+                // 主对话才需要重载（当前会话是主对话时）
+                const st = window.localStorage.getItem('thisSessionTime');
+                if (!st || st === 'null' || st === 'undefined' || st === '0') {
+                    loadMainChatHistory();
+                }
+            }
+        })
         .catch(() => {});
 }
 

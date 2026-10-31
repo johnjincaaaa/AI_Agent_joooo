@@ -12,5 +12,6 @@ __all__ = [
     "User", "ChatSession", "JobProfile", "Message",
     "ReferralEvent", "WithdrawRequest", "PromoConfig",
     "PageVisit", "DownloadClick", "CheckInRecord", "Memory",
+    "CustomCharacter", "RequestLog",
     "PROMO_CONFIG_DEFAULTS", "init_db", "seed_promo_config", "migrate_chat_sessions",
 ]

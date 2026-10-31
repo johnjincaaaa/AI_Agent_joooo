@@ -40,6 +40,52 @@ except ModuleNotFoundError as e:
     logging.getLogger(__name__).warning("Langchain import failed (optional feature): %s", e)
 
 
+# ===================== token 用量估算 & 落库 =====================
+def estimate_tokens(text: str) -> int:
+    """粗略估算 token：中文 1 字 ≈ 1 token，英文/其它按 4 字符 ≈ 1 token。"""
+    if not text:
+        return 0
+    cjk = sum(1 for ch in text if '\u4e00' <= ch <= '\u9fff')
+    other = len(text) - cjk
+    return cjk + max(0, other // 4)
+
+
+def _record_chat_tokens(request_id: str, tokens_in: int, tokens_out: int):
+    """后台线程把 chat 请求的 token 用量写回 request_logs（按 request_id 关联）。
+
+    middleware 也是异步写库，这里重试最多 6 次（每次 0.5s），
+    等 middleware 先把 request_logs 行落库后再更新 token。
+    """
+    import threading
+
+    def _update():
+        from app.core.db import SessionLocal, RequestLog
+        import time as _time
+        for _ in range(6):
+            db = SessionLocal()
+            try:
+                row = db.query(RequestLog).filter(RequestLog.request_id == request_id).first()
+                if row:
+                    row.tokens_in = tokens_in
+                    row.tokens_out = tokens_out
+                    db.commit()
+                    db.close()
+                    return
+                db.close()
+            except Exception:
+                try:
+                    db.close()
+                except Exception:
+                    pass
+            _time.sleep(0.5)
+
+    try:
+        threading.Thread(target=_update, daemon=True).start()
+    except Exception:
+        pass
+
+
+
 logger = logging.getLogger(__name__)
 router = APIRouter()
 
@@ -122,6 +168,7 @@ class ChatDbRequest(BaseModel):
     create_time: int
     session_name: str
     chat_type: str = "secondary"   # main=主对话 / secondary=新建会话
+    character_id: Optional[str] = None  # 角色包 ID（主对话按灵魂隔离历史）
 
 
 class ChatRenameRequest(BaseModel):
@@ -283,42 +330,71 @@ def resolve_embedding_config(user_embedding: Optional[dict]):
     return {"base_url": base_url, "model": model, "api_key": api_key}
 
 
-def build_memory_prompt(user_id: Optional[int], db: Session, chat_type: str = "main") -> str:
-    """拼记忆块。
+def build_memory_prompt(user_id: Optional[int], db: Session, chat_type: str = "main",
+                        character_id: Optional[str] = None, query: Optional[str] = None) -> str:
+    """拼记忆块（按角色隔离）。
 
-    - 主对话（main）：全局画像 + 细节记忆（完整记忆上下文）
+    - 主对话（main）：全局画像 + 细节记忆（语义召回 top-K）
     - 新建会话（secondary）：只注入全局画像，不注入细节记忆
     - 未登录用户：无记忆
+    - character_id：角色 ID；缺省用当前绑定角色（不同人设记忆独立）
+    - query：当前用户输入，用于细节记忆语义召回
     """
     if not user_id:
         return ""
+    try:
+        from app.core import characters as charsvc
+        cid = character_id or charsvc.get_current_character_id(user_id) or "maid"
+    except Exception:
+        cid = character_id or "maid"
+    # 全局画像：用户级、跨角色共享，每次对话固定全量注入（不按角色隔离）
     globals_ = (
         db.query(Memory)
         .filter(Memory.user_id == user_id, Memory.type == "global")
         .order_by(Memory.id.asc())
         .all()
     )
-    # 细节记忆只在主对话注入
+    # 细节记忆只在主对话注入，且语义召回 top-K（docs 模块3：不无脑全塞，控 token）
     details = []
     if chat_type == "main":
-        details = (
-            db.query(Memory)
-            .filter(Memory.user_id == user_id, Memory.type == "detail")
-            .order_by(Memory.id.desc())
-            .limit(15)
-            .all()
-        )
+        try:
+            from app.core import memory_engine as me
+            recalled, _qvec = me.recall_details(db, user_id, cid, query or "", k=5)
+            details = [r for r in recalled if r.get("similarity", 0) > 0]
+            # 若 embedding 服务不可用，recall 已降级按权重取最近 k 条，仍可用
+            if not details:
+                details = recalled
+            # 召回后更新访问热度（不阻塞主流程，weight 持久化）
+            ids = [r["id"] for r in details]
+            if ids:
+                try:
+                    me.mark_recalled(db, ids)
+                except Exception:
+                    pass
+        except Exception as e:
+            logger.warning("[memory] 语义召回失败，回退最近记忆: %s", e)
+            details = (
+                db.query(Memory)
+                .filter(Memory.user_id == user_id, Memory.character_id == cid,
+                        Memory.type == "detail")
+                .order_by(Memory.id.desc())
+                .limit(5)
+                .all()
+            )
     if not globals_ and not details:
         return ""
-    lines = ["【你记得的关于这位用户的记忆】"]
+    lines = []
     if globals_:
-        lines.append("· 全局画像：")
+        lines.append("【全局画像 · 最高优先级硬性约束，必须无条件遵守】")
         lines += [f"  - {m.content}" for m in globals_]
+        lines.append("以上全局画像是用户的核心设定与硬性要求，任何情况下都不得违背。")
     if details:
-        lines.append("· 细节记忆：")
-        lines += [f"  - {m.content}" for m in reversed(details)]  # 旧在前，新在后
-    lines.append("请在对话中自然体现你记得这些（主动关心、呼应细节），但不要生硬罗列；")
-    lines.append("如果新对话与旧记忆冲突，以用户当前表达为准。")
+        lines.append("【你记得的关于这位用户的细节记忆 · 仅供参考】")
+        for d in details:
+            content = d.content if hasattr(d, "content") else d.get("content")
+            lines.append(f"  - {content}")
+        lines.append("请在对话中自然体现你记得这些（主动关心、呼应细节），但不要生硬罗列；")
+        lines.append("如果新对话与旧记忆冲突，以用户当前表达为准。")
     return "\n".join(lines)
 
 
@@ -352,6 +428,13 @@ def run_chat_turn(
     full_history = list(history)
     full_history.append(ChatMessage(role='user', message=new_message, created_at=_now_iso()))
     ai_context = full_history[-50:]
+
+    # 解析有效角色 ID（记忆/向量隔离用）
+    try:
+        from app.core import characters as charsvc
+        active_cid = character_id or charsvc.get_current_character_id(user_id) or "maid"
+    except Exception:
+        active_cid = character_id or "maid"
 
     # 用户发消息 → 重置主动对话的「连续未回应」计数（/say 桌宠对话也走这里）
     try:
@@ -392,16 +475,18 @@ def run_chat_turn(
     else:
         final_system_prompt = base_system_prompt
 
-    memory_prompt = build_memory_prompt(user_id, db, chat_type)
+    memory_prompt = build_memory_prompt(user_id, db, chat_type, character_id=active_cid, query=new_message)
     if memory_prompt:
-        final_system_prompt = final_system_prompt + "\n\n" + memory_prompt
+        # 记忆块放最前面：全局画像是最高优先级硬性约束
+        final_system_prompt = memory_prompt + "\n\n" + final_system_prompt
 
     # RAG：主对话注入语义检索到的历史对话（新建会话不注入）
     if chat_type == "main" and user_id:
         try:
             from app.core.rag import get_rag_store
             rag_cfg = resolve_embedding_config(embedding_config)
-            rag_hits = get_rag_store().search(user_id, new_message, k=5, embedding_cfg=rag_cfg)
+            rag_hits = get_rag_store().search(user_id, new_message, k=5, embedding_cfg=rag_cfg,
+                                              character_id=active_cid)
             if rag_hits:
                 rag_prompt = "【历史相关对话（语义检索）】\n" + "\n".join(f"  - {h}" for h in rag_hits)
                 rag_prompt += "\n请自然参考这些历史内容，但不要生硬复述。"
@@ -437,25 +522,44 @@ def run_chat_turn(
 
 
 def _background_extract_memories(
-        user_id: int, user_msg: str, ai_reply: str,
+        user_id: int,
         base_url: str, model: str, api_key: str,
+        character_id: Optional[str] = None,
 ) -> None:
-    """对话结束后后台抽取记忆（独立 DB 连接，不阻塞响应）。
+    """每累计 20 轮触发：后台抽取最近 20 轮对话历史（独立 DB 连接，不阻塞响应）。
 
     纯同步实现，跑在线程里：不依赖事件循环，
     因此在同步路由（/ai/chat）和 async 路由（/ai/chatStream）里都能安全调用。
     """
     try:
-        from app.api.memory_routes import extract_facts_sync, save_extracted_facts
+        from app.api.memory_routes import extract_facts_from_history_sync, save_extracted_facts
         from app.core.db import SessionLocal
-        facts = extract_facts_sync(user_msg, ai_reply, base_url, model, api_key)
-        if not facts:
-            return
         db = SessionLocal()
         try:
-            added = save_extracted_facts(db, user_id, facts)
+            cid = character_id or "maid"
+            # 该用户该角色最近 40 条 user/ai 消息（≈20 轮）
+            rows = (
+                db.query(Message)
+                .filter(Message.user_id == user_id,
+                        Message.character_id == cid,
+                        Message.role.in_(["user", "ai"]))
+                .order_by(Message.id.desc())
+                .limit(40)
+                .all()
+            )
+            if len(rows) < 20:
+                return  # 不足 20 轮，不抽取
+            rows = list(reversed(rows))  # 时间正序
+            history_text = "\n".join(
+                f"{'用户' if r.role == 'user' else 'AI'}：{r.content}" for r in rows
+            )
+            facts = extract_facts_from_history_sync(history_text, base_url, model, api_key)
+            if not facts:
+                return
+            added = save_extracted_facts(db, user_id, facts, character_id=character_id)
             if added:
-                logger.info("[memory] 后台抽取新增 %d 条记忆 (user=%s)", added, user_id)
+                logger.info("[memory] 20轮批量抽取新增 %d 条记忆 (user=%s, character=%s)",
+                            added, user_id, character_id)
         finally:
             db.close()
     except Exception as e:
@@ -463,21 +567,22 @@ def _background_extract_memories(
 
 
 def _schedule_memory_extract(
-        user_id: int, user_msg: str, ai_reply: str,
+        user_id: int,
         base_url: str, model: str, api_key: str,
+        character_id: Optional[str] = None,
 ) -> None:
-    """后台线程启动记忆抽取，任何上下文（同步/异步）都安全。"""
+    """每累计 20 轮触发一次记忆抽取（异步，不阻塞对话流）。"""
     import threading
     t = threading.Thread(
         target=_background_extract_memories,
-        args=(user_id, user_msg, ai_reply, base_url, model, api_key),
+        args=(user_id, base_url, model, api_key, character_id),
         daemon=True,
     )
     t.start()
 
 
-def _schedule_rag_write(session_id: int, user_id: int) -> None:
-    """后台线程把主对话消息写入向量库（独立 session，避免线程复用问题）。"""
+def _schedule_rag_write(session_id: int, user_id: int, character_id: Optional[str] = None) -> None:
+    """后台线程把主对话消息写入向量库（独立 session，避免线程复用问题，按角色隔离）。"""
     import threading
     def _write():
         try:
@@ -486,9 +591,13 @@ def _schedule_rag_write(session_id: int, user_id: int) -> None:
             rag = get_rag_store()
             sdb = SessionLocal()
             try:
-                rows = sdb.query(Message).filter(Message.session_id == session_id).all()
+                q = sdb.query(Message).filter(Message.session_id == session_id)
+                if character_id:
+                    q = q.filter(Message.character_id == character_id)
+                rows = q.all()
                 for r in rows:
-                    rag.add_message(user_id, r.id, r.content)
+                    rag.add_message(user_id, r.id, r.content,
+                                    character_id=character_id or (r.character_id or "maid"))
             finally:
                 sdb.close()
         except Exception as e:
@@ -537,6 +646,16 @@ def chat_page(request: Request, db: Session = Depends(get_db)):
 @router.get("/job", summary="找工作页", description="独立找工作模块：个人画像 · 简历 · 岗位推荐", include_in_schema=False)
 def job_page(request: Request):
     return _templates_ref.TemplateResponse(name="job.html", request=request)
+
+
+@router.get("/chat/create", summary="Jingent创作中心", include_in_schema=False)
+def create_center_page(request: Request):
+    return _templates_ref.TemplateResponse(name="create.html", request=request)
+
+
+@router.get("/chat/create/edit", summary="Jingent创作中心 · 捏小人编辑器", include_in_schema=False)
+def create_edit_page(request: Request):
+    return _templates_ref.TemplateResponse(name="create_edit.html", request=request)
 
 
 # ==================================================================
@@ -716,6 +835,13 @@ async def chat_stream(
 ):
     remaining = ensure_chat_access(http_request, user_id)
 
+    # 解析有效角色 ID（记忆/向量隔离用）
+    try:
+        from app.core import characters as charsvc
+        active_cid = chat_request.character_id or charsvc.get_current_character_id(user_id) or "maid"
+    except Exception:
+        active_cid = chat_request.character_id or "maid"
+
     # 桌宠联动：用户发消息 → 倾听
     _broadcast_pet({"t": "user", "text": chat_request.newMessage})
 
@@ -768,16 +894,17 @@ async def chat_stream(
     else:
         final_system_prompt = base_system_prompt
 
-    memory_prompt = build_memory_prompt(user_id, db, chat_request.chat_type)
+    memory_prompt = build_memory_prompt(user_id, db, chat_request.chat_type, character_id=active_cid, query=chat_request.newMessage)
     if memory_prompt:
-        final_system_prompt = final_system_prompt + "\n\n" + memory_prompt
+        final_system_prompt = memory_prompt + "\n\n" + final_system_prompt
 
     # RAG：主对话注入语义检索到的历史对话（新建会话不注入）
     if chat_request.chat_type == "main" and user_id:
         try:
             from app.core.rag import get_rag_store
             rag_cfg = resolve_embedding_config(chat_request.embedding)
-            rag_hits = get_rag_store().search(user_id, chat_request.newMessage, k=5, embedding_cfg=rag_cfg)
+            rag_hits = get_rag_store().search(user_id, chat_request.newMessage, k=5, embedding_cfg=rag_cfg,
+                                              character_id=active_cid)
             if rag_hits:
                 rag_prompt = "【历史相关对话（语义检索）】\n" + "\n".join(f"  - {h}" for h in rag_hits)
                 rag_prompt += "\n请自然参考这些历史内容，但不要生硬复述。"
@@ -796,6 +923,12 @@ async def chat_stream(
         chat_request.image_paths,
         chat_request.document_paths,
     )
+
+    # 输入 token 估算：system prompt + 记忆 + 历史 + 新消息
+    _tokens_in = estimate_tokens(final_system_prompt) + estimate_tokens(chat_request.newMessage)
+    for _h in ai_context:
+        _tokens_in += estimate_tokens(getattr(_h, "message", "") or "")
+    _request_id = http_request.scope.get("request_id", "")
 
     async def generate():
         buffer = ""          # 流式缓冲：跨 chunk 累积，检测 ||| 分隔符
@@ -835,6 +968,10 @@ async def chat_stream(
             parts = [""]
         full_ai_reply = "".join(parts)
 
+        # 输出 token 估算 + 异步写回 request_logs（关联 request_id）
+        if _request_id:
+            _record_chat_tokens(_request_id, _tokens_in, estimate_tokens(full_ai_reply))
+
         ai_messages = [ChatMessage(role="ai", message=p, created_at=_now_iso()) for p in parts]
         final_history = full_history + ai_messages
 
@@ -844,11 +981,12 @@ async def chat_stream(
         # 桌宠联动：结束 → 完成
         _broadcast_pet({"t": "turn-end", "status": "success"})
 
-        # 对话结束后台抽取记忆（不阻塞 SSE）
+        # 每累计 20 轮后台抽取记忆（不阻塞 SSE）
         if user_id and full_ai_reply:
             _schedule_memory_extract(
-                user_id, chat_request.newMessage, full_ai_reply,
+                user_id,
                 base_url, model_name, api_key,
+                character_id=active_cid,
             )
 
     headers = {}
@@ -872,6 +1010,13 @@ def ai_chat(
         db: Session = Depends(get_db),
 ):
     ensure_chat_access(http_request, user_id)
+
+    # 解析有效角色 ID（记忆/向量隔离用）
+    try:
+        from app.core import characters as charsvc
+        active_cid = chat_request.character_id or charsvc.get_current_character_id(user_id) or "maid"
+    except Exception:
+        active_cid = chat_request.character_id or "maid"
 
     # 桌宠联动：用户发消息
     _broadcast_pet({"t": "user", "text": chat_request.newMessage})
@@ -928,16 +1073,17 @@ def ai_chat(
     else:
         final_system_prompt = base_system_prompt
 
-    memory_prompt = build_memory_prompt(user_id, db, chat_request.chat_type)
+    memory_prompt = build_memory_prompt(user_id, db, chat_request.chat_type, character_id=active_cid, query=chat_request.newMessage)
     if memory_prompt:
-        final_system_prompt = final_system_prompt + "\n\n" + memory_prompt
+        final_system_prompt = memory_prompt + "\n\n" + final_system_prompt
 
     # RAG：主对话注入语义检索到的历史对话（新建会话不注入）
     if chat_request.chat_type == "main" and user_id:
         try:
             from app.core.rag import get_rag_store
             rag_cfg = resolve_embedding_config(chat_request.embedding)
-            rag_hits = get_rag_store().search(user_id, chat_request.newMessage, k=5, embedding_cfg=rag_cfg)
+            rag_hits = get_rag_store().search(user_id, chat_request.newMessage, k=5, embedding_cfg=rag_cfg,
+                                              character_id=active_cid)
             if rag_hits:
                 rag_prompt = "【历史相关对话（语义检索）】\n" + "\n".join(f"  - {h}" for h in rag_hits)
                 rag_prompt += "\n请自然参考这些历史内容，但不要生硬复述。"
@@ -956,6 +1102,12 @@ def ai_chat(
         chat_request.image_paths,
         chat_request.document_paths,
     )
+    # 输入 token 估算：system prompt + 历史 + 新消息
+    _tokens_in = estimate_tokens(final_system_prompt) + estimate_tokens(chat_request.newMessage)
+    for _h in ai_context:
+        _tokens_in += estimate_tokens(getattr(_h, "message", "") or "")
+    _request_id = http_request.scope.get("request_id", "")
+
     # 桌宠联动：开始思考
     _broadcast_pet({"t": "turn-start"})
 
@@ -970,6 +1122,10 @@ def ai_chat(
                 logger.info(f"\n最终AI回答: {msg.content}")
         ai_reply = result["messages"][-1].content
 
+        # 输出 token 估算 + 异步写回 request_logs（关联 request_id）
+        if _request_id:
+            _record_chat_tokens(_request_id, _tokens_in, estimate_tokens(ai_reply or ""))
+
         # 真人连发：按 ||| 拆成多条 AI 消息（与 chat_stream 保持一致）
         ai_text = str(ai_reply)
         ai_parts = [p.strip() for p in ai_text.split("|||") if p.strip()]
@@ -982,11 +1138,12 @@ def ai_chat(
         # 桌宠联动：结束 → 完成
         _broadcast_pet({"t": "turn-end", "status": "success"})
 
-        # 对话结束后台抽取记忆（不阻塞响应）
+        # 每累计 20 轮后台抽取记忆（不阻塞响应）
         if user_id and ai_reply:
             _schedule_memory_extract(
-                user_id, chat_request.newMessage, str(ai_reply),
+                user_id,
                 base_url, model_name, api_key,
+                character_id=active_cid,
             )
 
         return {
@@ -1041,8 +1198,29 @@ def ai_savaToDb(
             db.add(session)
             db.flush()  # 拿到 session.id
 
-        # 原子化：同步 Message 表（先删旧再写新，保证与 chatData 一致）
-        db.query(Message).filter(Message.session_id == session.id).delete()
+        # 主对话按灵魂隔离：解析 character_id（缺省回退用户当前绑定角色）
+        resolved_cid = None
+        if chat_type == "main":
+            resolved_cid = request.character_id
+            if not resolved_cid:
+                try:
+                    from app.core import characters as charsvc
+                    resolved_cid = charsvc.get_current_character_id(user_id)
+                except Exception:
+                    resolved_cid = None
+            # 记录会话绑定的灵魂
+            session.character_id = resolved_cid
+
+        # 原子化：同步 Message 表。
+        # 主对话按灵魂隔离：只删除/重写「当前灵魂」的消息，其他灵魂的消息保留。
+        if chat_type == "main" and resolved_cid:
+            db.query(Message).filter(
+                Message.session_id == session.id,
+                Message.character_id == resolved_cid,
+            ).delete()
+        else:
+            db.query(Message).filter(Message.session_id == session.id).delete()
+
         for m in chat_data:
             role = m.get("role", "user")
             content = m.get("message") or m.get("content") or ""
@@ -1055,6 +1233,9 @@ def ai_savaToDb(
                 content=str(content),
                 reactions=m.get("reactions") or {},
             )
+            # 主对话消息打上灵魂标记
+            if chat_type == "main" and resolved_cid:
+                msg_kwargs["character_id"] = resolved_cid
             # 保留每条消息原始时间戳；缺失时才用 DB 列的 default（避免覆盖为 NULL/同一时刻）
             created_at = _parse_dt(m.get("created_at"))
             if created_at is not None:
@@ -1063,9 +1244,9 @@ def ai_savaToDb(
 
         db.commit()
 
-        # RAG：主对话消息写入向量库（后台线程，不阻塞保存；独立 session 避免线程问题）
+        # RAG：主对话消息写入向量库（后台线程，不阻塞保存；独立 session 避免线程问题，按角色隔离）
         if chat_type == "main":
-            _schedule_rag_write(session.id, user_id)
+            _schedule_rag_write(session.id, user_id, character_id=resolved_cid or "maid")
         return {"code": 200, "msg": "保存/更新成功", "session_id": session.id}
 
     except Exception as error:
@@ -1084,11 +1265,20 @@ def ai_history(
         is_Load_All: bool = Query(False),
         db: Session = Depends(get_db)
 ):
+    # 主对话按灵魂隔离：读取时用用户当前绑定角色过滤
+    main_cid = None
+    try:
+        from app.core import characters as charsvc
+        main_cid = charsvc.get_current_character_id(user_id)
+    except Exception:
+        main_cid = None
+
     def _session_messages(session) -> list:
         """从 Message 表重组消息（原子化路径），回退旧 JSON。
 
         reply_to 只存在于 session.messages JSON（Message 表未存），
         重组时按顺序从 JSON 回填，保证引用块与跳转不丢。
+        主对话（main）按 character_id 过滤，实现灵魂间历史隔离。
         """
         legacy = session.messages or []
         # 只保留有 message 的项，与 ai_savaToDb 写 Message 表时「跳过空消息」保持一致，避免下标错位
@@ -1097,12 +1287,11 @@ def ai_history(
             for m in legacy
             if isinstance(m, dict) and m.get("message")
         ]
-        rows = (
-            db.query(Message)
-            .filter(Message.session_id == session.id)
-            .order_by(Message.id.asc())
-            .all()
-        )
+        q = db.query(Message).filter(Message.session_id == session.id)
+        # 主对话按灵魂过滤
+        if (session.chat_type or "") == "main" and main_cid:
+            q = q.filter(Message.character_id == main_cid)
+        rows = q.order_by(Message.id.asc()).all()
         if rows:
             result = []
             for i, m in enumerate(rows):
@@ -1117,7 +1306,12 @@ def ai_history(
                     item["reply_to"] = reply
                 result.append(item)
             return result
-        # 回退：旧 JSON（未迁移或历史遗留）
+        # 主对话按灵魂过滤后为空：直接返回空列表，不回退旧 JSON。
+        # 旧 JSON（session.messages）只存了「最后一次写入的灵魂」的 chatData，
+        # 回退会读到别的灵魂的对话，破坏隔离。
+        if (session.chat_type or "") == "main" and main_cid:
+            return []
+        # 回退：旧 JSON（仅新建会话 / 未迁移历史遗留）
         return [
             {
                 "role": m.get("role", "user"),

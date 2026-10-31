@@ -83,3 +83,14 @@ _reference/
 .trae/
 .jingent/
 /android-app/
+
+# 三方 VoiceStudio 源码包（本地运行时参考，不入库）
+backend/app/plugins/voicestudio/
+
+# 本地测试 / 截图 / 语音产物
+.taste-skill/
+chunks/
+ops/
+*.png
+*.wav
+*.webm

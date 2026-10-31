@@ -13,6 +13,20 @@ function buildAuthHeaders() {
     return headers;
 }
 
+// 主对话缓存 key：按「用户 + 灵魂（角色）」双重隔离，避免切换登录账号后
+// 主对话数据串号。主对话 sessionTime 固定为 '0'，key 扩展为 0_<user>_<character_id>；
+// 新建会话保持原时间戳 key。
+function cacheKeyFor(sessionTime) {
+    if (String(sessionTime) === '0') {
+        let uid = null;
+        try { uid = window.localStorage.getItem('user_id'); } catch (e) { uid = null; }
+        const userKey = (uid && uid !== 'null') ? String(uid) : 'guest';
+        const cid = window.currentCharacterId || 'default';
+        return '0_' + userKey + '_' + cid;
+    }
+    return String(sessionTime);
+}
+
 function parseApiErrorMessage(data, fallback) {
     if (!data) return fallback;
     if (typeof data.detail === "string") return data.detail;
@@ -340,10 +354,15 @@ async function sendMessage() {
     };
 
     let currentAiMessageDiv, aiContentDiv, aiBubble;
+    // 本轮回复的所有 AI 气泡（真人连发可拆多条），依次记录行 + 文本
+    const aiBubbles = [];
+    // 本轮回复锁定音色：整轮（含多条连发）用同一个音色，避免中途解析出不同结果
+    const lockedVoice = (typeof resolveVoice === 'function') ? resolveVoice() : 'default';
     const firstSkeleton = createAiBubble();
     currentAiMessageDiv = firstSkeleton.row;
     aiContentDiv = firstSkeleton.contentDiv;
     aiBubble = firstSkeleton.bubble;
+    aiBubbles.push({ row: firstSkeleton.row, text: '' });
 
     // 打字指示器（只挂在第一条 AI 气泡上）
     const typingDiv = document.createElement("div");
@@ -443,11 +462,15 @@ async function sendMessage() {
                 // 真人连发：本条结束，开新气泡继续
                 if (data === "[MSG_SPLIT]") {
                     if (typingDiv && typingDiv.parentNode) typingDiv.remove();
+                    // 当前气泡文本已累积完整，回写进记录
+                    const last = aiBubbles[aiBubbles.length - 1];
+                    if (last) last.text = aiFullReply;
                     aiFullReply = "";
                     const next = createAiBubble();
                     currentAiMessageDiv = next.row;
                     aiContentDiv = next.contentDiv;
                     aiBubble = next.bubble;
+                    aiBubbles.push({ row: next.row, text: '' });
                     continue;
                 }
                 // 流式输出文字
@@ -459,6 +482,13 @@ async function sendMessage() {
                 box.scrollTop = box.scrollHeight;
                 enhanceCodeBlocks(aiContentDiv);
             }
+        }
+
+        // AI 回复完成 → 回写最后一条气泡文本，依次朗读整轮所有气泡（统一音色）
+        const lastBubble = aiBubbles[aiBubbles.length - 1];
+        if (lastBubble) lastBubble.text = aiFullReply;
+        if (typeof speakAiBubbles === 'function' && aiBubbles.length) {
+            speakAiBubbles(aiBubbles, lockedVoice);
         }
 
         if (chatSession.textContent.trim() === t('new_session')) {
@@ -608,8 +638,9 @@ async function sendMessage() {
         sendMessage_ele.disabled = false;
         sendMessage_ele.textContent = "➤";
         if (chatSession.textContent.trim() !== t('new_session')) {
-            window.localStorage.setItem(window.localStorage.getItem('thisSessionTime'), JSON.stringify(chatData));
-            await postToDb(chatData, window.localStorage.getItem('thisSessionTime'), chatSession.textContent);
+            const _st = window.localStorage.getItem('thisSessionTime');
+            window.localStorage.setItem(cacheKeyFor(_st), JSON.stringify(chatData));
+            await postToDb(chatData, _st, chatSession.textContent);
         }
     }
 }
@@ -650,6 +681,10 @@ async function generateTitleFromTwoRounds(dialogue) {
 // 渲染历史记录（切换会话时用）
 function renderHistoryChat(messages) {
     const box = document.getElementById("chatBox");
+    // 先清空旧消息，避免重复追加（如预取角色后二次加载导致历史翻倍、头像不刷新）
+    if (box) {
+        box.querySelectorAll(".message").forEach(el => el.remove());
+    }
 
     messages.forEach((msg, i) => {
         const sender = msg.role === "user" ? "user" : "ai";
@@ -673,11 +708,12 @@ async function postToDb(chatData, createTime, sessionName) {
                 create_time: createTime,
                 session_name: sessionName,
                 chat_type: currentChatType,   // main=主对话 / secondary=新建会话
+                character_id: window.currentCharacterId || undefined,   // 主对话按灵魂隔离
             }),
         });
         if (res.status === 401) {
             window.localStorage.setItem('token', null);
-            document.getElementById('openLoginBtn').textContent = '未登录';
+            document.getElementById('openLoginBtn').textContent = t('not_logged_in');
             showLoginExpiredModal('🔐 登录已过期，请重新登录！', 'error');
             return null;
         }
@@ -807,15 +843,22 @@ window.enhanceCodeBlocks = enhanceCodeBlocks;
 })();
 
 // ================= Telegram 式气泡骨架 =================
-// AI 头像：桌宠 logo；用户头像：用户名首字母
+// AI 头像：优先当前角色的 avatar（内置角色用内置头像，自定义角色用用户上传头像），
+// 取不到时回退桌宠 logo
 const AI_AVATAR_SRC = "/plugins/dsh-pet/assets/logo.png";
+
+function currentAI_avatar() {
+    const c = (typeof window !== 'undefined' && window.currentCharacter) || null;
+    if (c && c.avatar) return c.avatar;
+    return AI_AVATAR_SRC;
+}
 
 function buildAvatar(sender) {
     const av = document.createElement("div");
     av.className = "msg-avatar";
     if (sender === "ai") {
         const img = document.createElement("img");
-        img.src = AI_AVATAR_SRC;
+        img.src = currentAI_avatar();
         img.alt = "AI";
         img.onerror = () => { av.textContent = "🐾"; };
         av.appendChild(img);
@@ -1075,7 +1118,7 @@ function toggleReaction(emoji, btn) {
 function saveChatData() {
     const sessionTime = localStorage.getItem('thisSessionTime');
     if (sessionTime && isLoggedIn()) {
-        localStorage.setItem(sessionTime, JSON.stringify(chatData));
+        localStorage.setItem(cacheKeyFor(sessionTime), JSON.stringify(chatData));
         postToDb(chatData, sessionTime, document.getElementById('chatSession').textContent);
     }
 }
@@ -1089,19 +1132,27 @@ const CONTEXT_ICONS = {
     quote: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 21c3 0 7-1 7-8V5c0-1.25-.75-2-2-2H4c-1.25 0-2 .75-2 2v6c0 1.25.75 2 2 2h1"/><path d="M14 21c3 0 7-1 7-8V5c0-1.25-.75-2-2-2h-4c-1.25 0-2 .75-2 2v6c0 1.25.75 2 2 2h1"/></svg>`,
     reaction: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M8 14s1.5 2 4 2 4-2 4-2"/><line x1="9" y1="9" x2="9.01" y2="9"/><line x1="15" y1="9" x2="15.01" y2="9"/></svg>`,
     trash: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg>`,
+    speak: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M15.54 8.46a5 5 0 0 1 0 7.07"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14"/></svg>`,
 };
 
 function showMessageContextMenu(x, y, msgEl, index) {
     hideMessageContextMenu();
     const menu = document.createElement("div");
     menu.className = "msg-context-menu";
+    const isAi = !!(msgEl && msgEl.classList && msgEl.classList.contains('ai'));
     const items = [
         { label: '复制', icon: 'copy', fn: () => copyMessage(index) },
         { label: '引用', icon: 'quote', fn: () => quoteMessage(index) },
         { label: '反应', icon: 'reaction', fn: () => showReactionPicker(msgEl, index, x, y) },
+    ];
+    // AI 消息才显示「播放语音」
+    if (isAi) {
+        items.push({ label: '播放语音', icon: 'speak', fn: () => playMessageVoice(msgEl, index) });
+    }
+    items.push(
         { label: '——', fn: null },
         { label: '删除', icon: 'trash', fn: () => deleteSingleMessage(msgEl, index) },
-    ];
+    );
     items.forEach(item => {
         if (item.fn === null) {
             const sep = document.createElement("div");
@@ -1183,6 +1234,28 @@ function copyMessage(index) {
         ta.remove();
         showToast('已复制');
     });
+}
+
+// 右键「播放语音」：用当前智能体音色合成并播放这条 AI 消息
+async function playMessageVoice(msgEl, index) {
+    if (typeof index !== 'number' || !chatData[index]) return;
+    const text = chatData[index].message || '';
+    if (!text.trim()) { showToast('这条消息没有可朗读的文字'); return; }
+    // 去掉 markdown 语法，取纯文本朗读
+    const plain = text.replace(/```[\s\S]*?```/g, ' ').replace(/[#>*_`~\[\]()]/g, '').trim();
+    if (!plain) { showToast('这条消息没有可朗读的文字'); return; }
+    showToast('正在合成语音…');
+    const voice = resolveVoice();
+    const audioUrl = await synthesizeSpeech(plain.slice(0, 500), voice, voiceState.speed);
+    if (!audioUrl) { showToast('语音合成失败，请确认 VoiceStudio 已启动'); return; }
+    // 挂播放条（如果还没有），并自动播放
+    if (msgEl) attachVoiceToMessage(msgEl, audioUrl);
+    const bar = msgEl ? msgEl.querySelector('.msg-voice-bar audio') : null;
+    if (bar) { bar.play(); } else {
+        const a = new Audio(audioUrl);
+        a.play().catch(() => {});
+    }
+    showToast('播放中');
 }
 
 // 待发送的引用（右键消息 → 引用 后设置；发送后清除）
@@ -1338,7 +1411,7 @@ function deleteSingleMessage(msgEl, index) {
     // 保存
     const sessionTime = localStorage.getItem('thisSessionTime');
     if (sessionTime && isLoggedIn()) {
-        localStorage.setItem(sessionTime, JSON.stringify(chatData));
+        localStorage.setItem(cacheKeyFor(sessionTime), JSON.stringify(chatData));
         postToDb(chatData, sessionTime, document.getElementById('chatSession').textContent);
     }
     if (!chatData.length) {
@@ -1498,10 +1571,14 @@ async function loadMainChatHistory() {
     const chatSessionEl = document.getElementById('chatSession');
     if (chatSessionEl) chatSessionEl.textContent = '🐾 主对话';
     // 先看本地缓存（仅登录用户读缓存；未登录不读，避免残留上一个账号的主对话）
+    // 注意：window.currentCharacterId 未初始化时（页面刚加载，异步预取还没返回），
+    // 不能读 '0_default' 缓存——那是所有角色的共享 key，会串号。此时直接拉后端。
     let messages = null;
-    if (isLoggedIn()) {
+    const cidReady = !!(typeof window !== 'undefined' && window.currentCharacterId);
+    const _mainKey = cacheKeyFor('0');
+    if (isLoggedIn() && cidReady) {
         try {
-            const cached = localStorage.getItem('0');
+            const cached = localStorage.getItem(_mainKey);
             if (cached) messages = JSON.parse(cached);
         } catch (e) { messages = null; }
     }
@@ -1516,7 +1593,10 @@ async function loadMainChatHistory() {
                 const data = await res.json();
                 if (data && Array.isArray(data.messages)) {
                     messages = data.messages;
-                    localStorage.setItem('0', JSON.stringify(messages));
+                    // 只有 cid 确定时才写缓存，避免把历史写进 '0_default' 共享 key
+                    if (cidReady) {
+                        localStorage.setItem(_mainKey, JSON.stringify(messages));
+                    }
                 }
             }
         } catch (e) { /* 拉取失败则保持空 */ }
@@ -1916,7 +1996,7 @@ function clearCurrentChat() {
     // 保存到本地和数据库
     const sessionTime = localStorage.getItem('thisSessionTime');
     if (sessionTime && isLoggedIn()) {
-        localStorage.setItem(sessionTime, JSON.stringify([]));
+        localStorage.setItem(cacheKeyFor(sessionTime), JSON.stringify([]));
         postToDb([], sessionTime, document.getElementById('chatSession').textContent);
     }
 }
@@ -2267,7 +2347,13 @@ async function loadMemoriesIntoForm() {
 
 function memoryItemHTML(m) {
     const cat = m.category ? `<span class="memory-cat">${escapeHtml(m.category)}</span>` : '';
-    return `<div class="memory-item" data-id="${m.id}">
+    // 熟悉度可视化：access_count/weight 越高颜色越深（docs 模块4：深色=熟悉，浅色=陌生）
+    let fam = '';
+    if (m.type === 'detail') {
+        const strength = Math.min(1, ((m.access_count || 0) * 0.25) + ((m.importance || 0.5) - 0.5) * 0.6);
+        fam = ` style="--fam:${Math.max(0.15, strength).toFixed(3)}"`;
+    }
+    return `<div class="memory-item" data-id="${m.id}"${fam}>
         <span class="memory-content">${escapeHtml(m.content)}</span>
         ${cat}
         <button class="memory-del" title="删除" data-id="${m.id}">×</button>
@@ -2463,10 +2549,356 @@ function initQuoteCancel() {
     }
 }
 
+// ================= 记忆体语音（VoiceStudio 本地语音服务） =================
+// 状态存 localStorage：voiceEnabled(bool)、voiceId(string)、voiceSpeed(float)
+function getVoiceSettings() {
+    try {
+        return JSON.parse(localStorage.getItem('jingent_voice_settings') || '{}');
+    } catch (e) { return {}; }
+}
+function saveVoiceSettings(s) {
+    localStorage.setItem('jingent_voice_settings', JSON.stringify(s));
+}
+
+// 当前语音设置缓存（供 addMessage 后合成使用）
+let voiceState = {
+    enabled: getVoiceSettings().enabled === true,
+    voice: getVoiceSettings().voice || 'default',
+    speed: parseFloat(getVoiceSettings().speed || '1.0'),
+};
+
+// 合成一段语音 → 返回 blob URL（失败返回 null）
+async function synthesizeSpeech(text, voice, speed) {
+    try {
+        const token = localStorage.getItem('token') || '';
+        const res = await fetch(`${config.API_BASE_URL}/ai/tts/synthesize`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+            body: JSON.stringify({ text, voice, format: 'wav', speed: speed || 1.0 })
+        });
+        if (!res.ok) return null;
+        const blob = await res.blob();
+        if (!blob || blob.size === 0) return null;
+        return URL.createObjectURL(blob);
+    } catch (e) {
+        return null;
+    }
+}
+
+// 在 AI 消息下插入语音播放条
+function attachVoiceToMessage(row, audioUrl) {
+    if (!row || !audioUrl) return;
+    const col = row.querySelector('.msg-col');
+    if (!col) return;
+    // 避免重复插入
+    if (col.querySelector('.msg-voice-bar')) return;
+    const bar = document.createElement('div');
+    bar.className = 'msg-voice-bar';
+    bar.innerHTML = `<audio controls src="${audioUrl}"></audio>`;
+    col.appendChild(bar);
+}
+
+// 解析当前角色的音色：优先角色绑定 voice，其次全局设置兜底，最后默认
+function resolveVoice() {
+    // 主对话（桌宠/记忆体）才用角色绑定音色；历史会话（普通 AI）走全局默认
+    const isMain = (typeof currentChatType === 'undefined' || currentChatType === 'main');
+    if (isMain) {
+        // 1. 当前角色（独立记忆体）绑定的音色
+        const charVoice = (typeof window !== 'undefined' && window.currentCharacter && window.currentCharacter.voice) || '';
+        if (charVoice && charVoice !== 'default') return charVoice;
+    }
+    // 2. 全局设置里的音色（兜底）
+    const globalVoice = voiceState.voice;
+    if (globalVoice && globalVoice !== 'default') return globalVoice;
+    // 3. 默认
+    return 'default';
+}
+
+// 去掉 markdown 语法，取纯文本朗读
+function cleanPlainText(text) {
+    return (text || '').replace(/```[\s\S]*?```/g, ' ').replace(/[#>*_`~\[\]()]/g, '').trim();
+}
+
+// 等待一段 audio 播放结束（依次连播用）
+function playAudioToEnd(audio) {
+    return new Promise((resolve) => {
+        if (!audio) return resolve();
+        const finish = () => resolve();
+        audio.onended = finish;
+        audio.onerror = finish;
+        // 音频还没加载好时等 canplay 再播，避免 play() 直接失败
+        if (audio.readyState >= 3) {
+            audio.play().catch(finish);
+        } else {
+            audio.addEventListener('canplay', () => audio.play().catch(finish), { once: true });
+        }
+    });
+}
+
+// AI 回复完成后合成语音（开启开关时）。voice 可选，用于整轮锁定统一音色。
+async function maybeSpeakAiReply(row, text, voice) {
+    if (!voiceState.enabled) return;
+    if (!text || text.length < 2) return;
+    const plain = cleanPlainText(text);
+    if (!plain || plain.length > 4096) return;
+    const v = voice || resolveVoice();
+    const audioUrl = await synthesizeSpeech(plain.slice(0, 500), v, voiceState.speed);
+    if (audioUrl) attachVoiceToMessage(row, audioUrl);
+    return audioUrl || null;
+}
+
+// 依次朗读整轮多个 AI 气泡（真人连发）：合成一条 → 自动播放 → 播完再下一条，全程同一音色
+async function speakAiBubbles(bubbles, voice) {
+    if (!voiceState.enabled) return;
+    if (!bubbles || !bubbles.length) return;
+    const v = voice || resolveVoice();
+    for (const b of bubbles) {
+        if (!b || !b.row) continue;
+        const plain = cleanPlainText(b.text || '');
+        if (!plain || plain.length > 4096) continue;
+        const audioUrl = await synthesizeSpeech(plain.slice(0, 500), v, voiceState.speed);
+        if (!audioUrl) continue;
+        attachVoiceToMessage(b.row, audioUrl);
+        const audio = b.row.querySelector('.msg-voice-bar audio');
+        if (audio) await playAudioToEnd(audio);
+    }
+}
+
+// 聊天页底部「朗读」快捷开关：控制 AI 回复是否自动用智能体音色播放
+// 与设置面板里的「自动朗读」开关共享同一份 voiceState.enabled / localStorage
+function initTtsToggle() {
+    const btn = document.getElementById('ttsToggleBtn');
+    const label = document.getElementById('ttsToggleLabel');
+    if (!btn) return;
+
+    // 回显当前状态
+    function render() {
+        voiceState.enabled = getVoiceSettings().enabled === true;
+        btn.classList.toggle('active', voiceState.enabled);
+        if (label) label.textContent = voiceState.enabled ? '朗读中' : '朗读';
+    }
+    render();
+
+    btn.addEventListener('click', () => {
+        voiceState.enabled = !voiceState.enabled;
+        const cur = getVoiceSettings();
+        cur.enabled = voiceState.enabled;
+        saveVoiceSettings(cur);
+        render();
+        // 同步设置面板里的开关（如果存在）
+        const panelToggle = document.getElementById('voiceEnabledToggle');
+        const panelLabel = document.getElementById('voiceEnabledLabel');
+        if (panelToggle) panelToggle.checked = voiceState.enabled;
+        if (panelLabel) panelLabel.textContent = voiceState.enabled ? '开启' : '关闭';
+        showToast(voiceState.enabled ? '已开启：AI 回复后自动朗读' : '已关闭自动朗读');
+    });
+}
+
+// 初始化语音设置面板
+function initVoicePanel() {
+    const toggle = document.getElementById('voiceEnabledToggle');
+    const label = document.getElementById('voiceEnabledLabel');
+    const select = document.getElementById('voiceSelect');
+    const speedSel = document.getElementById('voiceSpeedSelect');
+    const testBtn = document.getElementById('voiceTestBtn');
+    const refreshBtn = document.getElementById('refreshVoicesBtn');
+    const statusTip = document.getElementById('voiceStatusTip');
+    const testAudio = document.getElementById('voiceTestAudio');
+    if (!toggle) return;
+
+    // 回显
+    const s = getVoiceSettings();
+    toggle.checked = s.enabled === true;
+    if (label) label.textContent = toggle.checked ? '开启' : '关闭';
+    if (select) select.value = s.voice || 'default';
+    if (speedSel) speedSel.value = String(s.speed || '1.0');
+
+    toggle.addEventListener('change', () => {
+        voiceState.enabled = toggle.checked;
+        if (label) label.textContent = toggle.checked ? '开启' : '关闭';
+        const cur = getVoiceSettings();
+        cur.enabled = toggle.checked;
+        saveVoiceSettings(cur);
+        // 反向同步底部「朗读」快捷开关
+        const ttsBtn = document.getElementById('ttsToggleBtn');
+        const ttsLabel = document.getElementById('ttsToggleLabel');
+        if (ttsBtn) ttsBtn.classList.toggle('active', toggle.checked);
+        if (ttsLabel) ttsLabel.textContent = toggle.checked ? '朗读中' : '朗读';
+    });
+    if (select) select.addEventListener('change', () => {
+        voiceState.voice = select.value;
+        const cur = getVoiceSettings();
+        cur.voice = select.value;
+        saveVoiceSettings(cur);
+    });
+    if (speedSel) speedSel.addEventListener('change', () => {
+        voiceState.speed = parseFloat(speedSel.value || '1.0');
+        const cur = getVoiceSettings();
+        cur.speed = voiceState.speed;
+        saveVoiceSettings(cur);
+    });
+
+    // 健康检查 + 加载音色
+    async function refreshVoices() {
+        if (statusTip) { statusTip.textContent = '正在检测本地语音服务…'; statusTip.className = 'llm-tip'; }
+        try {
+            const token = localStorage.getItem('token') || '';
+            const hres = await fetch(`${config.API_BASE_URL}/ai/tts/health`, { headers: { 'Authorization': `Bearer ${token}` } });
+            const hdata = await hres.json();
+            if (hres.ok && hdata.ok) {
+                if (statusTip) { statusTip.textContent = '✅ 本地语音服务已就绪（VoiceStudio，127.0.0.1:3900）'; statusTip.className = 'llm-test-result ok'; }
+            } else {
+                if (statusTip) { statusTip.textContent = '⚠️ 未检测到本地语音服务。请先安装 VoiceStudio 并打开（监听 127.0.0.1:3900），再刷新音色。'; statusTip.className = 'llm-test-result err'; }
+                return;
+            }
+            const vres = await fetch(`${config.API_BASE_URL}/ai/tts/voices`, { headers: { 'Authorization': `Bearer ${token}` } });
+            const vdata = await vres.json();
+            if (vres.ok && vdata.voices) {
+                const voices = vdata.voices.filter(v => v.type === 'profile'); // 只展示用户保存的音色
+                if (select) {
+                    select.innerHTML = '<option value="default">默认音色</option>';
+                    voices.forEach(v => {
+                        const opt = document.createElement('option');
+                        opt.value = v.voice_id || v.id;
+                        opt.textContent = v.name || v.voice_id;
+                        select.appendChild(opt);
+                    });
+                    select.value = getVoiceSettings().voice || 'default';
+                }
+                if (statusTip) statusTip.textContent = `✅ 语音服务就绪，共 ${voices.length} 个自定义音色（+ 内置默认）`;
+            }
+        } catch (e) {
+            if (statusTip) { statusTip.textContent = '⚠️ 无法连接本地语音服务。请确认 VoiceStudio 已打开。'; statusTip.className = 'llm-test-result err'; }
+        }
+    }
+
+    if (refreshBtn) refreshBtn.onclick = refreshVoices;
+    if (testBtn) testBtn.onclick = async () => {
+        const text = (document.getElementById('voiceTestText') || {}).value || '我学会说话了';
+        testBtn.textContent = '合成中…';
+        testBtn.disabled = true;
+        const audioUrl = await synthesizeSpeech(text, voiceState.voice, voiceState.speed);
+        testBtn.textContent = '试听';
+        testBtn.disabled = false;
+        if (audioUrl) {
+            if (testAudio) { testAudio.src = audioUrl; testAudio.style.display = 'block'; testAudio.play(); }
+        } else {
+            if (statusTip) { statusTip.textContent = '❌ 合成失败。请确认语音服务已就绪（首次合成需下载约 2.3GB 模型，请耐心等待）。'; statusTip.className = 'llm-test-result err'; }
+        }
+    };
+
+    // 打开语音 tab 时刷新
+    const voiceTab = document.querySelector('.settings-tab[data-stab="voice"]');
+    if (voiceTab) voiceTab.addEventListener('click', refreshVoices);
+}
+
+// ================= 语音输入（录音 → 转文字 → 填入输入框） =================
+let voiceRecorder = null;
+let voiceRecChunks = [];
+let voiceRecording = false;
+
+function initVoiceInput() {
+    const btn = document.getElementById('voiceBtn');
+    if (!btn) return;
+    const input = document.getElementById('userInput');
+    btn.addEventListener('click', async () => {
+        if (voiceRecording) {
+            // 停止录音并转文字
+            voiceRecording = false;
+            btn.classList.remove('recording');
+            if (voiceRecorder && voiceRecorder.state === 'recording') {
+                voiceRecorder.stop();
+            }
+            return;
+        }
+        // 检查是否支持录音
+        if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+            alert('当前浏览器不支持录音，请用 Chrome/Edge');
+            return;
+        }
+        if (typeof MediaRecorder === 'undefined') {
+            alert('当前浏览器不支持 MediaRecorder');
+            return;
+        }
+        try {
+            const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+            voiceRecChunks = [];
+            // 明确选择受支持的 mimeType，避免浏览器 fallback 到不可解码的格式
+            const candMimes = ['audio/webm;codecs=opus', 'audio/webm', 'audio/ogg;codecs=opus', 'audio/mp4'];
+            let mimeType = '';
+            for (const m of candMimes) {
+                if (window.MediaRecorder && MediaRecorder.isTypeSupported(m)) { mimeType = m; break; }
+            }
+            voiceRecorder = mimeType
+                ? new MediaRecorder(stream, { mimeType })
+                : new MediaRecorder(stream);
+            voiceRecorder.ondataavailable = e => { if (e.data && e.data.size > 0) voiceRecChunks.push(e.data); };
+            voiceRecorder.onstop = async () => {
+                // 先收集数据，再关流，避免最后一个 dataavailable 丢失
+                const recMime = (voiceRecorder && voiceRecorder.mimeType) || mimeType || 'audio/webm';
+                const blob = new Blob(voiceRecChunks, { type: recMime });
+                voiceRecChunks = [];
+                stream.getTracks().forEach(t => t.stop());
+                if (!blob || blob.size < 1000) {
+                    alert('录音太短或没录到声音，请长按说话 1 秒以上再松手');
+                    return;
+                }
+                await transcribeVoice(blob);
+            };
+            // timeslice 1 秒：定期 flush 数据，防止 stop 时一次性 flush 丢失
+            voiceRecorder.start(1000);
+            voiceRecording = true;
+            btn.classList.add('recording');
+        } catch (err) {
+            alert('无法访问麦克风：' + (err.message || '权限被拒绝'));
+        }
+    });
+}
+
+async function transcribeVoice(blob) {
+    const btn = document.getElementById('voiceBtn');
+    const input = document.getElementById('userInput');
+    const oldText = btn ? btn.textContent : '语音';
+    if (btn) btn.textContent = '转文字中…';
+    try {
+        const token = localStorage.getItem('token') || '';
+        const fd = new FormData();
+        // 根据实际 blob 类型决定文件名后缀（webm/ogg/mp4），后端按后缀探测格式
+        const bt = blob.type || '';
+        const ext = bt.indexOf('ogg') >= 0 ? 'ogg' : (bt.indexOf('mp4') >= 0 ? 'm4a' : 'webm');
+        fd.append('file', blob, 'recording.' + ext);
+        fd.append('model', 'whisper-1');
+        fd.append('response_format', 'json');
+        const res = await fetch(`${config.API_BASE_URL}/ai/tts/transcribe`, {
+            method: 'POST',
+            headers: { 'Authorization': `Bearer ${token}` },
+            body: fd,
+        });
+        const data = await res.json();
+        if (!res.ok || !data.ok) throw new Error(data.detail || '转文字失败');
+        const text = (data.text || '').trim();
+        if (text && input) {
+            // 追加到输入框（保留已有内容）
+            const cur = input.value.trim();
+            input.value = cur ? cur + ' ' + text : text;
+            input.focus();
+        } else {
+            alert('没有识别到文字，请重试');
+        }
+    } catch (err) {
+        alert('语音转文字失败：' + (err.message || '请确认 VoiceStudio 已启动'));
+    } finally {
+        if (btn) btn.innerHTML = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="2" width="6" height="12" rx="3"></rect><path d="M5 10v1a7 7 0 0 0 14 0v-1"></path><line x1="12" y1="19" x2="12" y2="22"></line></svg><span>语音</span>`;
+    }
+}
+
 if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', () => { initMainChatDefault(); initMainChatEntry(); initQuoteCancel(); });
+    document.addEventListener('DOMContentLoaded', () => { initMainChatDefault(); initMainChatEntry(); initQuoteCancel(); initTtsToggle(); initVoicePanel(); initVoiceInput(); });
 } else {
     initMainChatDefault();
     initMainChatEntry();
     initQuoteCancel();
+    initTtsToggle();
+    initVoicePanel();
+    initVoiceInput();
 }

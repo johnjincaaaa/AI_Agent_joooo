@@ -178,7 +178,7 @@ const TOP_BAR_HTML = `
     <div class="top-bar-left">
         <a href="/" class="top-bar-logo">
             <div class="logo-mark">
-                <img src="../static/a.png" alt="Jingent AI">
+                <img src="/static/a.png" alt="Jingent AI">
             </div>
             <span class="logo-text">Jingent</span>
         </a>

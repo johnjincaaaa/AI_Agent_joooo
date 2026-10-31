@@ -653,3 +653,116 @@
         grid-template-columns: 1fr;
     }
 }
+
+/* ==========================================================
+   /job 求职面板 · restyle（design-taste：True-black flat）
+   与创作中心同一语言：按钮反色药丸、紫 accent 清零（只留数据/状态色）、
+   面板亮度分层、聚焦淡白、滚动条统一 6px thin
+========================================================== */
+.page-job .job-panel-header h1 {
+    font-size: 24px;
+    font-weight: 700;
+    color: var(--text-primary);
+    margin-bottom: 6px;
+}
+
+.page-job .job-hunt-panel {
+    max-width: 1000px;
+    scrollbar-width: thin;
+    scrollbar-color: var(--scrollbar-thumb) transparent;
+}
+.page-job .job-hunt-panel::-webkit-scrollbar {
+    width: 6px;
+}
+.page-job .job-hunt-panel::-webkit-scrollbar-thumb {
+    background: var(--scrollbar-thumb);
+    border-radius: 3px;
+}
+.page-job .job-hunt-panel::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+/* 步骤条：active 用亮度分层，去紫 */
+.page-job .job-step-tag.active {
+    background: var(--bg-hover);
+    color: var(--text-primary);
+    border-color: rgba(255, 255, 255, 0.22);
+    font-weight: 600;
+}
+
+/* section：弱边框分层 */
+.page-job .job-section {
+    border-color: var(--border);
+    background: var(--bg-elevated);
+}
+
+/* section 标题编号：中性圆，去紫 */
+.page-job .job-section-title span.num {
+    background: var(--bg-hover);
+    color: var(--text-secondary);
+}
+
+/* 表单聚焦：淡白边，去紫 */
+.page-job .job-field input:focus,
+.page-job .job-field select:focus,
+.page-job .job-field textarea:focus {
+    border-color: rgba(255, 255, 255, 0.35);
+}
+
+/* 模板卡片：hover/选中用中性亮，去紫 */
+.page-job .template-card:hover {
+    border-color: rgba(255, 255, 255, 0.22);
+}
+.page-job .template-card.selected {
+    border-color: rgba(255, 255, 255, 0.5);
+    background: var(--bg-hover);
+}
+
+/* 岗位卡片 hover：去紫 */
+.page-job .job-card:hover {
+    border-color: rgba(255, 255, 255, 0.22);
+}
+
+/* 岗位标签：灰底中性，去紫 */
+.page-job .job-tag {
+    background: var(--bg-hover);
+    color: var(--text-secondary);
+}
+
+/* 按钮：primary 反色白底黑字药丸；secondary/ghost 中性描边 */
+.page-job .job-btn {
+    border-radius: 999px;
+    font-weight: 600;
+}
+.page-job .job-btn-primary {
+    background: #ffffff;
+    color: #111111;
+}
+.page-job .job-btn-primary:hover:not(:disabled) {
+    background: #e9e9ea;
+}
+[data-theme="light"] .page-job .job-btn-primary {
+    background: #111111;
+    color: #ffffff;
+}
+[data-theme="light"] .page-job .job-btn-primary:hover:not(:disabled) {
+    background: #2b2b30;
+}
+
+/* 面试回答框聚焦：去紫 */
+.page-job .interview-answer-input:focus {
+    border-color: rgba(255, 255, 255, 0.35);
+}
+
+/* 模板卡描述提亮（原 text-muted 在深棕面板上 2.2:1，低于 4.5:1 门槛） */
+.page-job .template-card p {
+    color: var(--text-secondary);
+}
+.page-job .job-section-title span.num {
+    color: var(--text-secondary);
+}
+
+/* 简历空态提示提亮（原 text-muted 2.2:1） */
+.page-job .resume-preview.empty {
+    color: var(--text-secondary);
+}

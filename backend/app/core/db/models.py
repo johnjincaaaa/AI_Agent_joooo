@@ -98,6 +98,7 @@ class Message(Base):
     created_at = Column(DateTime, default=datetime.now, index=True)  # 时间戳（原子定位）
     reactions = Column(JSON, default=dict)             # 消息反应 {emoji: count}
     reply_to_id = Column(Integer, ForeignKey("messages.id"), nullable=True)  # 回复引用
+    character_id = Column(String(50), nullable=True, index=True)  # 所属灵魂（角色 ID）；主对话按灵魂隔离历史
 
     session = relationship("ChatSession")
     user = relationship("User")
@@ -214,6 +215,58 @@ class Memory(Base):
     category = Column(String(30), nullable=True)                  # 个人信息/喜好偏好/目标计划/情绪状态/重要事件/其他
     content = Column(Text, nullable=False)                        # 记忆内容
     source = Column(String(20), nullable=True)                    # manual=手动 / extract=对话抽取
+    character_id = Column(String(50), nullable=True, index=True)  # 所属角色（灵魂隔离记忆；NULL=旧数据归默认角色）
+    importance = Column(Float, nullable=True, default=0.5)        # 重要度 0~1（抽取/手动时给定）
+    weight = Column(Float, nullable=True, default=1.0)            # 当前权重（遗忘曲线：随时间和召回衰减/增强）
+    access_count = Column(Integer, nullable=True, default=0)      # 被语义召回次数（越多越不容易忘）
+    last_recalled_at = Column(DateTime, nullable=True)            # 最近一次被召回时间
+    embedding = Column(Text, nullable=True)                       # 细节记忆 embedding（JSON float 数组，语义召回/去重用）
+    created_at = Column(DateTime, default=datetime.now, index=True)
+    updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now)
+
+
+# ======================
+# 请求日志表（后台「用户信息」：IP / 请求头 / token 用量 / 访客轨迹）
+# ======================
+class RequestLog(Base):
+    __tablename__ = "request_logs"
+
+    id = Column(Integer, primary_key=True, index=True)
+    request_id = Column(String(32), nullable=True, index=True)  # 请求唯一 ID（middleware 生成）
+    method = Column(String(10), nullable=False)                 # GET / POST / ...
+    path = Column(String(255), nullable=False, index=True)      # 请求路径
+    ip = Column(String(64), nullable=True, index=True)          # 客户端 IP
+    user_agent = Column(String(512), nullable=True)             # 完整 UA
+    referer = Column(String(512), nullable=True)                # 来源页
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=True, index=True)  # 注册用户（可空=访客）
+    visitor_key = Column(String(64), nullable=True, index=True) # 访客去重键（sha256(ua|ip)）
+    status_code = Column(Integer, nullable=True)                # 响应状态码
+    elapsed_ms = Column(Integer, nullable=True)                 # 耗时毫秒
+    tokens_in = Column(Integer, nullable=True)                  # 输入 token 估算
+    tokens_out = Column(Integer, nullable=True)                 # 输出 token 估算
+    created_at = Column(DateTime, default=datetime.now, index=True)
+
+
+# ======================
+# 自定义角色表（Jingent 创作中心 /chat/create）
+# ======================
+class CustomCharacter(Base):
+    __tablename__ = "custom_characters"
+
+    id = Column(Integer, primary_key=True, index=True)
+    npc_id = Column(String(30), unique=True, index=True, nullable=False)  # 毫秒时间戳，草稿唯一标识
+    user_id = Column(Integer, ForeignKey("users.id"), index=True, nullable=False)  # 创建者
+    name = Column(String(50), nullable=False)                   # 角色名称
+    description = Column(String(200), nullable=True)            # 简介（卡片展示）
+    persona = Column(Text, nullable=True)                       # 独立记忆体创建（完整 prompt）
+    opening = Column(String(300), nullable=True)                # 开场白
+    rules = Column(JSON, default=list)                          # 硬性规则列表
+    style = Column(JSON, default=dict)                          # 说话风格 {tone, meme_frequency, active_topics}
+    avatar = Column(String(255), nullable=True)                 # 形象图（上传 /uploads/xxx 或内置 svg）
+    appearance = Column(Text, nullable=True)                    # 宠物模型描述（形象描述生成）
+    tags = Column(JSON, default=list)                           # 标签
+    voice = Column(String(100), nullable=True)                  # 绑定音色（VoiceStudio 音色 ID/名字，如 demo0001 / 小欧-软萌音）
+    status = Column(String(20), nullable=False, default="draft", index=True)  # draft=草稿 / pending=审核中 / approved=已发布
     created_at = Column(DateTime, default=datetime.now, index=True)
     updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now)
 

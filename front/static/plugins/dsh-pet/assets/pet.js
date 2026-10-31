@@ -21,6 +21,13 @@
   const MEMES_DIR = ASSET_BASE + '/memes'
   const SOUND_DIR = ASSET_BASE + '/sound'
 
+  // 用户自定义资源（后端合并配置返回后填入）
+  let USER_DIR = null          // 如 /plugins/dsh-pet/user-assets/42
+  let USER_ASSETS = { webm: [], memes: [], sound: [] }
+  let PET_DIR = null           // 当前安装的宠物包资源目录 /plugins/pets/<id>
+  let PET_WEBMS = []           // 宠物包内的动画名清单（优先从 PET_DIR 加载）
+  let PET_MEMES = []           // 宠物包内自带的表情包名清单（切宠物后表情包也跟着换）
+
   // ── 可调配置（改这里，不用往下翻）──────────────────────
   const CONFIG = {
     // 碎碎念：间隔（毫秒），min~max 随机
@@ -35,8 +42,8 @@
     randomMaxMs: 20000,
   }
 
-  // ── 动画池（与 config.jsonc 对应，完整版）──────────────
-  const POOLS = {
+  // ── 动画池（内置默认；启动时用后端合并配置覆盖/追加）──────────────
+  let POOLS = {
     idle: ['待机呼吸休闲'],
     // 转向（播完翻转朝向）
     turn: ['东张西望'],
@@ -86,8 +93,8 @@
     ],
   }
 
-  // ── 表情包（碎碎念/对话配图）──────────────────────────
-  const MEMES = {
+  // ── 表情包（内置默认；启动时用后端合并配置覆盖/追加）──────────────
+  let MEMES = {
     '吃白饭的大肥鱼': '躺平扒白饭，摆烂挨骂也无所谓',
     '大的要来啦': '举喇叭大喊预警',
     '大的药来了': '抱着超大胶囊，谐音梗',
@@ -102,6 +109,14 @@
     '可爱': '标准正面卖萌立绘',
     'token给妈妈保管': '伸手过来要 token',
   }
+
+  // ── 音效（名称 → 文件名；用户可上传 sound 覆盖/追加）──────────────
+  let SOUNDS = {
+    'click-duck': 'click-duck.wav',
+  }
+
+  // ── 后端合并配置缓存 ──────────────────────────────────
+  let REMOTE_CFG = null
 
   const LS_KEY = 'dsh-pet:layout'
 
@@ -118,10 +133,40 @@
 
   // ── 音效 ──────────────────────────────────────────────
   let audioCtx = null
+
+  // 资源路径解析：当前宠物包优先 → 用户上传 → 内置
+  function resolveAsset(kind, name, ext) {
+    const dirMap = { webm: 'webm', memes: 'memes', sound: 'sound' }
+    // 1. 当前宠物包（插件市场安装的 DSH pet）
+    if (kind === 'webm' && PET_DIR && PET_WEBMS.indexOf(name) >= 0) {
+      return PET_DIR + '/webm/' + encodeURIComponent(name) + ext
+    }
+    // 1b. 当前宠物包自带的表情包（切宠物后表情包也跟着换，不再回退大肥鱼）
+    if (kind === 'memes' && PET_DIR && PET_MEMES.indexOf(name) >= 0) {
+      return PET_DIR + '/memes/' + encodeURIComponent(name) + ext
+    }
+    // 2. 用户上传
+    if (USER_DIR) {
+      const list = USER_ASSETS[kind] || []
+      if (list.indexOf(name) >= 0) {
+        return USER_DIR + '/' + dirMap[kind] + '/' + encodeURIComponent(name) + ext
+      }
+    }
+    // 3. 内置
+    const builtinDir = { webm: WEBM_DIR, memes: MEMES_DIR, sound: SOUND_DIR }
+    return builtinDir[kind] + '/' + encodeURIComponent(name) + ext
+  }
+
   function playClickSound() {
     try {
-      const audio = new Audio(SOUND_DIR + '/click-duck.wav')
-      audio.volume = 0.4
+      // 点击音效开关（默认开启，与 config.jsonc 一致）
+      if (!REMOTE_CFG || !REMOTE_CFG.settings || !REMOTE_CFG.settings.clickSoundEnabled) return
+      const file = SOUNDS['click-duck'] || 'click-duck.wav'
+      const dot = file.lastIndexOf('.')
+      const stem = dot > 0 ? file.slice(0, dot) : file
+      const ext = dot > 0 ? file.slice(dot) : '.wav'
+      const audio = new Audio(resolveAsset('sound', stem, ext))
+      audio.volume = 0.5
       audio.play().catch(() => {})
     } catch (e) {}
   }
@@ -199,7 +244,7 @@
     if (!text) { ui.bubble.style.display = 'none'; return }
     let html = ''
     if (memeName) {
-      const imgSrc = MEMES_DIR + '/' + encodeURIComponent(memeName) + '.png'
+      const imgSrc = resolveAsset('memes', memeName, '.png')
       html = `<img src="${imgSrc}" style="width:100%;border-radius:8px;display:block;margin-bottom:4px;">`
     }
     html += `<span>${escapeHtml(text)}</span>`
@@ -220,8 +265,9 @@
   // ── 动画播放 ──────────────────────────────────────────
   function playAnim(name, loop, keepFacing) {
     if (!name) return
-    const src = WEBM_DIR + '/' + encodeURIComponent(name) + '.webm'
+    const src = resolveAsset('webm', name, '.webm')
     state.current = name
+    ui.video.style.display = ''
     ui.video.loop = !!loop
     // 镜像：转向动画不镜像，其余按 facing
     if (!keepFacing && state.facing === -1) {
@@ -240,15 +286,47 @@
   }
 
   function playIdle() {
-    playAnim(pickRandom(POOLS.idle), true)
+    const name = pickRandom(POOLS.idle)
+    if (name) playAnim(name, true)
+  }
+
+  // 语义化播放：按「角色」从当前宠物的 POOLS 取动画，而不是写死大肥鱼动画名。
+  // workStatus 池按约定顺序映射：0思考 1忙碌 2整理 3等待 4庆祝 5出错。
+  // 池为空（如精简包）时优雅降级：workStatus 回退 idle，
+  // 取不到就保持当前动画不动——绝不加载不存在的 webm 导致 404 闪烁/消失。
+  const WORK_STATUS_INDEX = { thinking: 0, working: 1, result: 2, waiting: 3, success: 4, error: 5 }
+
+  function workStatusAnim(key) {
+    const pool = POOLS.workStatus || []
+    const idx = WORK_STATUS_INDEX[key]
+    if (idx != null && pool[idx]) return pool[idx]
+    // 宠物没有 workStatus 池 → 用随机/待机兜底
+    return pickRandom(pool) || pickRandom(POOLS.idle)
+  }
+
+  // 按角色播放动画；取不到名字则不动（保持当前帧），返回是否真的切了动画
+  function playByRole(role, loop) {
+    let name = null
+    if (role === 'idle') name = pickRandom(POOLS.idle)
+    else if (role === 'whisper') name = pickRandom(POOLS.whisper) || pickRandom(POOLS.random) || pickRandom(POOLS.idle)
+    else name = workStatusAnim(role)   // thinking/working/result/waiting/success/error
+    if (!name) return false
+    playAnim(name, loop)
+    return true
   }
 
   function playRandomAction() {
-    // 随机动作：从 random + seasonal 池里抽
-    const pool = Math.random() < 0.75 ? POOLS.random : POOLS.seasonal
+    // 随机动作：优先 random 池，空则用 seasonal，再空则待机兜底
+    let pool = (Math.random() < 0.75 && POOLS.random.length) ? POOLS.random : POOLS.seasonal
+    if (!pool || !pool.length) pool = POOLS.random
     const name = pickRandom(pool)
-    playAnim(name, false)
-    ui.video.onended = () => { playIdle(); scheduleNextRandom() }
+    if (name) {
+      playAnim(name, false)
+      ui.video.onended = () => { playIdle(); scheduleNextRandom() }
+    } else {
+      // 该宠物没有随机动作 → 跳过本次，稍后再试，保持待机
+      scheduleNextRandom()
+    }
   }
 
   function scheduleNextRandom() {
@@ -450,7 +528,7 @@
     // 播放一次后回到待机
     const playOnce = (name) => { playAnim(name, false); ui.video.onended = () => playIdle() }
 
-    // 动画池
+    // 动画池（空池跳过，不显示空分组）
     const groups = [
       ['点击回应', POOLS.clicks],
       ['随机动作', POOLS.random],
@@ -460,6 +538,7 @@
       ['碎碎念', POOLS.whisper],
     ]
     groups.forEach(([title, pool]) => {
+      if (!pool || !pool.length) return
       addSep(); addGroup(title)
       pool.forEach(n => addItem(n, () => playOnce(n)))
     })
@@ -606,11 +685,15 @@
 
   function doWhisper() {
     const line = pickRandom(WHISPER_LINES)
-    // 按 CONFIG 概率配表情包
+    // 按 CONFIG 概率配表情包（宠物没有表情包时 memeNames 为空 → 不配图）
     const memeNames = Object.keys(MEMES)
     const meme = Math.random() < CONFIG.whisperMemeChance ? pickRandom(memeNames) : null
-    playAnim(pickRandom(POOLS.whisper), false)
-    ui.video.onended = () => { playIdle(); scheduleNextRandom() }
+    // 宠物可能没有 whisper 池 → 只有成功播放了非循环动画才挂 onended 回到待机
+    const w = pickRandom(POOLS.whisper)
+    if (w) {
+      playAnim(w, false)
+      ui.video.onended = () => { playIdle(); scheduleNextRandom() }
+    }
     showBubble(line, CONFIG.whisperBubbleMs, meme)
     scheduleWhisper()
   }
@@ -642,40 +725,41 @@
       case 'hello':
         break
       case 'user':
-        playAnim('待机呼吸休闲', true)
+        playByRole('idle', true)
         showBubble('在听呢～', 2000)
         break
       case 'turn-start':
-        playAnim('工作状态-思考冒泡', true)
+        playByRole('thinking', true)
         showBubble('让我想想…', 3000)
         break
       case 'tool-call':
-        playAnim('工作状态-忙碌点按', true)
+        playByRole('working', true)
         showBubble('干活中：' + (msg.name || ''), 2000)
         break
       case 'delta':
-        if (state.current !== '待机呼吸休闲') {
-          playAnim('待机呼吸休闲', true)
+        // 输出中：切到待机（若宠物没有专门的 idle 就不动），避免反复重载
+        if (state.current == null || state.current.indexOf('工作状态') === 0) {
+          playByRole('idle', true)
         }
         break
       case 'turn-end':
         if (msg.status === 'error') {
-          playAnim('工作状态-垂头叹气冒汗', false)
+          playByRole('error', false)
           showBubble('呜…出错了', 2500)
         } else {
-          playAnim('工作状态-雀跃庆祝', false)
+          playByRole('success', false)
           showBubble('搞定啦！', 2500)
         }
         ui.video.onended = () => { playIdle(); scheduleNextRandom() }
         break
       case 'say-reply':
         showBubble(msg.text || '', 5000)
-        playAnim('待机呼吸休闲', true)
+        playByRole('idle', true)
         break
       case 'active-message':
         // AI 主动发消息 → 播放碎碎念动画 + 气泡 + 把消息加到主页面
         showBubble(msg.text || '', 6000)
-        playAnim(pickRandom(POOLS.whisper), false)
+        playByRole('whisper', false)
         ui.video.onended = () => { playIdle(); scheduleNextRandom() }
         // 同步到主页面 chatData（如果存在）
         try {
@@ -824,14 +908,73 @@
     }
   }
 
+  // ── 加载后端合并配置（用户资源 + 触发条件）─────────────
+  async function loadConfig() {
+    try {
+      const headers = {}
+      const token = (typeof localStorage !== 'undefined') ? localStorage.getItem('token') : null
+      if (token && token !== 'null') headers['Authorization'] = 'Bearer ' + token
+      const res = await fetch(BASE + '/config', { headers })
+      const data = await res.json()
+      if (!data) return
+
+      REMOTE_CFG = data
+
+      // 动画池：后端合并结果直接覆盖（含内置 + 用户追加）。
+      // 注意：空数组也要覆盖，否则切宠物后空池（如碎碎念/时节）会残留大肥鱼内置动画。
+      if (data.pools && typeof data.pools === 'object') {
+        Object.keys(POOLS).forEach(k => {
+          if (Array.isArray(data.pools[k])) POOLS[k] = data.pools[k]
+        })
+      }
+      // 表情包映射（后端已按当前宠物决定：切宠物后给宠物自带表情包，没有则为空）
+      if (data.memes && typeof data.memes === 'object') {
+        MEMES = data.memes
+      }
+      // 当前宠物包自带的表情包名清单（resolveAsset 用它判断去 PET_DIR/memes 取图）
+      PET_MEMES = Array.isArray(data.petMemes) ? data.petMemes : []
+      // 音效映射
+      if (data.sounds && typeof data.sounds === 'object') {
+        SOUNDS = Object.assign({}, SOUNDS, data.sounds)
+      }
+      // 用户资源清单与路径
+      if (data.userAssets) {
+        USER_ASSETS = data.userAssets
+      }
+      if (data.userDir) {
+        USER_DIR = data.userDir
+      }
+      // 当前宠物包资源目录（插件市场）
+      if (data.petDir) {
+        PET_DIR = data.petDir
+        // 宠物包动画名 = 当前 pools 里的全部动画（后端已用宠物池覆盖）
+        PET_WEBMS = []
+        Object.keys(POOLS).forEach(k => {
+          if (Array.isArray(POOLS[k])) PET_WEBMS = PET_WEBMS.concat(POOLS[k])
+        })
+        PET_WEBMS = Array.from(new Set(PET_WEBMS))
+      } else {
+        PET_DIR = null
+        PET_WEBMS = []
+      }
+
+      console.log('[dsh-pet] 配置已加载：动画池', Object.keys(POOLS).map(k => k + ':' + POOLS[k].length).join(' '), '| 表情', Object.keys(MEMES).length, '| 音效', Object.keys(SOUNDS).length)
+    } catch (e) {
+      console.warn('[dsh-pet] 配置加载失败，使用内置默认', e)
+    }
+  }
+
   // ── 启动 ──────────────────────────────────────────────
-  function main() {
+  async function main() {
     restoreLayout()
+    await loadConfig()
     playIdle()
     scheduleNextRandom()
     scheduleWhisper()
     connectSSE()
-    showBubble('🐾 蓝毛小女仆来啦', 3000)
+    // 开场白按当前宠物名生成（默认大肥鱼），不再硬编码成某个角色
+    const petName = (REMOTE_CFG && REMOTE_CFG.currentPet && REMOTE_CFG.currentPet.name) || '大肥鱼'
+    showBubble('🐾 ' + petName + '来啦', 3000)
     console.log('[dsh-pet] 就绪：动画池', Object.keys(POOLS).map(k => k + ':' + POOLS[k].length).join(' '))
   }
 

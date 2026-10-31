@@ -97,6 +97,28 @@ def _ensure_chat_session_columns():
             conn.execute(text("ALTER TABLE chat_sessions ADD COLUMN chat_type VARCHAR(20) NOT NULL DEFAULT 'secondary'"))
 
 
+def _ensure_message_columns():
+    """给已存在的 messages 表补 character_id 列（主对话按灵魂隔离历史）。"""
+    inspector = inspect(engine)
+    if "messages" not in inspector.get_table_names():
+        return
+    existing = {col["name"] for col in inspector.get_columns("messages")}
+    if "character_id" not in existing:
+        with engine.begin() as conn:
+            conn.execute(text("ALTER TABLE messages ADD COLUMN character_id VARCHAR(50)"))
+
+
+def _ensure_custom_character_columns():
+    """给已存在的 custom_characters 表补 voice 列（音色绑定到独立记忆体）。"""
+    inspector = inspect(engine)
+    if "custom_characters" not in inspector.get_table_names():
+        return
+    existing = {col["name"] for col in inspector.get_columns("custom_characters")}
+    if "voice" not in existing:
+        with engine.begin() as conn:
+            conn.execute(text("ALTER TABLE custom_characters ADD COLUMN voice VARCHAR(100)"))
+
+
 def migrate_chat_sessions():
     """把旧的 chat_sessions.messages JSON 拆成 Message 表原子化行（一次性迁移）。
 
@@ -145,5 +167,7 @@ def init_db():
     Base.metadata.create_all(bind=engine)
     _ensure_user_columns()
     _ensure_chat_session_columns()
+    _ensure_message_columns()
+    _ensure_custom_character_columns()
     migrate_chat_sessions()
     seed_promo_config()

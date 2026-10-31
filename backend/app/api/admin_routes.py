@@ -8,6 +8,7 @@ Endpoints:
 """
 import logging
 from datetime import datetime
+from pathlib import Path
 from typing import Optional
 
 from fastapi import (
@@ -19,7 +20,8 @@ from sqlalchemy.orm import Session
 
 import app.config as config
 from app.core.db import (
-    get_db, User, WithdrawRequest, PromoConfig, PROMO_CONFIG_DEFAULTS,
+    get_db, User, WithdrawRequest, PromoConfig, PROMO_CONFIG_DEFAULTS, RequestLog,
+    CustomCharacter,
 )
 from app.core.token_utils import verify_token, get_optional_user_id, create_admin_token, verify_admin_token
 from app.services import promo
@@ -351,6 +353,69 @@ def admin_withdraw_reject(
     return {"code": 200, "msg": "已驳回，金额已退回用户余额"}
 
 
+@router.get("/admin/api/memory-audit", summary="记忆体审核列表")
+def admin_memory_audit(
+        status_filter: str = Query("", alias="status", description="draft/pending/approved/rejected，空=全部"),
+        db: Session = Depends(get_db),
+        _: bool = Depends(verify_admin_token),
+):
+    query = db.query(CustomCharacter)
+    if status_filter in ("draft", "pending", "approved", "rejected"):
+        query = query.filter(CustomCharacter.status == status_filter)
+    rows = query.order_by(CustomCharacter.updated_at.desc()).all()
+    user_map = {u.id: u.username for u in db.query(User).all()}
+    return {
+        "code": 200,
+        "characters": [
+            {
+                "npc_id": c.npc_id,
+                "user_id": c.user_id,
+                "username": user_map.get(c.user_id, f"#{c.user_id}"),
+                "name": c.name,
+                "description": c.description,
+                "persona": c.persona,
+                "status": c.status,
+                "updated_at": c.updated_at.strftime("%Y-%m-%d %H:%M") if c.updated_at else "",
+            }
+            for c in rows
+        ],
+    }
+
+
+@router.post("/admin/api/memory-audit/{npc_id}/approve", summary="通过记忆体审核")
+def admin_memory_approve(
+        npc_id: str,
+        db: Session = Depends(get_db),
+        _: bool = Depends(verify_admin_token),
+):
+    record = db.query(CustomCharacter).filter(CustomCharacter.npc_id == npc_id).first()
+    if not record:
+        raise HTTPException(status_code=404, detail={"code": 404, "msg": "记忆体不存在"})
+    if record.status == "approved":
+        raise HTTPException(status_code=400, detail={"code": 400, "msg": "该记忆体已通过审核"})
+    if not (record.name or "").strip() or not (record.persona or "").strip():
+        raise HTTPException(status_code=400, detail={"code": 400, "msg": "记忆体名称和人设不能为空，无法通过"})
+    record.status = "approved"
+    db.commit()
+    return {"code": 200, "msg": "已通过审核，用户现在可以使用该记忆体"}
+
+
+@router.post("/admin/api/memory-audit/{npc_id}/reject", summary="拒绝记忆体审核")
+def admin_memory_reject(
+        npc_id: str,
+        db: Session = Depends(get_db),
+        _: bool = Depends(verify_admin_token),
+):
+    record = db.query(CustomCharacter).filter(CustomCharacter.npc_id == npc_id).first()
+    if not record:
+        raise HTTPException(status_code=404, detail={"code": 404, "msg": "记忆体不存在"})
+    if record.status == "rejected":
+        raise HTTPException(status_code=400, detail={"code": 400, "msg": "该记忆体已拒绝"})
+    record.status = "rejected"
+    db.commit()
+    return {"code": 200, "msg": "已拒绝，该记忆体不可使用"}
+
+
 @router.get("/admin/api/config", summary="获取全部推广配置")
 def admin_get_config(db: Session = Depends(get_db), _: bool = Depends(verify_admin_token)):
     return {"code": 200, "config": promo.get_config_map(db)}
@@ -375,3 +440,292 @@ def admin_set_config(
         updated.append(key)
     db.commit()
     return {"code": 200, "msg": "已保存", "updated": updated}
+
+
+# ==================================================================
+# 服务器信息 / 实时日志 / 用户信息（数据看板子级）
+# ==================================================================
+
+def _read_tail(path: Path, lines: int = 300, max_bytes: int = 2 * 1024 * 1024) -> str:
+    """高效读取日志文件尾部 N 行（最多读 2MB，避免大文件卡顿）。"""
+    try:
+        size = path.stat().st_size
+        if size == 0:
+            return ""
+        read_size = min(size, max_bytes)
+        with open(path, "rb") as f:
+            f.seek(size - read_size)
+            data = f.read().decode("utf-8", errors="replace")
+        return "\n".join(data.splitlines()[-lines:])
+    except FileNotFoundError:
+        return ""
+    except Exception as e:
+        return f"[读取日志失败] {e}"
+
+
+def _read_tail_offset(path: Path, offset: int, max_bytes: int = 2 * 1024 * 1024) -> dict:
+    """从 offset 字节之后增量读取日志（用于前端防闪烁的增量追加）。
+
+    返回 {content, offset, truncated}：
+      - offset 之后有新增 → content=新增部分, offset=新文件大小
+      - offset 之后无新增 → content="", offset=offset
+      - offset 失效（文件被 rolling 截断/重置）→ truncated=True, 前端应全量重载
+    """
+    try:
+        size = path.stat().st_size
+        if size == 0:
+            return {"content": "", "offset": 0, "truncated": False}
+        if offset > size:
+            # 文件被截断/轮转重置，offset 失效
+            return {"content": "", "offset": size, "truncated": True}
+        if offset == size:
+            return {"content": "", "offset": size, "truncated": False}
+        # 增量读，最多 2MB
+        read_size = min(size - offset, max_bytes)
+        with open(path, "rb") as f:
+            f.seek(offset)
+            data = f.read(read_size).decode("utf-8", errors="replace")
+        return {"content": data, "offset": offset + read_size, "truncated": False}
+    except FileNotFoundError:
+        return {"content": "", "offset": 0, "truncated": True}
+    except Exception as e:
+        return {"content": f"[读取日志失败] {e}", "offset": offset, "truncated": False}
+
+
+def _logs_startpy_path() -> Path:
+    from app.core.paths import logs_dir
+    return Path(logs_dir()) / "app.log"
+
+
+def _logs_voicestudio_path() -> Path:
+    """VoiceStudio 日志：优先 OMNIVOICE_DATA_DIR，否则 Windows %APPDATA% / 类 Unix ~/.local/share。"""
+    import os
+    data_dir = os.environ.get("OMNIVOICE_DATA_DIR")
+    if data_dir:
+        return Path(data_dir) / "omnivoice.log"
+    if os.name == "nt":
+        appdata = os.environ.get("APPDATA")
+        if appdata:
+            return Path(appdata) / "OmniVoice" / "omnivoice.log"
+    home = Path.home()
+    for cand in (
+        home / ".local" / "share" / "OmniVoice" / "omnivoice.log",
+        home / ".omnivoice" / "omnivoice.log",
+    ):
+        if cand.exists():
+            return cand
+    return home / ".local" / "share" / "OmniVoice" / "omnivoice.log"
+
+
+@router.get("/admin/api/server-info", summary="服务器性能指标（CPU/内存/磁盘/进程/运行时长）")
+def admin_server_info(_: bool = Depends(verify_admin_token)):
+    import platform
+    import os
+    import sys
+    from datetime import datetime
+
+    info = {
+        "hostname": platform.node(),
+        "platform": platform.platform(),
+        "python": sys.version.split()[0],
+        "cpu_count": os.cpu_count() or 0,
+        "boot_time": None,
+        "cpu_percent": None,
+        "mem_total": None,
+        "mem_used": None,
+        "mem_percent": None,
+        "disk_total": None,
+        "disk_used": None,
+        "disk_percent": None,
+        "process_rss": None,
+        "process_cpu": None,
+        "process_threads": None,
+        "process_uptime": None,
+        "server_time": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+    }
+
+    try:
+        import psutil
+        info["cpu_percent"] = round(psutil.cpu_percent(interval=0.2), 1)
+        vm = psutil.virtual_memory()
+        info["mem_total"] = vm.total
+        info["mem_used"] = vm.used
+        info["mem_percent"] = vm.percent
+        du = psutil.disk_usage(str(Path(__file__).resolve().anchor))
+        info["disk_total"] = du.total
+        info["disk_used"] = du.used
+        info["disk_percent"] = du.percent
+        info["boot_time"] = datetime.fromtimestamp(psutil.boot_time()).strftime("%Y-%m-%d %H:%M:%S")
+        proc = psutil.Process(os.getpid())
+        info["process_rss"] = proc.memory_info().rss
+        info["process_cpu"] = round(proc.cpu_percent(interval=0.1), 1)
+        info["process_threads"] = proc.num_threads()
+        info["process_uptime"] = int(datetime.now().timestamp() - proc.create_time())
+    except Exception as e:
+        info["psutil_error"] = str(e)
+
+    if info["process_uptime"] is not None:
+        secs = info["process_uptime"]
+        info["process_uptime_human"] = f"{secs // 3600}h {(secs % 3600) // 60}m {secs % 60}s"
+    else:
+        info["process_uptime_human"] = "未知"
+
+    return {"code": 200, **info}
+
+
+@router.get("/admin/api/logs/startpy", summary="Python start.py 服务日志（实时尾部）")
+def admin_logs_startpy(
+        lines: int = Query(200, ge=10, le=2000),
+        offset: int = Query(0, ge=0, description="增量读取的字节偏移；0=全量尾部"),
+        _: bool = Depends(verify_admin_token),
+):
+    path = _logs_startpy_path()
+    size = path.stat().st_size if path.exists() else 0
+    if offset > 0:
+        inc = _read_tail_offset(path, offset)
+        return {
+            "code": 200,
+            "path": str(path),
+            "exists": path.exists(),
+            "size": size,
+            "content": inc["content"],
+            "offset": inc["offset"],
+            "truncated": inc["truncated"],
+        }
+    return {
+        "code": 200,
+        "path": str(path),
+        "exists": path.exists(),
+        "size": size,
+        "content": _read_tail(path, lines=lines),
+        "offset": size,
+        "truncated": False,
+    }
+
+
+@router.get("/admin/api/logs/voicestudio", summary="VoiceStudio 服务日志（实时尾部）")
+def admin_logs_voicestudio(
+        lines: int = Query(200, ge=10, le=2000),
+        offset: int = Query(0, ge=0, description="增量读取的字节偏移；0=全量尾部"),
+        _: bool = Depends(verify_admin_token),
+):
+    path = _logs_voicestudio_path()
+    size = path.stat().st_size if path.exists() else 0
+    if offset > 0:
+        inc = _read_tail_offset(path, offset)
+        return {
+            "code": 200,
+            "path": str(path),
+            "exists": path.exists(),
+            "size": size,
+            "content": inc["content"],
+            "offset": inc["offset"],
+            "truncated": inc["truncated"],
+        }
+    return {
+        "code": 200,
+        "path": str(path),
+        "exists": path.exists(),
+        "size": size,
+        "content": _read_tail(path, lines=lines),
+        "offset": size,
+        "truncated": False,
+    }
+
+
+@router.get("/admin/api/users-info", summary="用户信息（注册用户 + 访客 IP/请求头/token 用量）")
+def admin_users_info(
+        db: Session = Depends(get_db),
+        _: bool = Depends(verify_admin_token),
+):
+    from sqlalchemy import func
+
+    users = db.query(User).order_by(User.id.desc()).all()
+
+    user_token_rows = db.query(
+        RequestLog.user_id,
+        func.coalesce(func.sum(RequestLog.tokens_in), 0),
+        func.coalesce(func.sum(RequestLog.tokens_out), 0),
+        func.count(RequestLog.id),
+    ).filter(RequestLog.user_id.isnot(None)).group_by(RequestLog.user_id).all()
+    user_tokens = {r[0]: {"tokens_in": int(r[1] or 0), "tokens_out": int(r[2] or 0), "requests": int(r[3] or 0)} for r in user_token_rows}
+
+    user_last_req = {}
+    for r in db.query(RequestLog).filter(RequestLog.user_id.isnot(None)).order_by(RequestLog.id.desc()).limit(5000).all():
+        if r.user_id not in user_last_req:
+            user_last_req[r.user_id] = {
+                "ip": r.ip,
+                "user_agent": r.user_agent,
+                "last_path": r.path,
+                "last_time": r.created_at.strftime("%Y-%m-%d %H:%M:%S") if r.created_at else "",
+            }
+
+    registered = []
+    for u in users:
+        t = user_tokens.get(u.id, {"tokens_in": 0, "tokens_out": 0, "requests": 0})
+        lr = user_last_req.get(u.id, {})
+        registered.append({
+            "id": u.id,
+            "username": u.username,
+            "nickname": u.nickname or "",
+            "phone": u.phone or "",
+            "register_time": u.register_time.strftime("%Y-%m-%d %H:%M:%S") if u.register_time else "",
+            "ip": lr.get("ip") or "",
+            "user_agent": (lr.get("user_agent") or "")[:80],
+            "last_path": lr.get("last_path") or "",
+            "last_time": lr.get("last_time") or "",
+            "tokens_in": t["tokens_in"],
+            "tokens_out": t["tokens_out"],
+            "tokens_total": t["tokens_in"] + t["tokens_out"],
+            "requests": t["requests"],
+        })
+
+    visitor_rows = db.query(
+        RequestLog.ip,
+        RequestLog.visitor_key,
+        func.count(RequestLog.id),
+        func.coalesce(func.sum(RequestLog.tokens_in), 0),
+        func.coalesce(func.sum(RequestLog.tokens_out), 0),
+        func.max(RequestLog.created_at),
+    ).filter(RequestLog.user_id.is_(None)).group_by(RequestLog.ip, RequestLog.visitor_key).order_by(
+        func.max(RequestLog.created_at).desc()
+    ).limit(200).all()
+
+    visitors = []
+    for ip, vk, cnt, tin, tout, last_time in visitor_rows:
+        ua_row = db.query(RequestLog.user_agent).filter(
+            RequestLog.user_id.is_(None),
+            RequestLog.ip == ip,
+        ).order_by(RequestLog.id.desc()).first()
+        ua = ua_row[0] if ua_row else ""
+        visitors.append({
+            "ip": ip or "未知",
+            "visitor_key": vk or "",
+            "user_agent": (ua or "")[:80],
+            "requests": int(cnt or 0),
+            "tokens_in": int(tin or 0),
+            "tokens_out": int(tout or 0),
+            "tokens_total": int((tin or 0) + (tout or 0)),
+            "last_time": last_time.strftime("%Y-%m-%d %H:%M:%S") if last_time else "",
+        })
+
+    total_visitor_requests = db.query(func.count(RequestLog.id)).filter(RequestLog.user_id.is_(None)).scalar() or 0
+    total_user_requests = db.query(func.count(RequestLog.id)).filter(RequestLog.user_id.isnot(None)).scalar() or 0
+    total_tokens = db.query(
+        func.coalesce(func.sum(RequestLog.tokens_in), 0),
+        func.coalesce(func.sum(RequestLog.tokens_out), 0),
+    ).first()
+
+    return {
+        "code": 200,
+        "registered": registered,
+        "visitors": visitors,
+        "summary": {
+            "registered_count": len(registered),
+            "visitor_count": len(visitors),
+            "visitor_requests": int(total_visitor_requests),
+            "user_requests": int(total_user_requests),
+            "tokens_in_total": int(total_tokens[0] or 0),
+            "tokens_out_total": int(total_tokens[1] or 0),
+        },
+    }
