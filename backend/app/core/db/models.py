@@ -65,6 +65,20 @@ class User(Base):
 
 
 # ======================
+# 用户 AI 配置表（跟随登录用户，云端覆盖 .env）
+# ======================
+class UserAIConfig(Base):
+    __tablename__ = "user_ai_configs"
+
+    user_id = Column(Integer, ForeignKey("users.id"), primary_key=True)
+    # 全部 AI 配置，JSON 结构见 docs；留空项回退 .env
+    config = Column(JSON, default=dict, nullable=False)
+    updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now)
+
+    user = relationship("User")
+
+
+# ======================
 # 会话表
 # ======================
 class ChatSession(Base):

@@ -176,16 +176,11 @@
     <div class="modal-overlay" id="voiceModalOverlay"></div>
     <div class="voice-modal-content">
         <div class="voice-modal-title">设置音色 <span id="voiceModalCharName"></span></div>
-        <div class="voice-modal-desc">这个记忆体说话的声音（来自本地 VoiceStudio）</div>
+        <div class="voice-modal-desc">这个记忆体说话的声音（来自系统设置里选择的语音服务商；克隆音色请到系统设置）</div>
         <select class="edit-select" id="voiceModalSelect">
             <option value="">默认音色</option>
         </select>
         <div class="voice-modal-tip" id="voiceModalTip"></div>
-        <div class="voice-clone-row">
-            <button class="create-secondary-btn" id="voiceCloneBtn" type="button">🎙 克隆新音色</button>
-            <span class="voice-clone-hint">上传有授权的录音生成专属音色</span>
-        </div>
-        <input type="file" id="voiceCloneFile" accept="audio/*,video/*" hidden>
         <div class="voice-modal-actions">
             <button class="create-secondary-btn" id="voiceModalCancel">取消</button>
             <button class="submit-btn" id="voiceModalSave">保存</button>

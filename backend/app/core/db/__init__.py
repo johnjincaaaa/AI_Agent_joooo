@@ -9,7 +9,7 @@ from app.core.db.seed import PROMO_CONFIG_DEFAULTS, init_db, seed_promo_config, 
 
 __all__ = [
     "engine", "SessionLocal", "Base", "get_db",
-    "User", "ChatSession", "JobProfile", "Message",
+    "User", "UserAIConfig", "ChatSession", "JobProfile", "Message",
     "ReferralEvent", "WithdrawRequest", "PromoConfig",
     "PageVisit", "DownloadClick", "CheckInRecord", "Memory",
     "CustomCharacter", "RequestLog",

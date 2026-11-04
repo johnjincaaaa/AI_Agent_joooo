@@ -323,7 +323,6 @@ LLM_API_KEY=ollama</pre>
             <span class="settings-tab" data-stab="security" data-i18n="settings_tab_security">账号安全</span>
             <span class="settings-tab" data-stab="llm" data-i18n="settings_tab_llm">AI 配置</span>
             <span class="settings-tab" data-stab="memory" data-i18n="settings_tab_memory">我的记忆</span>
-            <span class="settings-tab" data-stab="voice" data-i18n="settings_tab_voice">记忆体语音</span>
         </div>
 
         <!-- 个人资料 -->
@@ -394,60 +393,199 @@ LLM_API_KEY=ollama</pre>
 
         <!-- AI 配置（用户自定义大模型） -->
         <div class="settings-pane" id="stab-llm">
-            <div class="input-item">
-                <label for="llmBaseUrl" data-i18n="settings_llm_base_url">API 地址（OpenAI 兼容）</label>
-                <input type="text" id="llmBaseUrl" placeholder="https://api.deepseek.com/v1" autocomplete="off">
-            </div>
-            <div class="input-item">
-                <label for="llmModel" data-i18n="settings_llm_model">模型名</label>
-                <input type="text" id="llmModel" placeholder="deepseek-chat" autocomplete="off">
-            </div>
-            <div class="input-item">
-                <label for="llmApiKey" data-i18n="settings_llm_api_key">API Key</label>
-                <div class="password-field">
-                    <input type="password" id="llmApiKey" placeholder="sk-..." autocomplete="off">
-                    <button type="button" class="pwd-toggle-btn" data-target="llmApiKey" aria-label="显示密码" data-i18n-title="settings_show_pwd" title="显示密码">
-                        <svg class="icon-eye-open" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle></svg>
-                        <svg class="icon-eye-closed" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94"></path><line x1="1" y1="1" x2="23" y2="23"></line></svg>
-                    </button>
+            <!-- 对话模型 -->
+            <section class="cfg-group">
+                <h3 class="cfg-group-title">对话模型</h3>
+                <p class="cfg-group-desc">AI 对话使用的大模型；留空的项自动用服务器默认。</p>
+                <div class="cfg-field">
+                    <label for="llmBaseUrl" data-i18n="settings_llm_base_url">API 地址（OpenAI 兼容）</label>
+                    <input type="text" id="llmBaseUrl" placeholder="https://api.deepseek.com/v1" autocomplete="off">
                 </div>
-            </div>
-            <div class="input-item">
-                <div class="llm-tip" data-i18n="settings_llm_tip">配置仅保存在当前浏览器，AI 对话会使用它；留空的项自动使用服务器默认配置。</div>
-            </div>
-            <div class="llm-subtitle" data-i18n="settings_embedding_subtitle">向量模型（历史记忆语义检索用，留空则用服务器默认）</div>
-            <div class="input-item">
-                <label for="embeddingBaseUrl" data-i18n="settings_embedding_base_url">向量模型 API 地址</label>
-                <input type="text" id="embeddingBaseUrl" placeholder="http://localhost:11434 或 https://.../v1" autocomplete="off">
-            </div>
-            <div class="input-item">
-                <label for="embeddingModel" data-i18n="settings_embedding_model">向量模型名</label>
-                <input type="text" id="embeddingModel" placeholder="bge-m3" autocomplete="off">
-            </div>
-            <div class="input-item">
-                <label for="embeddingApiKey" data-i18n="settings_embedding_api_key">向量模型 API Key</label>
-                <div class="password-field">
-                    <input type="password" id="embeddingApiKey" placeholder="本地 Ollama 可留空" autocomplete="off">
-                    <button type="button" class="pwd-toggle-btn" data-target="embeddingApiKey" aria-label="显示密码" data-i18n-title="settings_show_pwd" title="显示密码">
-                        <svg class="icon-eye-open" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle></svg>
-                        <svg class="icon-eye-closed" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94"></path><line x1="1" y1="1" x2="23" y2="23"></line></svg>
-                    </button>
+                <div class="cfg-field">
+                    <label for="llmModel" data-i18n="settings_llm_model">模型名</label>
+                    <input type="text" id="llmModel" placeholder="deepseek-chat" autocomplete="off">
                 </div>
-            </div>
-            <div class="input-item">
-                <div class="llm-tip" data-i18n="settings_embedding_tip">向量模型需与服务器向量库维度一致；更换模型后请在服务器端重建向量库。</div>
-            </div>
-            <div class="llm-actions">
-                <button class="submit-btn" id="saveLLMConfigBtn" data-i18n="settings_save_config">保存配置</button>
-                <button class="submit-btn secondary" id="testLLMConfigBtn" data-i18n="settings_test_conn">测试连接</button>
-            </div>
-            <div id="llmTestResult" class="llm-test-result"></div>
+                <div class="cfg-field">
+                    <label for="llmApiKey" data-i18n="settings_llm_api_key">API Key</label>
+                    <div class="password-field">
+                        <input type="password" id="llmApiKey" placeholder="sk-..." autocomplete="off">
+                        <button type="button" class="pwd-toggle-btn" data-target="llmApiKey" aria-label="显示密码" data-i18n-title="settings_show_pwd" title="显示密码">
+                            <svg class="icon-eye-open" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle></svg>
+                            <svg class="icon-eye-closed" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94"></path><line x1="1" y1="1" x2="23" y2="23"></line></svg>
+                        </button>
+                    </div>
+                </div>
+                <div class="cfg-actions">
+                    <button class="submit-btn" id="saveLLMConfigBtn" data-i18n="settings_save_config">保存配置</button>
+                    <button class="submit-btn secondary" id="testLLMConfigBtn" data-i18n="settings_test_conn">测试连接</button>
+                </div>
+                <div id="llmTestResult" class="llm-test-result"></div>
+            </section>
+
+            <!-- 向量模型 -->
+            <section class="cfg-group">
+                <h3 class="cfg-group-title">向量模型</h3>
+                <p class="cfg-group-desc">历史记忆语义检索用；留空则用服务器默认（Ollama bge-m3）。</p>
+                <div class="cfg-field">
+                    <label for="embeddingBaseUrl" data-i18n="settings_embedding_base_url">向量模型 API 地址</label>
+                    <input type="text" id="embeddingBaseUrl" placeholder="http://localhost:11434 或 https://.../v1" autocomplete="off">
+                </div>
+                <div class="cfg-field">
+                    <label for="embeddingModel" data-i18n="settings_embedding_model">向量模型名</label>
+                    <input type="text" id="embeddingModel" placeholder="bge-m3" autocomplete="off">
+                </div>
+                <div class="cfg-field">
+                    <label for="embeddingApiKey" data-i18n="settings_embedding_api_key">向量模型 API Key</label>
+                    <div class="password-field">
+                        <input type="password" id="embeddingApiKey" placeholder="本地 Ollama 可留空" autocomplete="off">
+                        <button type="button" class="pwd-toggle-btn" data-target="embeddingApiKey" aria-label="显示密码" data-i18n-title="settings_show_pwd" title="显示密码">
+                            <svg class="icon-eye-open" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle></svg>
+                            <svg class="icon-eye-closed" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94"></path><line x1="1" y1="1" x2="23" y2="23"></line></svg>
+                        </button>
+                    </div>
+                </div>
+                <div class="cfg-tip">向量模型维度需与服务器向量库一致；更换模型后请重建向量库。</div>
+                <div class="cfg-actions">
+                    <button class="submit-btn" id="saveEmbeddingConfigBtn" type="button">保存向量配置</button>
+                    <button class="submit-btn secondary" id="testEmbeddingBtn" type="button">测试向量模型</button>
+                </div>
+                <div id="embeddingTestResult" class="llm-test-result"></div>
+            </section>
+
+            <!-- 图片解析 -->
+            <section class="cfg-group">
+                <h3 class="cfg-group-title">图片解析模型</h3>
+                <p class="cfg-group-desc">聊天发图时的视觉识别；留空则用服务器默认。</p>
+                <div class="cfg-field">
+                    <label for="imageVlProvider">图片解析通道</label>
+                    <select id="imageVlProvider" class="select-input">
+                        <option value="">跟随服务器默认</option>
+                        <option value="glm">智谱 GLM 视觉（云端，glm-4.6v-flash）</option>
+                        <option value="dashscope">通义千问 VL（云端）</option>
+                        <option value="ollama">本地 Ollama 视觉</option>
+                    </select>
+                </div>
+                <div class="cfg-field">
+                    <label for="imageVlModel">视觉模型名</label>
+                    <input type="text" id="imageVlModel" placeholder="qwen2.5vl:7b 或 qwen-vl-plus" autocomplete="off">
+                </div>
+                <div class="cfg-field">
+                    <label for="imageVlApiKey">视觉模型 API Key</label>
+                    <div class="password-field">
+                        <input type="password" id="imageVlApiKey" placeholder="本地 Ollama 可留空" autocomplete="off">
+                        <button type="button" class="pwd-toggle-btn" data-target="imageVlApiKey" aria-label="显示密码" data-i18n-title="settings_show_pwd" title="显示密码">
+                            <svg class="icon-eye-open" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle></svg>
+                            <svg class="icon-eye-closed" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94"></path><line x1="1" y1="1" x2="23" y2="23"></line></svg>
+                        </button>
+                    </div>
+                </div>
+                <div class="cfg-actions">
+                    <button class="submit-btn" id="saveImageVlConfigBtn" type="button">保存图片解析配置</button>
+                    <button class="submit-btn secondary" id="testImageVlBtn" type="button">上传图片测试</button>
+                    <input type="file" id="imageVlFileInput" accept="image/jpeg,image/png,image/webp,image/gif,image/bmp" style="display:none;">
+                </div>
+                <div id="imageVlTestResult" class="llm-test-result"></div>
+            </section>
+
+            <!-- 记忆体语音（多厂商中转适配，并入 AI 配置） -->
+            <section class="cfg-group">
+                <h3 class="cfg-group-title">记忆体语音</h3>
+                <p class="cfg-group-desc">AI 回复朗读用的语音通道；服务商互斥，一次只生效一个。</p>
+                <div id="voiceStatusTip" class="cfg-tip"></div>
+
+                <div class="cfg-field">
+                    <label for="voiceProviderSelect">服务商</label>
+                    <select id="voiceProviderSelect" class="select-input">
+                        <option value="voicestudio">VoiceStudio（本地，无需 key）</option>
+                        <option value="doubao">豆包 TTS 2.0（火山引擎）</option>
+                        <option value="cosyvoice">通义 CosyVoice（阿里云百炼）</option>
+                        <option value="glm">智谱 GLM-TTS</option>
+                    </select>
+                </div>
+                <div class="cfg-field">
+                    <label for="voiceModel">模型名 / 集群</label>
+                    <input type="text" id="voiceModel" placeholder="豆包填 volcano_tts；CosyVoice 填 cosyvoice-v1" autocomplete="off">
+                </div>
+                <div class="cfg-field">
+                    <label for="voiceApiKey">API Key</label>
+                    <div class="password-field">
+                        <input type="password" id="voiceApiKey" placeholder="sk-..." autocomplete="off">
+                        <button type="button" class="pwd-toggle-btn" data-target="voiceApiKey" aria-label="显示密码" data-i18n-title="settings_show_pwd" title="显示密码">
+                            <svg class="icon-eye-open" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle></svg>
+                            <svg class="icon-eye-closed" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94"></path><line x1="1" y1="1" x2="23" y2="23"></line></svg>
+                        </button>
+                    </div>
+                </div>
+                <div class="cfg-field">
+                    <label for="voiceAppId">App ID（豆包）</label>
+                    <input type="text" id="voiceAppId" placeholder="火山引擎 APPID，其他厂商留空" autocomplete="off">
+                </div>
+                <div class="cfg-field">
+                    <label for="voiceAccessToken">Access Token（豆包）</label>
+                    <input type="password" id="voiceAccessToken" placeholder="火山引擎 Access Token，其他厂商留空" autocomplete="off">
+                </div>
+                <div class="cfg-actions">
+                    <button class="submit-btn" id="saveVoiceConfigBtn">保存语音配置</button>
+                    <button class="submit-btn secondary" id="testVoiceBtn">测试（TTS+STT）</button>
+                </div>
+                <div id="voiceTestResult" class="llm-test-result"></div>
+
+                <h4 class="cfg-group-subtitle">音色</h4>
+                <div class="cfg-field">
+                    <label for="voiceSelect">默认音色（兜底）</label>
+                    <select id="voiceSelect" class="select-input">
+                        <option value="default">默认音色</option>
+                    </select>
+                </div>
+                <div class="cfg-actions">
+                    <button class="submit-btn secondary" id="refreshVoicesBtn" type="button">刷新音色列表</button>
+                    <button class="submit-btn secondary" id="cloneVoiceInSettingsBtn" type="button">克隆新音色</button>
+                    <input type="file" id="cloneVoiceInSettingsFile" accept="audio/*,video/*" style="display:none;">
+                </div>
+                <div id="cloneVoiceResult" class="llm-test-result"></div>
+
+                <h4 class="cfg-group-subtitle">朗读与试听</h4>
+                <div class="cfg-field">
+                    <label>自动朗读（AI 回复后播放）</label>
+                    <div class="toggle-row">
+                        <span id="voiceEnabledLabel" class="toggle-label">关闭</span>
+                        <label class="switch">
+                            <input type="checkbox" id="voiceEnabledToggle">
+                            <span class="slider"></span>
+                        </label>
+                    </div>
+                </div>
+                <div class="cfg-field">
+                    <label for="voiceTestText">试听文本</label>
+                    <div class="memory-add-row">
+                        <input type="text" id="voiceTestText" placeholder="我学会说话了" maxlength="200">
+                        <button class="submit-btn secondary" id="voiceTestBtn">试听</button>
+                    </div>
+                </div>
+                <div class="cfg-field">
+                    <label>语速</label>
+                    <select id="voiceSpeedSelect" class="select-input">
+                        <option value="0.75">0.75x（慢）</option>
+                        <option value="1.0" selected>1.0x（正常）</option>
+                        <option value="1.25">1.25x（快）</option>
+                        <option value="1.5">1.5x（很快）</option>
+                    </select>
+                </div>
+                <audio id="voiceTestAudio" controls style="display:none;width:100%;margin-top:8px;"></audio>
+            </section>
         </div>
 
         <!-- 我的记忆（个人陪伴助手） -->
         <div class="settings-pane" id="stab-memory">
             <div id="memoryLoginTip" style="display:none;">
                 <div class="llm-tip" data-i18n="settings_memory_login_tip">登录后 AI 才能记住你，并随对话自动积累细节记忆。</div>
+            </div>
+            <div class="memory-galaxy-banner">
+                <div class="mgb-text">
+                    <div class="mgb-title" data-i18n="settings_memory_galaxy_title">记忆银河</div>
+                    <div class="mgb-desc" data-i18n="settings_memory_galaxy_desc">把长期记忆画成旋臂星系，核心是钉住的画像，旋臂由内向外是越来越容易被忘掉的记忆，还能推演遗忘。</div>
+                </div>
+                <a href="/chat/memory" target="_self" class="submit-btn mgb-btn" data-i18n="settings_memory_galaxy_open">打开记忆银河</a>
             </div>
             <div class="input-item">
                 <label for="globalMemoryInput" data-i18n="settings_global_memory_label">全局画像（AI 长期记住的核心信息）</label>
@@ -466,45 +604,7 @@ LLM_API_KEY=ollama</pre>
             </div>
         </div>
 
-        <!-- 记忆体语音（VoiceStudio 本地语音服务） -->
-        <div class="settings-pane" id="stab-voice">
-            <div id="voiceStatusTip" class="llm-tip" style="margin-bottom:12px;">正在检测本地语音服务…</div>
-            <div class="input-item">
-                <label>记忆体语音（AI 回复朗读）</label>
-                <div class="toggle-row">
-                    <span id="voiceEnabledLabel" class="toggle-label">关闭</span>
-                    <label class="switch">
-                        <input type="checkbox" id="voiceEnabledToggle">
-                        <span class="slider"></span>
-                    </label>
-                </div>
-            </div>
-            <div class="input-item">
-                <label for="voiceSelect">默认音色（兜底）</label>
-                <div class="llm-tip" style="margin-bottom:6px;">每个独立记忆体的专属音色在「捏小人 / 创作中心」里设置。这里只作未绑定音色的角色兜底。</div>
-                <select id="voiceSelect" class="select-input">
-                    <option value="default">默认音色</option>
-                </select>
-                <button class="submit-btn secondary" id="refreshVoicesBtn" style="margin-top:8px;">刷新音色列表</button>
-            </div>
-            <div class="input-item">
-                <label for="voiceTestText">试听文本</label>
-                <div class="memory-add-row">
-                    <input type="text" id="voiceTestText" placeholder="我学会说话了" maxlength="200">
-                    <button class="submit-btn" id="voiceTestBtn">试听</button>
-                </div>
-            </div>
-            <div class="input-item">
-                <label>语速</label>
-                <select id="voiceSpeedSelect" class="select-input">
-                    <option value="0.75">0.75x（慢）</option>
-                    <option value="1.0" selected>1.0x（正常）</option>
-                    <option value="1.25">1.25x（快）</option>
-                    <option value="1.5">1.5x（很快）</option>
-                </select>
-            </div>
-            <audio id="voiceTestAudio" controls style="display:none;width:100%;margin-top:8px;"></audio>
-        </div>
+
     </div>
 </div>
 
@@ -531,6 +631,20 @@ LLM_API_KEY=ollama</pre>
                 </svg>
                 <span data-i18n="nav_main_chat">主对话</span>
             </div>
+            <a href="/chat/memory" target="_self" class="sidebar-nav-item" id="memoryGalaxyEntry" data-i18n-title="nav_memory_galaxy_title" title="记忆银河（长期记忆旋臂星系 · 遗忘推演）">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <circle cx="12" cy="12" r="2.2"></circle>
+                    <path d="M12 2v3"></path>
+                    <path d="M12 19v3"></path>
+                    <path d="M2 12h3"></path>
+                    <path d="M19 12h3"></path>
+                    <path d="M4.93 4.93l2.12 2.12"></path>
+                    <path d="M16.95 16.95l2.12 2.12"></path>
+                    <path d="M4.93 19.07l2.12-2.12"></path>
+                    <path d="M16.95 7.05l2.12-2.12"></path>
+                </svg>
+                <span data-i18n="nav_memory_galaxy">记忆银河</span>
+            </a>
             <a href="/chat/create" class="sidebar-nav-item" id="characterSettingsEntry" data-i18n-title="nav_creation_center_title" title="Jingent 创作中心（独立记忆体创建 · 宠物模型 · 自定义角色）">
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                     <line x1="4" y1="21" x2="4" y2="14"></line>

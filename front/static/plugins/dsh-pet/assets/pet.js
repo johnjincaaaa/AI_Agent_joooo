@@ -131,6 +131,41 @@
     lastActivity: Date.now(),
   }
 
+  // ── 资源内存缓存（避免重复请求动画/表情/音效）────────────
+  // 首次 fetch 转 blob URL 缓存；后续同一资源直接读内存，不再走网络。
+  // 网络波动时已缓存的资源照常播放，宠物不会因资源加载失败而消失。
+  const resourceCache = new Map()   // url -> objectURL(blob)
+  const pendingFetches = new Map()  // url -> Promise<objectURL>
+
+  function getCachedResource(url) {
+    return resourceCache.get(url) || null
+  }
+
+  async function fetchResource(url) {
+    const hit = resourceCache.get(url)
+    if (hit) return hit
+    let p = pendingFetches.get(url)
+    if (!p) {
+      p = fetch(url, { cache: 'force-cache' })
+        .then(res => {
+          if (!res.ok) throw new Error('HTTP ' + res.status)
+          return res.blob()
+        })
+        .then(blob => {
+          const objectUrl = URL.createObjectURL(blob)
+          resourceCache.set(url, objectUrl)
+          pendingFetches.delete(url)
+          return objectUrl
+        })
+        .catch(err => {
+          pendingFetches.delete(url)
+          throw err
+        })
+      pendingFetches.set(url, p)
+    }
+    return p
+  }
+
   // ── 音效 ──────────────────────────────────────────────
   let audioCtx = null
 
@@ -165,9 +200,19 @@
       const dot = file.lastIndexOf('.')
       const stem = dot > 0 ? file.slice(0, dot) : file
       const ext = dot > 0 ? file.slice(dot) : '.wav'
-      const audio = new Audio(resolveAsset('sound', stem, ext))
-      audio.volume = 0.5
-      audio.play().catch(() => {})
+      const src = resolveAsset('sound', stem, ext)
+      const cached = getCachedResource(src)
+      if (cached) {
+        const audio = new Audio(cached)
+        audio.volume = 0.5
+        audio.play().catch(() => {})
+      } else {
+        fetchResource(src).then(blobUrl => {
+          const audio = new Audio(blobUrl)
+          audio.volume = 0.5
+          audio.play().catch(() => {})
+        }).catch(() => {})
+      }
     } catch (e) {}
   }
 
@@ -242,14 +287,26 @@
 
   function showBubble(text, ms, memeName) {
     if (!text) { ui.bubble.style.display = 'none'; return }
-    let html = ''
+    // 文字先立即显示，表情包异步走缓存：不阻塞气泡、不重复请求
+    ui.bubble.innerHTML = `<span>${escapeHtml(text)}</span>`
+    ui.bubble.style.display = 'block'
     if (memeName) {
       const imgSrc = resolveAsset('memes', memeName, '.png')
-      html = `<img src="${imgSrc}" style="width:100%;border-radius:8px;display:block;margin-bottom:4px;">`
+      const img = document.createElement('img')
+      img.style.cssText = 'width:100%;border-radius:8px;display:block;margin-bottom:4px;'
+      const cached = getCachedResource(imgSrc)
+      if (cached) {
+        img.src = cached
+        ui.bubble.insertBefore(img, ui.bubble.firstChild)
+      } else {
+        fetchResource(imgSrc).then(blobUrl => {
+          // 气泡期间若已切走，不再插入
+          if (ui.bubble.style.display === 'none') return
+          img.src = blobUrl
+          ui.bubble.insertBefore(img, ui.bubble.firstChild)
+        }).catch(() => {})
+      }
     }
-    html += `<span>${escapeHtml(text)}</span>`
-    ui.bubble.innerHTML = html
-    ui.bubble.style.display = 'block'
     clearTimeout(showBubble._t)
     if (ms) {
       showBubble._t = setTimeout(() => { ui.bubble.style.display = 'none' }, ms)
@@ -275,10 +332,24 @@
     } else {
       ui.video.style.transform = ''
     }
-    ui.video.src = src
-    ui.video.play().catch(() => {})
     state.lastActivity = Date.now()
     state.sleeping = false
+
+    const cached = getCachedResource(src)
+    if (cached) {
+      // 命中缓存：直接播，不再发网络请求
+      ui.video.src = cached
+      ui.video.play().catch(() => {})
+      return
+    }
+    // 未命中：拉取成 blob 缓存后再播；快速切换时只有当前动画才上屏
+    fetchResource(src).then(blobUrl => {
+      if (state.current !== name) return
+      ui.video.src = blobUrl
+      ui.video.play().catch(() => {})
+    }).catch(() => {
+      // 网络失败：保留当前帧不黑屏；下一次切动画会自动重试
+    })
   }
 
   function pickRandom(arr) {

@@ -3,8 +3,11 @@
 
 路径保持不变：无 prefix，直接 /, /chat, /ai/*
 """
+import hashlib
 import json
 import logging
+import math
+import time
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
@@ -659,6 +662,233 @@ def create_edit_page(request: Request):
 
 
 # ==================================================================
+# 记忆银河（/chat/memory）—— 把长期记忆画成旋臂星系
+# ==================================================================
+
+_MG_R = 1000
+_MG_ARMS = 4
+_MG_TAU = {
+    'soul': 36500, 'user': 36500, 'person': 400, 'preference': 300, 'fact': 300,
+    'plan': 240, 'lesson': 400, 'topic': 300, 'event': 45, 'misc': 60, 'feeling': 150,
+    'digest_day': 999, 'digest_week': 999, 'digest_month': 999, 'impression': 300,
+    'rules': 240, 'project': 300,
+}
+_MG_KIND = {
+    'soul': 'identity', 'user': 'identity', 'rules': 'plan',
+    'person': 'fact', 'preference': 'fact', 'fact': 'fact', 'project': 'fact',
+    'plan': 'plan', 'lesson': 'conclusion', 'topic': 'conclusion',
+    'digest_day': 'conclusion', 'digest_week': 'conclusion', 'digest_month': 'conclusion',
+    'impression': 'conclusion', 'event': 'event', 'misc': 'event', 'feeling': 'feeling', 'diary': 'diary',
+}
+_MG_SHELL_R = [[0.02, 0.11], [0.14, 0.44], [0.44, 0.72], [0.72, 1.0]]
+
+# 细节记忆分类 → 银河 rawKind（决定半衰期 τ 与颜色）
+_MG_CAT_KIND = {
+    '计划': 'plan', '目标计划': 'plan', '约定': 'plan',
+    '事件': 'event', '重要事件': 'event',
+    '情绪状态': 'feeling', '心情': 'feeling',
+    '个人喜好': 'preference', '喜好偏好': 'preference', '偏好': 'preference',
+    '个人信息': 'fact', '其他': 'fact', '学习': 'topic', '工作': 'fact',
+}
+
+
+def _mg_hash(s: str) -> bytes:
+    return hashlib.sha1(s.encode('utf-8')).digest()
+
+
+def _mg_u01(b: bytes, i: int) -> float:
+    return b[i % len(b)] / 255.0
+
+
+def _mg_gauss(b: bytes, i: int) -> float:
+    a = _mg_u01(b, i) or 0.5
+    c = _mg_u01(b, i + 7) or 0.5
+    return math.sqrt(-2 * math.log(a)) * math.cos(2 * math.pi * c) * 0.5
+
+
+def _mg_ts(v) -> int:
+    """datetime / str / int → 毫秒时间戳；无法解析返回 0。"""
+    if v is None:
+        return 0
+    if isinstance(v, (int, float)):
+        return int(v)
+    if isinstance(v, datetime):
+        return int(v.timestamp() * 1000)
+    s = str(v)
+    try:
+        return int(datetime.fromisoformat(s.replace('Z', '+00:00')).timestamp() * 1000)
+    except Exception:
+        return 0
+
+
+def _memory_to_raw_kind(category: str) -> str:
+    c = (category or '').strip()
+    for key, kind in _MG_CAT_KIND.items():
+        if key in c:
+            return kind
+    return 'fact'
+
+
+def build_memory_galaxy(stars_raw, messages_raw, now_ms: int) -> dict:
+    """把记忆/消息排成银河（复刻 dsh-memory-galaxy 的 lib/data.js layout 算法）。"""
+    # 1) 统一星体：算 tau / ageDays / hitDays / effAge / strength
+    stars = []
+    for s in stars_raw:
+        raw_kind = s.get('rawKind', 'fact')
+        tau = _MG_TAU.get(raw_kind, 240)
+        at = int(s.get('at') or 0) or now_ms
+        last_hit = int(s.get('lastHitAt') or 0)
+        age_days = max(0, (now_ms - at) / 86400000.0)
+        hit_days = max(0, (now_ms - last_hit) / 86400000.0) if last_hit else None
+        eff_age = age_days if hit_days is None else min(age_days, hit_days * 0.55)
+        weight = max(1.0, min(4.0, float(s.get('weight') or 1)))
+        strength = (weight ** 1.5) * math.exp(-eff_age / tau)
+        stars.append({
+            'id': str(s.get('id')), 'rawKind': raw_kind,
+            'kind': _MG_KIND.get(raw_kind, 'fact'),
+            'weight': weight, 'at': at, 'lastHitAt': last_hit,
+            'pin': bool(s.get('pin')), 'title': str(s.get('title') or ''),
+            'text': str(s.get('text') or ''), 'tags': list(s.get('tags') or []),
+            'source': s.get('source', 'jingent'),
+            'tau': tau, 'ageDays': round(age_days, 2),
+            'hitDays': None if hit_days is None else round(hit_days, 2),
+            'strength': strength,
+        })
+
+    # 2) 分层：pin/identity → 核心(0)；其余按强度排名 55/15/15
+    core = [x for x in stars if x['pin'] or x['kind'] == 'identity']
+    rest = sorted([x for x in stars if not (x['pin'] or x['kind'] == 'identity')],
+                  key=lambda x: -x['strength'])
+    for x in core:
+        x['shell'] = 0
+    n_rest = len(rest)
+    for i, x in enumerate(rest):
+        f = i / max(1, n_rest - 1)
+        x['shell'] = 1 if f < 0.55 else (2 if f < 0.85 else 3)
+
+    # 3) 摆位
+    all_stars = core + rest
+    for i, s in enumerate(all_stars):
+        h = _mg_hash(s['id'] + '|' + str(i))
+        r0, r1 = _MG_SHELL_R[s['shell']]
+        shell0 = 1 if s['shell'] == 0 else 0
+        frac = 0.5 + 0.5 * _mg_u01(h, 3) + (0 if s['shell'] == 0 else 0.25 * (1 - min(1, s['strength'] / 4)))
+        rr = min(r1, r0 + (r1 - r0) * min(1, frac * 0.85))
+        arm = int(math.floor(_mg_u01(h, 5) * _MG_ARMS)) % _MG_ARMS
+        theta = (arm / _MG_ARMS) * math.pi * 2 - 2.6 * math.log(rr * 6 + 1) + (_mg_u01(h, 9) - 0.5) * 1.30
+        radius = _MG_R * rr * (1 + (_mg_u01(h, 11) - 0.5) * (0.12 if s['shell'] == 0 else 0.26))
+        y_scale = 0.20 if s['shell'] == 0 else 0.055
+        s['arm'] = arm
+        s['r'] = round(radius / _MG_R, 4)
+        s['x'] = round(math.cos(theta) * radius, 2)
+        s['z'] = round(math.sin(theta) * radius, 2)
+        s['y'] = round(
+            _mg_gauss(h, 13) * _MG_R * y_scale * math.exp(-rr * 1.1)
+            + (_mg_gauss(h, 17) * _MG_R * 0.05 if s['shell'] == 0 else 0), 2)
+
+    # 4) 消息层
+    messages = []
+    for i, m in enumerate(messages_raw):
+        h = _mg_hash(f"{m.get('key')}:{m.get('at')}:{i}")
+        rr = 0.30 + (_mg_u01(h, 2) ** 0.55) * 0.76
+        arm = int(math.floor(_mg_u01(h, 5) * _MG_ARMS)) % _MG_ARMS
+        theta = (arm / _MG_ARMS) * math.pi * 2 - 2.6 * math.log(rr * 6 + 1) + (_mg_u01(h, 9) - 0.5) * 1.35
+        radius = _MG_R * rr
+        at = int(m.get('at') or 0) or now_ms
+        age_days = max(0, (now_ms - at) / 86400000.0)
+        messages.append({
+            'id': m.get('id', f'm{i}'), 'key': str(m.get('key', 'chat')),
+            'at': at, 'self': bool(m.get('self')), 'text': str(m.get('text') or '')[:60],
+            'source': m.get('source', 'jingent'),
+            'x': round(math.cos(theta) * radius, 1),
+            'y': round(_mg_gauss(h, 13) * _MG_R * 0.075, 1),
+            'z': round(math.sin(theta) * radius, 1),
+            'tau': round(24 + _mg_u01(h, 15) * 12, 1),
+            'ageDays': round(age_days, 2),
+        })
+
+    # 5) meta
+    counts = {}
+    for s in stars:
+        counts[s['kind']] = counts.get(s['kind'], 0) + 1
+    by_source = {}
+    for s in stars + messages:
+        by_source[s['source']] = by_source.get(s['source'], 0) + 1
+    memory_n = sum(1 for s in stars if s['kind'] != 'diary')
+    diary_n = sum(1 for s in stars if s['kind'] == 'diary')
+    avg = sum(s['strength'] for s in stars) / max(1, len(stars))
+    return {
+        'meta': {
+            'generatedAt': now_ms, 'radius': _MG_R, 'arms': _MG_ARMS,
+            'total': len(stars), 'pinned': sum(1 for s in stars if s['pin']),
+            'messages': len(messages), 'counts': counts,
+            'sources': {'memory': memory_n, 'diary': diary_n, 'message': len(messages), 'bySource': by_source},
+            'avgStrength': round(avg, 3),
+        },
+        'stars': stars, 'messages': messages, 'links': [],
+    }
+
+
+@router.get("/chat/memory", summary="记忆银河页", include_in_schema=False)
+def memory_galaxy_page(request: Request):
+    return _templates_ref.TemplateResponse(name="memory_galaxy.html", request=request)
+
+
+@router.get("/chat/memory/api/data", summary="记忆银河数据", include_in_schema=False)
+def memory_galaxy_data(
+        request: Request,
+        user_id: int = Depends(verify_token),
+        db: Session = Depends(get_db),
+):
+    """把当前用户的记忆 + 对话消息画成银河。只读，不写库。"""
+    now_ms = int(time.time() * 1000)
+
+    # 记忆：global → 身份核心；detail → 按分类映射类型
+    mems = db.query(Memory).filter(Memory.user_id == user_id).order_by(Memory.id.desc()).limit(500).all()
+    stars_raw = []
+    for m in mems:
+        if m.type == 'global':
+            raw_kind = 'soul'
+            pin = True
+        else:
+            raw_kind = _memory_to_raw_kind(m.category)
+            pin = False
+        content = (m.content or '').strip()
+        if not content:
+            continue
+        stars_raw.append({
+            'id': f'mg-{m.id}',
+            'rawKind': raw_kind,
+            'weight': max(1.0, min(4.0, round((m.importance or 0.5) * 4, 2))),
+            'at': _mg_ts(m.created_at),
+            'lastHitAt': _mg_ts(m.last_recalled_at),
+            'pin': pin,
+            'title': content[:60],
+            'text': content[:420],
+            'tags': [m.category] if m.category else [],
+            'source': 'jingent',
+        })
+
+    # 消息：最近 2000 条对话
+    msgs = db.query(Message).filter(Message.user_id == user_id).order_by(Message.id.desc()).limit(2000).all()
+    messages_raw = []
+    for m in reversed(msgs):
+        text = (m.content or '').replace('\n', ' ').strip()
+        if not text:
+            continue
+        messages_raw.append({
+            'id': f'mm-{m.id}',
+            'key': f'session-{m.session_id}',
+            'at': _mg_ts(m.created_at),
+            'self': m.role == 'user',
+            'text': text[:60],
+            'source': 'jingent',
+        })
+
+    return build_memory_galaxy(stars_raw, messages_raw, now_ms)
+
+
+# ==================================================================
 # 技能 & 场景
 # ==================================================================
 
@@ -859,7 +1089,19 @@ async def chat_stream(
     ))
     ai_context = full_history[-50:]
 
-    model_name, base_url, api_key = resolve_llm_config(chat_request.llm)
+    # 用户 AI 配置（数据库持久化，.env 打底；前端本次传参可再覆盖）
+    from app.api.ai_config_routes import get_user_ai_config
+    user_ai_cfg = get_user_ai_config(db, user_id) if user_id else {}
+
+    # 对话 LLM 配置优先级：前端实时传参 > 数据库用户配置 > .env
+    _req_llm = chat_request.llm or {}
+    _db_llm = (user_ai_cfg or {}).get("llm") or {}
+    _llm_cfg = {
+        "model": (_req_llm.get("model") or "").strip() or (_db_llm.get("model") or "").strip(),
+        "base_url": (_req_llm.get("base_url") or "").strip() or (_db_llm.get("base_url") or "").strip(),
+        "api_key": (_req_llm.get("api_key") or "").strip() or (_db_llm.get("api_key") or "").strip(),
+    }
+    model_name, base_url, api_key = resolve_llm_config(_llm_cfg)
     model = init_chat_model(
         model=model_name,
         model_provider="openai",
@@ -867,6 +1109,14 @@ async def chat_stream(
         api_key=api_key,
         temperature=temperature,
     )
+
+    # 图片解析配置：注入用户数据库配置（工具内部 .env 打底，用户覆盖）
+    try:
+        from app.tools.tool_Image_parsing import set_user_image_vl_config
+        set_user_image_vl_config(user_ai_cfg.get("image_vl") or None)
+    except Exception as e:
+        logger.warning("[image_vl] 注入用户配置失败: %s", e)
+
     enabled_skills = resolve_enabled_skills(
         chat_request.enabled_skills,
         chat_request.image_paths,
@@ -902,7 +1152,14 @@ async def chat_stream(
     if chat_request.chat_type == "main" and user_id:
         try:
             from app.core.rag import get_rag_store
-            rag_cfg = resolve_embedding_config(chat_request.embedding)
+            _req_emb = chat_request.embedding or {}
+            _db_emb = (user_ai_cfg or {}).get("embedding") or {}
+            _emb_cfg = {
+                "base_url": (_req_emb.get("base_url") or "").strip() or (_db_emb.get("base_url") or "").strip(),
+                "model": (_req_emb.get("model") or "").strip() or (_db_emb.get("model") or "").strip(),
+                "api_key": (_req_emb.get("api_key") or "").strip() or (_db_emb.get("api_key") or "").strip(),
+            }
+            rag_cfg = resolve_embedding_config(_emb_cfg)
             rag_hits = get_rag_store().search(user_id, chat_request.newMessage, k=5, embedding_cfg=rag_cfg,
                                               character_id=active_cid)
             if rag_hits:
@@ -937,30 +1194,51 @@ async def chat_stream(
         # 桌宠联动：开始思考
         _broadcast_pet({"t": "turn-start"})
 
+        # SSE 统一用 JSON 帧，避免回复文本含换行时破坏 SSE 协议导致前端丢行/截断。
+        # 帧类型：{t:"delta",text} / {t:"split"} / {t:"history",history} / {t:"done"}
+        def frame(obj) -> str:
+            return f"data: {json.dumps(obj, ensure_ascii=False)}\n\n"
+
         async for msg_chunk, metadata in agent.astream(
                 {"messages": messages},
                 stream_mode="messages",
         ):
-            if msg_chunk.content:
-                buffer += msg_chunk.content
-                # 检测「|||」分隔符：真人连发多条消息
-                while "|||" in buffer:
-                    idx = buffer.index("|||")
-                    segment = buffer[:idx]
-                    buffer = buffer[idx + 3:]
-                    parts.append(segment)
-                    if segment:
-                        # 桌宠联动：逐字输出 → 嘴巴动
-                        _broadcast_pet({"t": "delta", "text": segment})
-                        yield f"data: {segment}\n\n"
-                    # 通知前端：本条结束，开新气泡
-                    yield "data: [MSG_SPLIT]\n\n"
+            # 工具返回（ToolMessage）是 Agent 中间过程，不推给用户；
+            # 只收集 AI 文本，最终回复由 LLM 整合后给出。
+            if isinstance(msg_chunk, ToolMessage):
+                continue
+            content = msg_chunk.content
+            # 多模态/复合 chunk 的 content 可能是 list，只取 text 块
+            if isinstance(content, list):
+                text_parts = []
+                for block in content:
+                    if isinstance(block, str):
+                        text_parts.append(block)
+                    elif isinstance(block, dict) and block.get("type") == "text":
+                        text_parts.append(block.get("text", "") or "")
+                content = "".join(text_parts)
+            if not content:
+                continue
+
+            buffer += content
+            # 检测「|||」分隔符：真人连发多条消息
+            while "|||" in buffer:
+                idx = buffer.index("|||")
+                segment = buffer[:idx]
+                buffer = buffer[idx + 3:]
+                parts.append(segment)
+                if segment:
+                    # 桌宠联动：逐字输出 → 嘴巴动
+                    _broadcast_pet({"t": "delta", "text": segment})
+                    yield frame({"t": "delta", "text": segment})
+                # 通知前端：本条结束，开新气泡
+                yield frame({"t": "split"})
 
         # flush 剩余缓冲
         if buffer:
             parts.append(buffer)
             _broadcast_pet({"t": "delta", "text": buffer})
-            yield f"data: {buffer}\n\n"
+            yield frame({"t": "delta", "text": buffer})
 
         # 清理空段；全部为空时保留一条空回复，避免历史丢失
         parts = [p.strip() for p in parts if p.strip()]
@@ -975,8 +1253,8 @@ async def chat_stream(
         ai_messages = [ChatMessage(role="ai", message=p, created_at=_now_iso()) for p in parts]
         final_history = full_history + ai_messages
 
-        yield f"data: [HISTORY] {json.dumps([m.model_dump() for m in final_history], ensure_ascii=False)}\n\n"
-        yield "data: [DONE]\n\n"
+        yield frame({"t": "history", "history": [m.model_dump() for m in final_history]})
+        yield frame({"t": "done"})
 
         # 桌宠联动：结束 → 完成
         _broadcast_pet({"t": "turn-end", "status": "success"})
@@ -1035,7 +1313,18 @@ def ai_chat(
     ))
     ai_context = full_history[-50:]
 
-    model_name, base_url, api_key = resolve_llm_config(chat_request.llm)
+    # 用户 AI 配置（数据库持久化，.env 打底；前端本次传参可再覆盖）
+    from app.api.ai_config_routes import get_user_ai_config
+    user_ai_cfg = get_user_ai_config(db, user_id) if user_id else {}
+
+    _req_llm = chat_request.llm or {}
+    _db_llm = (user_ai_cfg or {}).get("llm") or {}
+    _llm_cfg = {
+        "model": (_req_llm.get("model") or "").strip() or (_db_llm.get("model") or "").strip(),
+        "base_url": (_req_llm.get("base_url") or "").strip() or (_db_llm.get("base_url") or "").strip(),
+        "api_key": (_req_llm.get("api_key") or "").strip() or (_db_llm.get("api_key") or "").strip(),
+    }
+    model_name, base_url, api_key = resolve_llm_config(_llm_cfg)
     model = init_chat_model(
         model=model_name,
         model_provider="openai",
@@ -1043,6 +1332,14 @@ def ai_chat(
         api_key=api_key,
         temperature=temperature,
     )
+
+    # 图片解析配置：注入用户数据库配置
+    try:
+        from app.tools.tool_Image_parsing import set_user_image_vl_config
+        set_user_image_vl_config(user_ai_cfg.get("image_vl") or None)
+    except Exception as e:
+        logger.warning("[image_vl] 注入用户配置失败: %s", e)
+
     resolved_skills = resolve_enabled_skills(
         chat_request.enabled_skills,
         chat_request.image_paths,
@@ -1081,7 +1378,14 @@ def ai_chat(
     if chat_request.chat_type == "main" and user_id:
         try:
             from app.core.rag import get_rag_store
-            rag_cfg = resolve_embedding_config(chat_request.embedding)
+            _req_emb = chat_request.embedding or {}
+            _db_emb = (user_ai_cfg or {}).get("embedding") or {}
+            _emb_cfg = {
+                "base_url": (_req_emb.get("base_url") or "").strip() or (_db_emb.get("base_url") or "").strip(),
+                "model": (_req_emb.get("model") or "").strip() or (_db_emb.get("model") or "").strip(),
+                "api_key": (_req_emb.get("api_key") or "").strip() or (_db_emb.get("api_key") or "").strip(),
+            }
+            rag_cfg = resolve_embedding_config(_emb_cfg)
             rag_hits = get_rag_store().search(user_id, chat_request.newMessage, k=5, embedding_cfg=rag_cfg,
                                               character_id=active_cid)
             if rag_hits:

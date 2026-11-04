@@ -729,3 +729,57 @@ def admin_users_info(
             "tokens_out_total": int(total_tokens[1] or 0),
         },
     }
+
+
+# ==================================================================
+# 音色管理（VoiceStudio 本地服务 127.0.0.1:3900）
+# ==================================================================
+
+def _voicestudio_request(method: str, path: str, timeout: int = 30):
+    """直连 VoiceStudio 本地服务，返回 (status, decoded_data)。"""
+    import json as _json
+    import urllib.request
+    import urllib.error
+
+    url = "http://127.0.0.1:3900" + path
+    req = urllib.request.Request(url, method=method, headers={"User-Agent": "jingent-admin/1.0"})
+    try:
+        with urllib.request.urlopen(req, timeout=timeout) as resp:
+            return resp.status, _json.loads(resp.read().decode("utf-8", errors="replace"))
+    except urllib.error.HTTPError as e:
+        try:
+            return e.code, _json.loads(e.read().decode("utf-8", errors="replace"))
+        except Exception:
+            return e.code, {"detail": f"VoiceStudio HTTP {e.code}"}
+    except Exception as e:
+        return -1, {"detail": f"无法连接 VoiceStudio：{str(e)[:200]}"}
+
+
+@router.get("/admin/api/voices", summary="音色列表（VoiceStudio）")
+def admin_voices(_: bool = Depends(verify_admin_token)):
+    status, data = _voicestudio_request("GET", "/v1/audio/voices")
+    if status != 200:
+        raise HTTPException(status_code=502, detail={"code": 502, "msg": f"VoiceStudio 不可用（status={status}）"})
+    voices = data.get("voices", []) if isinstance(data, dict) else []
+    # 只返回可删除的 profile 音色 + 标记内置别名不可删
+    result = []
+    for v in voices:
+        vid = v.get("voice_id") or v.get("id")
+        result.append({
+            "voice_id": vid,
+            "name": v.get("name") or vid,
+            "type": v.get("type", ""),
+            "deletable": v.get("type") == "profile",
+        })
+    return {"code": 200, "voices": result, "total": len(result)}
+
+
+@router.delete("/admin/api/voices/{voice_id}", summary="删除指定音色（VoiceStudio profile）")
+def admin_delete_voice(voice_id: str, _: bool = Depends(verify_admin_token)):
+    status, data = _voicestudio_request("DELETE", f"/profiles/{voice_id}")
+    if status == 404:
+        raise HTTPException(status_code=404, detail={"code": 404, "msg": "音色不存在"})
+    if status != 200:
+        detail = (data or {}).get("detail", "") if isinstance(data, dict) else str(data)
+        raise HTTPException(status_code=502, detail={"code": 502, "msg": f"删除失败（status={status}）：{detail[:200]}"})
+    return {"code": 200, "msg": f"已删除音色 {voice_id}"}

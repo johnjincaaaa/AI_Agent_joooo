@@ -43,7 +43,7 @@
     const TAB_LABELS = {
         dashboard: "数据看板", server: "服务器信息", logs: "实时日志", userinfo: "用户信息",
         approvals: "审批处理", withdraws: "提现审核", "memory-audit": "记忆体审核",
-        users: "用户管理", config: "配置管理",
+        users: "用户管理", voices: "音色管理", config: "配置管理",
     };
 
     const state = {
@@ -599,6 +599,57 @@
         } catch (e) { /* 401 已处理 */ }
     }
 
+    // ---------------- 音色管理 ----------------
+    async function loadVoices() {
+        const box = document.getElementById("voicesState");
+        const frame = document.getElementById("voicesFrame");
+        box.innerHTML = '<div class="state">正在读取音色…</div>';
+        frame.hidden = true;
+
+        try {
+            const res = await api("/admin/api/voices");
+            const d = await res.json();
+            const rows = d.voices || [];
+            if (!rows.length) {
+                box.innerHTML = `<div class="empty">
+                    <div class="empty-title">没有音色</div>
+                    <div class="empty-note">VoiceStudio 服务未运行或没有音色数据。</div>
+                </div>`;
+                return;
+            }
+
+            box.innerHTML = "";
+            frame.hidden = false;
+            document.getElementById("voicesTbody").innerHTML = rows.map(v => {
+                const typeZh = v.type === "profile" ? "用户音色" : "内置别名";
+                const actions = v.deletable
+                    ? `<button class="btn btn-quiet btn-sm" type="button" data-voicedel="${esc(v.voice_id)}">删除</button>`
+                    : `<span class="ident-sub">不可删</span>`;
+                return `<tr>
+                    <td class="col-id">${esc(v.voice_id)}</td>
+                    <td><b>${esc(v.name)}</b></td>
+                    <td>${esc(typeZh)}</td>
+                    <td class="col-actions"><div class="cell-actions">${actions}</div></td>
+                </tr>`;
+            }).join("");
+        } catch (e) {
+            box.innerHTML = errState("音色读取失败", e);
+        }
+    }
+
+    async function handleVoiceDelete(voiceId) {
+        if (!confirm(`确认删除音色 ${voiceId}？\n删除会同时清掉对应的音频文件，不可恢复。`)) return;
+        try {
+            const res = await api(`/admin/api/voices/${encodeURIComponent(voiceId)}`, {method: "DELETE"});
+            const d = await res.json().catch(() => ({}));
+            if (res.ok) {
+                loadVoices();
+            } else {
+                alert((d.detail && d.detail.msg) || "删除失败");
+            }
+        } catch (e) { /* 401 已处理 */ }
+    }
+
     // ---------------- 用户管理 ----------------
     async function loadUsers() {
         const q = document.getElementById("userSearch").value.trim();
@@ -829,6 +880,7 @@
         else if (tab === "withdraws") loadWithdraws(state.withdrawStatus);
         else if (tab === "memory-audit") loadMemoryAudit();
         else if (tab === "users") loadUsers();
+        else if (tab === "voices") loadVoices();
         else if (tab === "config") loadConfig();
     }
 
@@ -841,6 +893,7 @@
         else if (state.tab === "withdraws") loadWithdraws(state.withdrawStatus);
         else if (state.tab === "memory-audit") loadMemoryAudit();
         else if (state.tab === "users") loadUsers();
+        else if (state.tab === "voices") loadVoices();
         else loadConfig();
     }
 
@@ -1048,6 +1101,12 @@
             const rj = e.target.getAttribute("data-mreject");
             if (ap) handleMemoryAction(ap, "approve");
             if (rj) handleMemoryAction(rj, "reject");
+        });
+
+        document.getElementById("voicesRefreshBtn").addEventListener("click", () => loadVoices());
+        document.getElementById("voicesTbody").addEventListener("click", e => {
+            const del = e.target.getAttribute("data-voicedel");
+            if (del) handleVoiceDelete(del);
         });
 
         document.getElementById("userTbody").addEventListener("click", e => {

@@ -625,6 +625,10 @@ logoutBtn.addEventListener("click", () => {
     localStorage.removeItem("username");
     localStorage.removeItem("user_id");
     localStorage.removeItem("avatar");
+    // AI 配置缓存（含 api_key 明文）：退出登录必须一起清掉，
+    // 否则退出后打开设置弹窗会回显上一个账号的 key（切换账号残留）。
+    localStorage.removeItem("jingent_llm_config");
+    localStorage.removeItem("jingent_voice_settings");
     clearChatCache();
     profileDropdown.classList.remove("show");
     window.location.reload();

@@ -92,6 +92,14 @@
                 </svg>
                 <span>用户管理</span>
             </button>
+            <button class="nav-item" type="button" data-tab="voices">
+                <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
+                    <path d="M4 9.5a6 6 0 0 1 12 0"></path>
+                    <rect x="3" y="9.5" width="14" height="6" rx="2"></rect>
+                    <path d="M8 15.5h4"></path>
+                </svg>
+                <span>音色管理</span>
+            </button>
             <button class="nav-item" type="button" data-tab="config">
                 <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
                     <path d="M2.8 6.2h8.4"></path>
@@ -396,6 +404,36 @@
                             </tr>
                             </thead>
                             <tbody id="memoryTbody"></tbody>
+                        </table>
+                    </div>
+                </section>
+            </section>
+
+            <!-- 音色管理 -->
+            <section class="panel" id="panel-voices">
+                <div class="page-head">
+                    <div class="page-head-text">
+                        <h1>音色管理</h1>
+                        <p class="page-sub">管理 VoiceStudio 本地服务的音色。内置别名（alloy/nova…）不可删除；profile 音色（克隆/设计）可删除，删除同时清掉音频文件。</p>
+                    </div>
+                    <div class="page-head-actions">
+                        <button class="btn btn-ghost btn-sm" type="button" id="voicesRefreshBtn">刷新</button>
+                    </div>
+                </div>
+
+                <div id="voicesState"></div>
+                <section class="card table-card" id="voicesFrame" hidden>
+                    <div class="table-frame">
+                        <table class="table">
+                            <thead>
+                            <tr>
+                                <th class="col-id">音色 ID</th>
+                                <th>名称</th>
+                                <th>类型</th>
+                                <th class="col-actions">操作</th>
+                            </tr>
+                            </thead>
+                            <tbody id="voicesTbody"></tbody>
                         </table>
                     </div>
                 </section>

@@ -8,9 +8,29 @@ import uvicorn
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
+from starlette.responses import Response
 import logging
 import os
 import sys
+
+
+class CachedStaticFiles(StaticFiles):
+    """静态资源缓存策略：媒体文件长缓存，代码/页面短缓存（配合 ?v= 版本号）。"""
+
+    # 可长缓存的媒体扩展名（动画/图片/音频，URL 含资源名，内容变化会换 URL）
+    LONG_CACHE_EXTS = {
+        ".webm", ".mp4", ".png", ".jpg", ".jpeg", ".gif", ".webp",
+        ".wav", ".mp3", ".ogg", ".opus", ".aac", ".flac", ".ico", ".svg",
+    }
+
+    def file_response(self, full_path, stat_result, scope, status_code=200) -> Response:
+        response = super().file_response(full_path, stat_result, scope, status_code)
+        suffix = os.path.splitext(str(full_path))[1].lower()
+        if suffix in self.LONG_CACHE_EXTS:
+            response.headers["Cache-Control"] = "public, max-age=604800, immutable"
+        else:
+            response.headers["Cache-Control"] = "no-cache"
+        return response
 
 # ── 1. 日志：最先初始化，后续所有 logger 都能用上 ──
 from app.core.logging_setup import setup_logging
@@ -47,7 +67,7 @@ from app.tools.skills_registry import get_skill_catalog, resolve_tools
 from app.services.job_mock_data import RESUME_TEMPLATES, MOCK_JOBS, match_jobs
 
 # 路由模块
-from app.api import chat_routes, job_routes, admin_routes, auth_routes, memory_routes, character_routes, create_routes, pet_market_routes, tts_routes
+from app.api import chat_routes, job_routes, admin_routes, auth_routes, memory_routes, character_routes, create_routes, pet_market_routes, tts_routes, ai_config_routes
 
 # Middleware
 from app.core.middleware import add_request_middleware
@@ -66,24 +86,24 @@ app = FastAPI(
     version="1.0",
 )
 from app.core.paths import resource_path, uploads_dir
-app.mount("/static", StaticFiles(directory=str(resource_path("static"))), name="static")
+app.mount("/static", CachedStaticFiles(directory=str(resource_path("static"))), name="static")
 UPLOAD_DIR = uploads_dir()
-app.mount("/uploads", StaticFiles(directory=str(UPLOAD_DIR)), name="uploads")
+app.mount("/uploads", CachedStaticFiles(directory=str(UPLOAD_DIR)), name="uploads")
 
 # 角色系统头像静态资源（/plugins/avatars/xxx.png|webp，与 characters 同级）
 _characters_avatars = resource_path("static") / "plugins" / "avatars"
 _characters_avatars.mkdir(parents=True, exist_ok=True)
-app.mount("/plugins/avatars", StaticFiles(directory=str(_characters_avatars)), name="character-avatars")
+app.mount("/plugins/avatars", CachedStaticFiles(directory=str(_characters_avatars)), name="character-avatars")
 
 # 宠物自定义资源（/plugins/dsh-pet/user-assets/<user_id>/webm|memes|sound/xxx）
 from app.core.pet_assets import PET_ASSETS_ROOT
 PET_ASSETS_ROOT.mkdir(parents=True, exist_ok=True)
-app.mount("/plugins/dsh-pet/user-assets", StaticFiles(directory=str(PET_ASSETS_ROOT)), name="pet-user-assets")
+app.mount("/plugins/dsh-pet/user-assets", CachedStaticFiles(directory=str(PET_ASSETS_ROOT)), name="pet-user-assets")
 
 # 宠物插件市场资源（/plugins/pets/<pet_id>/webm|preview.png，与 dsh-pet 同级）
 from app.core.pet_market import PETS_ROOT
 PETS_ROOT.mkdir(parents=True, exist_ok=True)
-app.mount("/plugins/pets", StaticFiles(directory=str(PETS_ROOT)), name="pet-market-pets")
+app.mount("/plugins/pets", CachedStaticFiles(directory=str(PETS_ROOT)), name="pet-market-pets")
 from fastapi.templating import Jinja2Templates
 templates = Jinja2Templates(directory=str(resource_path("templates")))
 
@@ -162,6 +182,10 @@ logger.info("[Boot] Pet-market routes loaded (api/pet_market_routes.py)")
 # 记忆体语音（VoiceStudio 本地语音服务代理：合成 / 音色 / 转录 / 健康检查）
 app.include_router(tts_routes.router)
 logger.info("[Boot] TTS routes loaded (api/tts_routes.py)")
+
+# 用户 AI 配置（数据库持久化，跟随登录用户，云端覆盖 .env）
+app.include_router(ai_config_routes.router)
+logger.info("[Boot] AI-config routes loaded (api/ai_config_routes.py)")
 
 # 主动发消息（主对话 AI 定时主动开启话题）
 from app.core.active_chat import start_active_chat_worker

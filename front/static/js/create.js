@@ -255,7 +255,7 @@
             const res = await fetch(`${API}/ai/tts/voices`, { headers: buildAuthHeaders() });
             const data = await res.json();
             if (!res.ok || !data.ok) throw new Error(data.detail || '加载失败');
-            const voices = (data.voices || []).filter(v => v && v.type === 'profile');
+            const voices = (data.voices || []).filter(v => v && (v.voice_id || v.id || v.name));
             const cur = sel.dataset.saved || '';
             sel.innerHTML = '<option value="">默认音色</option>';
             window.__voiceNameMap = window.__voiceNameMap || {};
@@ -265,7 +265,7 @@
                 window.__voiceNameMap[val] = v.name || val;
                 const opt = document.createElement('option');
                 opt.value = val;
-                opt.textContent = v.name || val;
+                opt.textContent = (v.name || val) + (v.type === 'cloned' ? '（克隆）' : '');
                 sel.appendChild(opt);
             });
             if (cur && ![...sel.options].some(o => o.value === cur)) {
@@ -333,7 +333,7 @@
             const data = await res.json();
             if (res.ok && data.ok && Array.isArray(data.voices)) {
                 window.__voiceNameMap = window.__voiceNameMap || {};
-                data.voices.filter(v => v && v.type === 'profile').forEach(v => {
+                data.voices.filter(v => v && (v.voice_id || v.id || v.name)).forEach(v => {
                     const val = v.voice_id || v.id || v.name || '';
                     if (val) window.__voiceNameMap[val] = v.name || val;
                 });

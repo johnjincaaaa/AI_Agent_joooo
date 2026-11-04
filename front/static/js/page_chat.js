@@ -449,18 +449,23 @@ async function sendMessage() {
             for (const line of lines) {
                 const trimLine = line.trim();
                 if (!trimLine.startsWith("data: ")) continue;
-                const data = trimLine.replace("data: ", "").trim();
+                const raw = trimLine.replace("data: ", "").trim();
+                if (!raw) continue;
+
+                // 统一 JSON 帧（后端 SSE 已改为 JSON，避免回复含换行时丢行/截断）
+                let frame = null;
+                try { frame = JSON.parse(raw); } catch (e) { continue; }
+                if (!frame || !frame.t) continue;
 
                 // 结束
-                if (data === "[DONE]") continue;
+                if (frame.t === "done") continue;
                 // 接收完整历史
-                if (data.startsWith("[HISTORY]")) {
-                    const historyJson = data.replace("[HISTORY] ", "");
-                    chatData = JSON.parse(historyJson);
+                if (frame.t === "history") {
+                    chatData = Array.isArray(frame.history) ? frame.history : [];
                     continue;
                 }
                 // 真人连发：本条结束，开新气泡继续
-                if (data === "[MSG_SPLIT]") {
+                if (frame.t === "split") {
                     if (typingDiv && typingDiv.parentNode) typingDiv.remove();
                     // 当前气泡文本已累积完整，回写进记录
                     const last = aiBubbles[aiBubbles.length - 1];
@@ -474,13 +479,15 @@ async function sendMessage() {
                     continue;
                 }
                 // 流式输出文字
-                aiFullReply += data;
-                if (typingDiv && typingDiv.parentNode) {
-                    typingDiv.remove();
+                if (frame.t === "delta") {
+                    aiFullReply += (frame.text || "");
+                    if (typingDiv && typingDiv.parentNode) {
+                        typingDiv.remove();
+                    }
+                    aiContentDiv.innerHTML = renderMarkdown(aiFullReply);
+                    box.scrollTop = box.scrollHeight;
+                    enhanceCodeBlocks(aiContentDiv);
                 }
-                aiContentDiv.innerHTML = renderMarkdown(aiFullReply);
-                box.scrollTop = box.scrollHeight;
-                enhanceCodeBlocks(aiContentDiv);
             }
         }
 
@@ -2274,6 +2281,9 @@ function getLLMConfig() {
         if (cfg.embedding_base_url) clean.embedding_base_url = String(cfg.embedding_base_url).trim();
         if (cfg.embedding_model) clean.embedding_model = String(cfg.embedding_model).trim();
         if (cfg.embedding_api_key) clean.embedding_api_key = String(cfg.embedding_api_key).trim();
+        if (cfg.image_vl_provider) clean.image_vl_provider = String(cfg.image_vl_provider).trim();
+        if (cfg.image_vl_model) clean.image_vl_model = String(cfg.image_vl_model).trim();
+        if (cfg.image_vl_api_key) clean.image_vl_api_key = String(cfg.image_vl_api_key).trim();
         return Object.keys(clean).length ? clean : null;
     } catch (e) { return null; }
 }
@@ -2286,11 +2296,48 @@ function saveLLMConfig(cfg) {
     if (cfg.embedding_base_url) clean.embedding_base_url = String(cfg.embedding_base_url).trim();
     if (cfg.embedding_model) clean.embedding_model = String(cfg.embedding_model).trim();
     if (cfg.embedding_api_key) clean.embedding_api_key = String(cfg.embedding_api_key).trim();
+    if (cfg.image_vl_provider) clean.image_vl_provider = String(cfg.image_vl_provider).trim();
+    if (cfg.image_vl_model) clean.image_vl_model = String(cfg.image_vl_model).trim();
+    if (cfg.image_vl_api_key) clean.image_vl_api_key = String(cfg.image_vl_api_key).trim();
     if (Object.keys(clean).length) {
         localStorage.setItem(LLM_CONFIG_KEY, JSON.stringify(clean));
     } else {
         localStorage.removeItem(LLM_CONFIG_KEY);
     }
+}
+
+// 从数据库加载用户 AI 配置（登录用户），回显到表单；未登录回退 localStorage
+async function loadAIConfigFromServer() {
+    const token = localStorage.getItem('token');
+    if (!token || token === 'null') {
+        loadLLMSettingsIntoForm();  // localStorage 兜底
+        return null;
+    }
+    try {
+        const res = await fetch(`${config.API_BASE_URL}/ai/config`, { headers: buildAuthHeaders() });
+        const data = await res.json();
+        if (res.ok && data.ok && data.config) {
+            const c = data.config;
+            const llm = c.llm || {}, emb = c.embedding || {}, vl = c.image_vl || {};
+            setVal('llmBaseUrl', llm.base_url || '');
+            setVal('llmModel', llm.model || '');
+            setVal('llmApiKey', llm.api_key || '');
+            setVal('embeddingBaseUrl', emb.base_url || '');
+            setVal('embeddingModel', emb.model || '');
+            setVal('embeddingApiKey', emb.api_key || '');
+            setVal('imageVlProvider', vl.provider || '');
+            setVal('imageVlModel', vl.model || '');
+            setVal('imageVlApiKey', vl.api_key || '');
+            return c;
+        }
+    } catch (e) { console.warn('加载数据库 AI 配置失败', e); }
+    loadLLMSettingsIntoForm();
+    return null;
+}
+
+function setVal(id, v) {
+    const el = document.getElementById(id);
+    if (el) el.value = v == null ? '' : v;
 }
 
 // —— 设置弹窗打开时：回显 LLM 配置 + 加载记忆 ——
@@ -2310,6 +2357,11 @@ function loadLLMSettingsIntoForm() {
     if (embBaseEl) embBaseEl.value = cfg && cfg.embedding_base_url ? cfg.embedding_base_url : '';
     if (embModelEl) embModelEl.value = cfg && cfg.embedding_model ? cfg.embedding_model : '';
     if (embKeyEl) embKeyEl.value = cfg && cfg.embedding_api_key ? cfg.embedding_api_key : '';
+
+    // 图片解析模型回显
+    setVal('imageVlProvider', cfg && cfg.image_vl_provider ? cfg.image_vl_provider : '');
+    setVal('imageVlModel', cfg && cfg.image_vl_model ? cfg.image_vl_model : '');
+    setVal('imageVlApiKey', cfg && cfg.image_vl_api_key ? cfg.image_vl_api_key : '');
 }
 
 async function loadMemoriesIntoForm() {
@@ -2336,9 +2388,9 @@ async function loadMemoriesIntoForm() {
         listGlobal.innerHTML = globals.length
             ? globals.map(m => memoryItemHTML(m)).join('')
             : '<div class="memory-empty">暂无，添加一条试试</div>';
-        listDetail.innerHTML = details.length
-            ? details.map(m => memoryItemHTML(m)).join('')
-            : '<div class="memory-empty">暂无细节记忆</div>';
+        // 细节记忆：渲染为星图（全局画像=中央主星，细节记忆=星座）；记忆银河入口保留在上方 banner
+        listDetail.innerHTML = '';
+        listDetail.appendChild(renderMemoryStarMap(globals, details));
     } catch (e) {
         listGlobal.innerHTML = '<div class="memory-empty">加载失败</div>';
         listDetail.innerHTML = '<div class="memory-empty">加载失败</div>';
@@ -2360,6 +2412,293 @@ function memoryItemHTML(m) {
     </div>`;
 }
 
+// —— 细节记忆星图 ——
+// 记忆体 = 全局画像（中央主星） + 细节记忆（星座，越亮越被在意） + 上下文 RAG（向量检索）
+// 布局：viewBox 760×420；主星区居中（每条全局画像一颗金色主星），类别星座环绕，主星向星座核心拉虚线
+// 口径：星亮度 = min(1, access_count*0.25 + (importance-0.5)*0.6)，下限 0.15；灰蓝→白→金插值
+function renderMemoryStarMap(globals, details) {
+    const NS = 'http://www.w3.org/2000/svg';
+    const W = 760, H = 420;
+    const t_ = (k, n) => {
+        if (typeof t !== 'function') return k;
+        const s = t(k);
+        return n == null ? s : String(s).replace(/\{n\}/g, n);
+    };
+    const esc = escapeHtml;
+
+    if (!(globals || []).length && !(details || []).length) {
+        const empty = document.createElement('div');
+        empty.className = 'memory-empty';
+        empty.textContent = t_('memory_stars_empty');
+        return empty;
+    }
+
+    // 类别聚合（无类别归「未分类」）
+    const catOrder = [];
+    const catMap = {};
+    for (const m of details || []) {
+        const key = (m.category || '').trim() || t_('memory_cat_other');
+        (catMap[key] = catMap[key] || []).push(m);
+    }
+    for (const k in catMap) catOrder.push(k);
+
+    // 固定种子随机（每次打开星图一致）
+    let seed = 20261104;
+    const rnd = () => { seed = (seed * 9301 + 49297) % 233280; return seed / 233280; };
+
+    const strengthOf = (m) => Math.min(1, Math.max(0.15, (m.access_count || 0) * 0.25 + ((m.importance || 0.5) - 0.5) * 0.6));
+    const starColor = (s) => {
+        const stops = [[0.15, [110, 130, 166]], [0.45, [216, 226, 242]], [0.80, [255, 214, 150]]];
+        if (s <= stops[0][0]) return stops[0][1];
+        if (s >= stops[2][0]) return stops[2][1];
+        const i = s < stops[1][0] ? 0 : 1;
+        const a = stops[i][1], b = stops[i + 1][1];
+        const tt = (s - stops[i][0]) / (stops[i + 1][0] - stops[i][0]);
+        return [Math.round(a[0] + (b[0] - a[0]) * tt), Math.round(a[1] + (b[1] - a[1]) * tt), Math.round(a[2] + (b[2] - a[2]) * tt)];
+    };
+    const rgb = (c, o) => 'rgba(' + c[0] + ',' + c[1] + ',' + c[2] + ',' + (o == null ? 1 : o) + ')';
+
+    const wrap = document.createElement('div');
+    wrap.className = 'mem-stars-wrap';
+
+    const svg = document.createElementNS(NS, 'svg');
+    svg.setAttribute('viewBox', '0 0 ' + W + ' ' + H);
+    svg.setAttribute('preserveAspectRatio', 'xMidYMid meet');
+    svg.classList.add('mem-stars-svg');
+    wrap.appendChild(svg);
+
+    // 背景星尘：56 颗氛围星 + 3 颗亮星
+    for (let i = 0; i < 56; i++) {
+        const c = document.createElementNS(NS, 'circle');
+        c.setAttribute('cx', (rnd() * W).toFixed(1));
+        c.setAttribute('cy', (rnd() * H).toFixed(1));
+        c.setAttribute('r', (0.5 + rnd() * 1.2).toFixed(2));
+        c.setAttribute('fill', '#fff');
+        c.setAttribute('opacity', (0.04 + rnd() * 0.14).toFixed(2));
+        c.classList.add('ms-sky');
+        svg.appendChild(c);
+    }
+    for (let i = 0; i < 3; i++) {
+        const c = document.createElementNS(NS, 'circle');
+        c.setAttribute('cx', (60 + rnd() * (W - 120)).toFixed(1));
+        c.setAttribute('cy', (40 + rnd() * (H - 80)).toFixed(1));
+        c.setAttribute('r', (1.6 + rnd() * 0.9).toFixed(2));
+        c.setAttribute('fill', '#fff');
+        c.setAttribute('opacity', '0.85');
+        c.classList.add('ms-sky');
+        svg.appendChild(c);
+    }
+
+    const PCx = W / 2, PCy = 210;            // 主星区中心
+    const G = (globals || []).length;
+    const C = catOrder.length;
+    const gStep = Math.min(72, Math.max(40, 520 / Math.max(1, G)));
+    const allStars = [];                     // {id, el, kind:'profile'|'data', star}
+
+    // 垫底层：主星 → 星座核心 虚线 + 星座内部连线（先插入 svg 后部会被星点盖住，故 insertBefore 到背景星之后）
+    const under = [];
+    if (C) {
+        catOrder.forEach((cat, ci) => {
+            const baseAng = (ci / C) * Math.PI * 2 - Math.PI / 2 + (rnd() - 0.5) * 0.45;
+            const cx = Math.min(W - 90, Math.max(90, PCx + Math.cos(baseAng) * 265 + (rnd() - 0.5) * 26));
+            const cy = Math.min(H - 46, Math.max(46, PCy + Math.sin(baseAng) * 155 + (rnd() - 0.5) * 22));
+            const dash = document.createElementNS(NS, 'line');
+            dash.setAttribute('x1', PCx); dash.setAttribute('y1', PCy);
+            dash.setAttribute('x2', cx.toFixed(1)); dash.setAttribute('y2', cy.toFixed(1));
+            dash.setAttribute('class', 'ms-dash');
+            under.push({ el: dash, cat: cat, cx: cx, cy: cy });
+        });
+    }
+    for (const u of under) svg.insertBefore(u.el, svg.firstChild);
+
+    // 星座（数据星）
+    catOrder.forEach((cat, ci) => {
+        const u = under[ci];
+        const cx = u.cx, cy = u.cy;
+        const items = catMap[cat];
+        // 核心点 + 类别标签
+        const core = document.createElementNS(NS, 'circle');
+        core.setAttribute('cx', cx.toFixed(1)); core.setAttribute('cy', cy.toFixed(1));
+        core.setAttribute('r', '3.2'); core.setAttribute('fill', '#A8C3FF'); core.setAttribute('opacity', '0.55');
+        svg.appendChild(core);
+        const label = document.createElementNS(NS, 'text');
+        label.setAttribute('x', (cx + 11).toFixed(1)); label.setAttribute('y', (cy + 4).toFixed(1));
+        label.setAttribute('class', 'ms-cat-label');
+        label.textContent = cat + ' · ' + items.length;
+        svg.appendChild(label);
+
+        items.forEach((m, i) => {
+            const s = strengthOf(m);
+            const n = items.length;
+            const ang = (i / n) * Math.PI * 2 + (rnd() - 0.5) * 0.55;
+            const rad = 58 + s * 46 + (rnd() - 0.5) * 24;
+            const x = cx + Math.cos(ang) * rad;
+            const y = cy + Math.sin(ang) * rad * 0.82;
+            // 星 → 核心 连线
+            const line = document.createElementNS(NS, 'line');
+            line.setAttribute('x1', x.toFixed(1)); line.setAttribute('y1', y.toFixed(1));
+            line.setAttribute('x2', cx.toFixed(1)); line.setAttribute('y2', cy.toFixed(1));
+            line.setAttribute('class', 'ms-line');
+            svg.appendChild(line);
+            // 星体（光环 + 主体），hover 只改透明度，禁 scale（Chrome 合成原点会漂移）
+            const sg = document.createElementNS(NS, 'g');
+            sg.setAttribute('class', 'ms-star');
+            const halo = document.createElementNS(NS, 'circle');
+            const rCore = 3.0 + s * 4.6;
+            halo.setAttribute('r', (rCore * 2.1).toFixed(2));
+            halo.setAttribute('fill', rgb(starColor(s), 0.12));
+            halo.classList.add('ms-halo');
+            sg.appendChild(halo);
+            const body = document.createElementNS(NS, 'circle');
+            body.setAttribute('r', rCore.toFixed(2));
+            body.setAttribute('fill', rgb(starColor(s)));
+            body.setAttribute('opacity', (0.55 + s * 0.45).toFixed(2));
+            body.classList.add('ms-body');
+            sg.appendChild(body);
+            sg.setAttribute('transform', 'translate(' + x.toFixed(1) + ',' + y.toFixed(1) + ')');
+            svg.appendChild(sg);
+            allStars.push({ id: 'm' + m.id, el: sg, kind: 'data', m: m, s: s, cat: cat });
+        });
+    });
+
+    // 全局画像主星区（每条画像一颗主星，金色；白芯亮起）
+    if (G) {
+        const groupLabel = document.createElementNS(NS, 'text');
+        groupLabel.setAttribute('x', PCx);
+        groupLabel.setAttribute('y', PCy - 46);
+        groupLabel.setAttribute('text-anchor', 'middle');
+        groupLabel.setAttribute('class', 'ms-profile-label');
+        groupLabel.textContent = t_('memory_stars_profile_label') + ' · ' + G;
+        svg.appendChild(groupLabel);
+        (globals || []).forEach((m, i) => {
+            const x = PCx + (i - (G - 1) / 2) * gStep;
+            const sg = document.createElementNS(NS, 'g');
+            sg.setAttribute('class', 'ms-profile-star');
+            sg.setAttribute('transform', 'translate(' + x.toFixed(1) + ',' + PCy + ')');
+            const ring = document.createElementNS(NS, 'circle');
+            ring.setAttribute('r', '24'); ring.setAttribute('fill', 'rgba(255,199,106,0.10)');
+            ring.classList.add('ms-ring');
+            sg.appendChild(ring);
+            const halo = document.createElementNS(NS, 'circle');
+            halo.setAttribute('r', '13'); halo.setAttribute('fill', 'rgba(255,199,106,0.18)');
+            sg.appendChild(halo);
+            const core = document.createElementNS(NS, 'circle');
+            core.setAttribute('r', '8.5'); core.setAttribute('fill', '#FFC76A');
+            sg.appendChild(core);
+            const coreIn = document.createElementNS(NS, 'circle');
+            coreIn.setAttribute('r', '5.5'); coreIn.setAttribute('class', 'ms-core-in');
+            sg.appendChild(coreIn);
+            svg.appendChild(sg);
+            allStars.push({ id: 'g' + m.id, el: sg, kind: 'profile', m: m, s: 1, cat: t_('memory_stars_profile_label') });
+        });
+    }
+
+    // 详情面板（点击星展开；删除按钮复用全局 memory-del 委托）
+    const detail = document.createElement('div');
+    detail.className = 'ms-detail';
+    wrap.appendChild(detail);
+    const showDetail = (star) => {
+        const m = star.m;
+        const s = star.s;
+        const col = s > 0.7 ? '#FFC76A' : (s > 0.45 ? '#E8ECF4' : '#6E82A6');
+        detail.innerHTML =
+            '<div class="ms-detail-head">' +
+            '<span class="ms-detail-cat">' + esc(star.cat) + '</span>' +
+            '<span class="ms-detail-meta">' + t_('memory_stars_hint') + '</span>' +
+            '</div>' +
+            '<div class="ms-detail-body">' + esc(m.content) + '</div>' +
+            '<div class="ms-detail-meta">' +
+            (star.kind === 'profile'
+                ? '<span>' + t_('memory_stars_profile_hint') + '</span>'
+                : '<span>' + t_('memory_stars_times', m.access_count || 0) + '</span>' +
+                  '<span>' + t_('memory_stars_importance', Math.round((m.importance || 0.5) * 100)) + '</span>' +
+                  '<span class="ms-strength"><i style="width:' + Math.round(s * 100) + '%;background:' + col + '"></i></span>') +
+            '</div>' +
+            '<div class="ms-detail-actions"><button type="button" class="memory-del ms-del" title="删除" data-id="' + m.id + '">' + t_('memory_stars_delete') + '</button></div>';
+        detail.classList.add('show');
+        allStars.forEach((st) => st.el.classList.remove('hot'));
+        star.el.classList.add('hot');
+    };
+
+    // tooltip 委托：mousemove rAF 节流更新位置，同星不重建 innerHTML，mouseout 才隐藏
+    const tip = document.createElement('div');
+    tip.className = 'ms-tip';
+    wrap.appendChild(tip);
+    let tipStar = null, tipRAF = 0;
+    const setTip = (star, ev) => {
+        tipStar = star;
+        tip.innerHTML = '<div class="ms-tip-cat">' + esc(star.cat) + (star.kind === 'data' ? ' · ' + Math.round(star.s * 100) + '%' : '') + '</div>' +
+            '<div class="ms-tip-body">' + esc(star.m.content) + '</div>';
+        tip.style.display = 'block';
+    };
+    const placeTip = (ev) => {
+        const rect = wrap.getBoundingClientRect();
+        let x = ev.clientX - rect.left + 14;
+        let y = ev.clientY - rect.top + 10;
+        if (x + 260 > rect.width) x = ev.clientX - rect.left - 272;
+        if (y + 80 > rect.height) y = ev.clientY - rect.top - 76;
+        tip.style.left = x + 'px';
+        tip.style.top = y + 'px';
+    };
+    svg.addEventListener('mousemove', (e) => {
+        if (!tipRAF) tipRAF = requestAnimationFrame(() => {
+            tipRAF = 0;
+            if (tip.style.display !== 'none') placeTip(e);
+        });
+    });
+    svg.addEventListener('mouseover', (e) => {
+        const target = e.target.closest ? e.target.closest('.ms-profile-star, .ms-star') : null;
+        if (target) {
+            const star = allStars.find((st) => st.el === target);
+            if (star) setTip(star, e);
+            return;
+        }
+        tipStar = null;
+    });
+    svg.addEventListener('mouseout', (e) => {
+        if (!e.target.closest || !e.target.closest('.ms-profile-star, .ms-star')) {
+            tipStar = null;
+            tip.style.display = 'none';
+        }
+    });
+    svg.addEventListener('click', (e) => {
+        const target = e.target.closest ? e.target.closest('.ms-profile-star, .ms-star') : null;
+        if (target) {
+            const star = allStars.find((st) => st.el === target);
+            if (star) showDetail(star);
+            return;
+        }
+        detail.classList.remove('show');
+        allStars.forEach((st) => st.el.classList.remove('hot'));
+    });
+
+    return wrap;
+}
+
+function renderMemoryGroups(details) {
+    // 按类别分组：无类别的归「未分类」，每组一个卡片，hover 展开 / 点击固定
+    const groups = {};
+    for (const m of details) {
+        const key = (m.category || '').trim() || t('memory_cat_other');
+        (groups[key] = groups[key] || []).push(m);
+    }
+    const cards = Object.entries(groups).map(([cat, items]) => `
+        <div class="mem-group">
+            <button type="button" class="mem-group-head" aria-expanded="false">
+                <span class="memory-cat">${escapeHtml(cat)}</span>
+                <span class="mem-group-count">${items.length}</span>
+                <svg class="mem-group-chev" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg>
+            </button>
+            <div class="mem-group-body">
+                <div class="mem-group-body-inner">
+                    ${items.map(m => memoryItemHTML(m)).join('')}
+                </div>
+            </div>
+        </div>`).join('');
+    return `<div class="mem-group-grid">${cards}</div>`;
+}
+
+
 function escapeHtml(s) {
     return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({
         '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
@@ -2368,6 +2707,13 @@ function escapeHtml(s) {
 
 // —— 事件绑定 ——
 document.addEventListener('click', async (e) => {
+    const groupHead = e.target.closest('.mem-group-head');
+    if (groupHead) {
+        const group = groupHead.closest('.mem-group');
+        const pinned = group.classList.toggle('pinned');
+        groupHead.setAttribute('aria-expanded', pinned ? 'true' : 'false');
+        return;
+    }
     const delBtn = e.target.closest('.memory-del');
     if (delBtn) {
         const id = delBtn.dataset.id;
@@ -2382,12 +2728,12 @@ document.addEventListener('click', async (e) => {
     }
 });
 
-// 打开设置弹窗时初始化：回显 LLM 配置 + 按当前激活 tab 加载对应数据
+// 打开设置弹窗时初始化：从数据库加载 AI 配置 + 按当前激活 tab 加载对应数据
 const _settingsBtn = document.getElementById('settingsBtn');
 if (_settingsBtn) {
     _settingsBtn.addEventListener('click', () => {
         setTimeout(() => {
-            loadLLMSettingsIntoForm();
+            loadAIConfigFromServer();
             const activeTab = document.querySelector('.settings-tab.active');
             if (activeTab && activeTab.dataset.stab === 'memory') {
                 loadMemoriesIntoForm();
@@ -2396,32 +2742,99 @@ if (_settingsBtn) {
     });
 }
 
-// 切到「我的记忆」tab 时加载记忆（之前切 tab 不会触发加载，导致记忆列表空白）
+// 切到「我的记忆」tab 时加载记忆；切到 AI 配置时从数据库加载
 document.querySelectorAll('.settings-tab').forEach(tab => {
     tab.addEventListener('click', () => {
         if (tab.dataset.stab === 'llm') {
-            loadLLMSettingsIntoForm();
+            loadAIConfigFromServer();
         } else if (tab.dataset.stab === 'memory') {
             loadMemoriesIntoForm();
         }
     });
 });
 
-// 保存 LLM 配置
+// 保存 AI 配置（登录用户 → 数据库持久化；未登录 → localStorage 兜底）
+// 通用：保存某个子配置到账号（登录）/ 本浏览器（未登录）
+async function saveAiSubConfig(flatCfg, box, okText) {
+    const token = localStorage.getItem('token');
+    if (token && token !== 'null') {
+        // 登录：配置只存数据库（按 user_id 隔离），不落 localStorage，退出/切换账号无 key 残留
+        try {
+            const res = await fetch(`${config.API_BASE_URL}/ai/config`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json', ...buildAuthHeaders() },
+                body: JSON.stringify({ config: flatCfg })
+            });
+            const data = await res.json();
+            if (res.ok && data.ok) {
+                box.className = 'llm-test-result ok';
+                box.textContent = okText + '（已保存到账号）';
+            } else {
+                throw new Error(data.detail || '保存失败');
+            }
+        } catch (err) {
+            box.className = 'llm-test-result err';
+            box.textContent = '云端保存失败：' + (err.message || '未知错误');
+        }
+    } else {
+        saveLLMConfig({
+            base_url: flatCfg.llm && flatCfg.llm.base_url,
+            model: flatCfg.llm && flatCfg.llm.model,
+            api_key: flatCfg.llm && flatCfg.llm.api_key,
+            embedding_base_url: flatCfg.embedding && flatCfg.embedding.base_url,
+            embedding_model: flatCfg.embedding && flatCfg.embedding.model,
+            embedding_api_key: flatCfg.embedding && flatCfg.embedding.api_key,
+            image_vl_provider: flatCfg.image_vl && flatCfg.image_vl.provider,
+            image_vl_model: flatCfg.image_vl && flatCfg.image_vl.model,
+            image_vl_api_key: flatCfg.image_vl && flatCfg.image_vl.api_key
+        });
+        box.className = 'llm-test-result ok';
+        box.textContent = okText + '（已保存到本浏览器）';
+    }
+}
+
+// 对话模型：只保存 llm
 const saveLLMConfigBtn = document.getElementById('saveLLMConfigBtn');
 if (saveLLMConfigBtn) {
     saveLLMConfigBtn.onclick = () => {
-        saveLLMConfig({
-            base_url: document.getElementById('llmBaseUrl').value,
-            model: document.getElementById('llmModel').value,
-            api_key: document.getElementById('llmApiKey').value,
-            embedding_base_url: document.getElementById('embeddingBaseUrl').value,
-            embedding_model: document.getElementById('embeddingModel').value,
-            embedding_api_key: document.getElementById('embeddingApiKey').value
-        });
-        const box = document.getElementById('llmTestResult');
-        box.className = 'llm-test-result ok';
-        box.textContent = '已保存到本浏览器，新的对话将使用该配置。';
+        const cfg = {
+            llm: {
+                base_url: document.getElementById('llmBaseUrl').value.trim(),
+                model: document.getElementById('llmModel').value.trim(),
+                api_key: document.getElementById('llmApiKey').value.trim()
+            }
+        };
+        saveAiSubConfig(cfg, document.getElementById('llmTestResult'), '对话模型配置');
+    };
+}
+
+// 向量模型：只保存 embedding
+const saveEmbeddingConfigBtn = document.getElementById('saveEmbeddingConfigBtn');
+if (saveEmbeddingConfigBtn) {
+    saveEmbeddingConfigBtn.onclick = () => {
+        const cfg = {
+            embedding: {
+                base_url: document.getElementById('embeddingBaseUrl').value.trim(),
+                model: document.getElementById('embeddingModel').value.trim(),
+                api_key: document.getElementById('embeddingApiKey').value.trim()
+            }
+        };
+        saveAiSubConfig(cfg, document.getElementById('embeddingTestResult'), '向量模型配置');
+    };
+}
+
+// 图片解析：只保存 image_vl
+const saveImageVlConfigBtn = document.getElementById('saveImageVlConfigBtn');
+if (saveImageVlConfigBtn) {
+    saveImageVlConfigBtn.onclick = () => {
+        const cfg = {
+            image_vl: {
+                provider: document.getElementById('imageVlProvider').value,
+                model: document.getElementById('imageVlModel').value.trim(),
+                api_key: document.getElementById('imageVlApiKey').value.trim()
+            }
+        };
+        saveAiSubConfig(cfg, document.getElementById('imageVlTestResult'), '图片解析配置');
     };
 }
 
@@ -2457,6 +2870,77 @@ if (testLLMConfigBtn) {
         } catch (err) {
             box.className = 'llm-test-result err';
             box.textContent = '连接失败：' + err.message;
+        }
+    };
+}
+
+// 测试向量模型
+const testEmbeddingBtn = document.getElementById('testEmbeddingBtn');
+if (testEmbeddingBtn) {
+    testEmbeddingBtn.onclick = async () => {
+        const box = document.getElementById('embeddingTestResult');
+        const base_url = document.getElementById('embeddingBaseUrl').value.trim();
+        const model = document.getElementById('embeddingModel').value.trim();
+        const api_key = document.getElementById('embeddingApiKey').value.trim();
+        box.className = 'llm-test-result';
+        box.textContent = '测试中…';
+        try {
+            const res = await fetch(`${config.API_BASE_URL}/ai/config/test/embedding`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ base_url, model, api_key, text: '你好世界' })
+            });
+            const data = await res.json();
+            if (res.ok && data.code === 200) {
+                box.className = 'llm-test-result ok';
+                box.textContent = '向量化成功，维度：' + data.dim;
+            } else {
+                box.className = 'llm-test-result err';
+                box.textContent = '测试失败：' + (data.detail || res.status);
+            }
+        } catch (err) {
+            box.className = 'llm-test-result err';
+            box.textContent = '测试失败：' + err.message;
+        }
+    };
+}
+
+// 测试图片解析模型（上传图片）
+const testImageVlBtn = document.getElementById('testImageVlBtn');
+const imageVlFileInput = document.getElementById('imageVlFileInput');
+if (testImageVlBtn && imageVlFileInput) {
+    testImageVlBtn.onclick = () => imageVlFileInput.click();
+    imageVlFileInput.onchange = async () => {
+        const f = imageVlFileInput.files && imageVlFileInput.files[0];
+        const box = document.getElementById('imageVlTestResult');
+        if (!f) return;
+        box.className = 'llm-test-result';
+        box.textContent = '识别中…（本地视觉模型较慢）';
+        try {
+            const fd = new FormData();
+            fd.append('file', f);
+            fd.append('provider', document.getElementById('imageVlProvider').value);
+            fd.append('model', document.getElementById('imageVlModel').value);
+            fd.append('api_key', document.getElementById('imageVlApiKey').value);
+            const token = localStorage.getItem('token');
+            const res = await fetch(`${config.API_BASE_URL}/ai/config/test/image`, {
+                method: 'POST',
+                headers: token && token !== 'null' ? { 'Authorization': 'Bearer ' + token } : {},
+                body: fd
+            });
+            const data = await res.json();
+            if (res.ok && data.code === 200) {
+                box.className = 'llm-test-result ok';
+                box.textContent = '识别成功：' + (data.result || '').replace(/=====/g, '').slice(0, 120) + '…';
+            } else {
+                box.className = 'llm-test-result err';
+                box.textContent = '识别失败：' + (data.detail || res.status);
+            }
+        } catch (err) {
+            box.className = 'llm-test-result err';
+            box.textContent = '识别失败：' + err.message;
+        } finally {
+            imageVlFileInput.value = '';
         }
     };
 }
@@ -2694,7 +3178,7 @@ function initTtsToggle() {
     });
 }
 
-// 初始化语音设置面板
+// 初始化语音设置面板（多厂商：voicestudio / doubao / cosyvoice / glm）
 function initVoicePanel() {
     const toggle = document.getElementById('voiceEnabledToggle');
     const label = document.getElementById('voiceEnabledLabel');
@@ -2706,7 +3190,7 @@ function initVoicePanel() {
     const testAudio = document.getElementById('voiceTestAudio');
     if (!toggle) return;
 
-    // 回显
+    // 回显朗读开关/音色/语速（localStorage）
     const s = getVoiceSettings();
     toggle.checked = s.enabled === true;
     if (label) label.textContent = toggle.checked ? '开启' : '关闭';
@@ -2719,7 +3203,6 @@ function initVoicePanel() {
         const cur = getVoiceSettings();
         cur.enabled = toggle.checked;
         saveVoiceSettings(cur);
-        // 反向同步底部「朗读」快捷开关
         const ttsBtn = document.getElementById('ttsToggleBtn');
         const ttsLabel = document.getElementById('ttsToggleLabel');
         if (ttsBtn) ttsBtn.classList.toggle('active', toggle.checked);
@@ -2738,37 +3221,174 @@ function initVoicePanel() {
         saveVoiceSettings(cur);
     });
 
-    // 健康检查 + 加载音色
-    async function refreshVoices() {
-        if (statusTip) { statusTip.textContent = '正在检测本地语音服务…'; statusTip.className = 'llm-tip'; }
+    // 厂商下拉切换：豆包显示 APPID/Token，其他厂商隐藏
+    const providerSel = document.getElementById('voiceProviderSelect');
+    function refreshProviderFields() {
+        const p = providerSel ? providerSel.value : 'voicestudio';
+        const isDoubao = p === 'doubao';
+        const appIdItem = document.getElementById('voiceAppId') ? document.getElementById('voiceAppId').closest('.cfg-field') : null;
+        const tokenItem = document.getElementById('voiceAccessToken') ? document.getElementById('voiceAccessToken').closest('.cfg-field') : null;
+        if (appIdItem) appIdItem.style.display = isDoubao ? '' : 'none';
+        if (tokenItem) tokenItem.style.display = isDoubao ? '' : 'none';
+    }
+    if (providerSel) providerSel.addEventListener('change', refreshProviderFields);
+
+    // 从数据库加载语音配置回显
+    async function loadVoiceConfig() {
+        const token = localStorage.getItem('token');
+        if (!token || token === 'null') return;
+        try {
+            const res = await fetch(`${config.API_BASE_URL}/ai/config`, { headers: buildAuthHeaders() });
+            const data = await res.json();
+            if (res.ok && data.ok && data.config) {
+                const v = data.config.voice || {};
+                setVal('voiceProviderSelect', v.provider || 'voicestudio');
+                setVal('voiceModel', v.model || '');
+                setVal('voiceApiKey', v.api_key || '');
+                setVal('voiceAppId', v.app_id || '');
+                setVal('voiceAccessToken', v.access_token || '');
+                if (v.voice_id && select) select.value = v.voice_id;
+                refreshProviderFields();
+            }
+        } catch (e) { console.warn('加载语音配置失败', e); }
+    }
+
+    // 保存语音配置到数据库
+    const saveVoiceCfgBtn = document.getElementById('saveVoiceConfigBtn');
+    if (saveVoiceCfgBtn) saveVoiceCfgBtn.onclick = async () => {
+        const box = document.getElementById('voiceTestResult');
+        const cfg = {
+            voice: {
+                provider: providerSel ? providerSel.value : 'voicestudio',
+                model: document.getElementById('voiceModel').value.trim(),
+                api_key: document.getElementById('voiceApiKey').value.trim(),
+                app_id: document.getElementById('voiceAppId').value.trim(),
+                access_token: document.getElementById('voiceAccessToken').value.trim(),
+                voice_id: select ? select.value : 'default'
+            }
+        };
+        // 兼容旧逻辑：音色/开关仍存 localStorage
+        if (select) { const c = getVoiceSettings(); c.voice = select.value; saveVoiceSettings(c); voiceState.voice = select.value; }
+        const token = localStorage.getItem('token');
+        if (!token || token === 'null') {
+            if (box) { box.className = 'llm-test-result err'; box.textContent = '请先登录，语音配置才能保存到账号。'; }
+            return;
+        }
+        try {
+            const res = await fetch(`${config.API_BASE_URL}/ai/config`, {
+                method: 'PUT', headers: { 'Content-Type': 'application/json', ...buildAuthHeaders() },
+                body: JSON.stringify({ config: cfg })
+            });
+            const data = await res.json();
+            if (res.ok && data.ok) {
+                if (box) { box.className = 'llm-test-result ok'; box.textContent = '语音配置已保存到账号。'; }
+            } else {
+                throw new Error(data.detail || '保存失败');
+            }
+        } catch (err) {
+            if (box) { box.className = 'llm-test-result err'; box.textContent = '保存失败：' + err.message; }
+        }
+    };
+
+    // 测试当前语音通道（TTS 合成 + STT 转写）
+    const testVoiceCfgBtn = document.getElementById('testVoiceBtn');
+    if (testVoiceCfgBtn) testVoiceCfgBtn.onclick = async () => {
+        const box = document.getElementById('voiceTestResult');
+        if (box) { box.className = 'llm-test-result'; box.textContent = '测试中（合成+转写，云端约 10~30 秒）…'; }
         try {
             const token = localStorage.getItem('token') || '';
-            const hres = await fetch(`${config.API_BASE_URL}/ai/tts/health`, { headers: { 'Authorization': `Bearer ${token}` } });
-            const hdata = await hres.json();
-            if (hres.ok && hdata.ok) {
-                if (statusTip) { statusTip.textContent = '✅ 本地语音服务已就绪（VoiceStudio，127.0.0.1:3900）'; statusTip.className = 'llm-test-result ok'; }
+            // 传表单当前值，不先保存也能测
+            const body = {
+                provider: providerSel ? providerSel.value : 'voicestudio',
+                model: document.getElementById('voiceModel').value.trim(),
+                api_key: document.getElementById('voiceApiKey').value.trim(),
+                app_id: document.getElementById('voiceAppId').value.trim(),
+                access_token: document.getElementById('voiceAccessToken').value.trim(),
+                voice_id: select ? select.value : 'default'
+            };
+            const res = await fetch(`${config.API_BASE_URL}/ai/tts/test`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+                body: JSON.stringify(body)
+            });
+            const data = await res.json();
+            if (res.ok && data.ok) {
+                const ok = data.ok === true;
+                if (box) {
+                    box.className = ok ? 'llm-test-result ok' : 'llm-test-result err';
+                    box.textContent = ok
+                        ? `✅ ${data.provider} 测试通过：${data.detail || 'TTS+STT 均正常'}`
+                        : `❌ ${data.provider} 测试未通过：${data.detail || ''}`;
+                }
             } else {
-                if (statusTip) { statusTip.textContent = '⚠️ 未检测到本地语音服务。请先安装 VoiceStudio 并打开（监听 127.0.0.1:3900），再刷新音色。'; statusTip.className = 'llm-test-result err'; }
-                return;
+                if (box) { box.className = 'llm-test-result err'; box.textContent = '测试失败：' + (data.detail || res.status); }
             }
+        } catch (err) {
+            if (box) { box.className = 'llm-test-result err'; box.textContent = '测试失败：' + err.message; }
+        }
+    };
+
+    // 设置面板内克隆音色（从创作中心迁移）
+    const cloneBtn = document.getElementById('cloneVoiceInSettingsBtn');
+    const cloneFile = document.getElementById('cloneVoiceInSettingsFile');
+    if (cloneBtn && cloneFile) {
+        cloneBtn.onclick = () => cloneFile.click();
+        cloneFile.onchange = async () => {
+            const f = cloneFile.files && cloneFile.files[0];
+            const box = document.getElementById('cloneVoiceResult');
+            if (!f) return;
+            if (box) { box.className = 'llm-test-result'; box.textContent = '克隆中…（本地约 10 秒，云端按厂商计费）'; }
+            try {
+                const fd = new FormData();
+                fd.append('file', f);
+                fd.append('name', (prompt('给这个音色起个名字（如：妈妈的声音）') || '我的音色').trim());
+                const token = localStorage.getItem('token') || '';
+                const res = await fetch(`${config.API_BASE_URL}/ai/tts/clone`, {
+                    method: 'POST', headers: { 'Authorization': `Bearer ${token}` }, body: fd
+                });
+                const data = await res.json();
+                if (res.ok && data.ok) {
+                    if (box) { box.className = 'llm-test-result ok'; box.textContent = `克隆成功：${data.name}（voiceId=${data.voice_id}），已保存到账号。`; }
+                    refreshVoices();
+                } else {
+                    if (box) { box.className = 'llm-test-result err'; box.textContent = '克隆失败：' + (data.detail || res.status); }
+                }
+            } catch (err) {
+                if (box) { box.className = 'llm-test-result err'; box.textContent = '克隆失败：' + err.message; }
+            } finally {
+                cloneFile.value = '';
+            }
+        };
+    }
+
+    // 健康检查 + 加载音色（多厂商）
+    async function refreshVoices() {
+        if (statusTip) { statusTip.textContent = '正在检测语音服务…'; statusTip.className = 'llm-tip'; }
+        try {
+            const token = localStorage.getItem('token') || '';
             const vres = await fetch(`${config.API_BASE_URL}/ai/tts/voices`, { headers: { 'Authorization': `Bearer ${token}` } });
             const vdata = await vres.json();
             if (vres.ok && vdata.voices) {
-                const voices = vdata.voices.filter(v => v.type === 'profile'); // 只展示用户保存的音色
+                const voices = vdata.voices || [];
                 if (select) {
                     select.innerHTML = '<option value="default">默认音色</option>';
                     voices.forEach(v => {
                         const opt = document.createElement('option');
                         opt.value = v.voice_id || v.id;
-                        opt.textContent = v.name || v.voice_id;
+                        opt.textContent = (v.name || v.voice_id) + (v.type === 'cloned' ? '（克隆）' : '');
                         select.appendChild(opt);
                     });
                     select.value = getVoiceSettings().voice || 'default';
                 }
-                if (statusTip) statusTip.textContent = `✅ 语音服务就绪，共 ${voices.length} 个自定义音色（+ 内置默认）`;
+                if (statusTip) {
+                    statusTip.textContent = `✅ ${vdata.provider || '语音服务'} 就绪，共 ${voices.length} 个音色`;
+                    statusTip.className = 'llm-test-result ok';
+                }
+            } else {
+                if (statusTip) { statusTip.textContent = '⚠️ ' + (vdata.warning || vdata.detail || '未检测到可用音色'); statusTip.className = 'llm-test-result err'; }
             }
         } catch (e) {
-            if (statusTip) { statusTip.textContent = '⚠️ 无法连接本地语音服务。请确认 VoiceStudio 已打开。'; statusTip.className = 'llm-test-result err'; }
+            if (statusTip) { statusTip.textContent = '⚠️ 无法连接语音服务：' + e.message; statusTip.className = 'llm-test-result err'; }
         }
     }
 
@@ -2783,13 +3403,14 @@ function initVoicePanel() {
         if (audioUrl) {
             if (testAudio) { testAudio.src = audioUrl; testAudio.style.display = 'block'; testAudio.play(); }
         } else {
-            if (statusTip) { statusTip.textContent = '❌ 合成失败。请确认语音服务已就绪（首次合成需下载约 2.3GB 模型，请耐心等待）。'; statusTip.className = 'llm-test-result err'; }
+            if (statusTip) { statusTip.textContent = '❌ 合成失败。请确认语音服务已就绪。'; statusTip.className = 'llm-test-result err'; }
         }
     };
 
-    // 打开语音 tab 时刷新
-    const voiceTab = document.querySelector('.settings-tab[data-stab="voice"]');
-    if (voiceTab) voiceTab.addEventListener('click', refreshVoices);
+    // 语音配置已并入「AI 配置」tab：打开 AI 配置 tab 时加载配置 + 刷新音色
+    const llmTab = document.querySelector('.settings-tab[data-stab="llm"]');
+    if (llmTab) llmTab.addEventListener('click', () => { loadVoiceConfig(); refreshVoices(); });
+    loadVoiceConfig();
 }
 
 // ================= 语音输入（录音 → 转文字 → 填入输入框） =================

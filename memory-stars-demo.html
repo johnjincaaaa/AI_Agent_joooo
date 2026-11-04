@@ -1,0 +1,397 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>记忆星图 · 演示</title>
+<style>
+  :root {
+    --night: #070B16;
+    --night-2: #0B1224;
+    --ink: #E8ECF4;
+    --ink-dim: #93A3C4;
+    --ink-faint: #5E7499;
+    --gold: #FFC76A;
+    --line: rgba(110, 140, 190, 0.35);
+    --panel: rgba(13, 19, 36, 0.86);
+    --panel-border: rgba(140, 165, 210, 0.16);
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    background: var(--night);
+    color: var(--ink);
+    font-family: -apple-system, "PingFang SC", "Microsoft YaHei", "Segoe UI", sans-serif;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    padding: 28px 32px 20px;
+  }
+  header { display: flex; align-items: baseline; gap: 14px; margin-bottom: 6px; }
+  h1 { font-size: 20px; font-weight: 600; letter-spacing: 0.01em; }
+  .sub { font-size: 13px; color: var(--ink-dim); }
+  .tag { font-size: 11px; color: var(--gold); border: 1px solid rgba(255,199,106,0.4); border-radius: 4px; padding: 1px 7px; }
+  .memnote { margin: 10px 0 2px; font-size: 12.5px; color: var(--ink-dim); }
+  .memnote b { color: var(--ink); font-weight: 600; }
+  .profile-row { display: flex; gap: 8px; align-items: baseline; font-size: 14px; line-height: 1.7; padding: 3px 0; }
+  .profile-row .dot { width: 5px; height: 5px; border-radius: 50%; background: var(--gold); flex-shrink: 0; margin-top: 2px; }
+  .profile-star { cursor: pointer; }
+  .profile-star .ring { transition: opacity 0.2s ease; }
+  .profile-star.hot .ring { opacity: 0.95; }
+  .chips { display: flex; gap: 8px; flex-wrap: wrap; margin: 12px 0 14px; }
+  .chip {
+    font-size: 12.5px; color: var(--ink-dim); background: rgba(255,255,255,0.04);
+    border: 1px solid var(--panel-border); border-radius: 999px; padding: 5px 14px; cursor: pointer;
+    transition: all 0.18s ease; user-select: none;
+  }
+  .chip:hover { color: var(--ink); background: rgba(255,255,255,0.08); }
+  .chip.off { opacity: 0.35; }
+  .stage { position: relative; width: 100%; border: 1px solid var(--panel-border); border-radius: 14px; background: var(--night-2); overflow: hidden; }
+  .stage svg { display: block; width: 100%; height: auto; }
+  /* 星座 dim 状态由 g.cat-dim 控制 */
+  g.cat-dim { opacity: 0.12; }
+  .sky-star { transition: opacity 0.25s ease; }
+  .data-star { cursor: pointer; }
+  .data-star .halo { transition: opacity 0.2s ease; }
+  .data-star .core { transition: r 0.18s ease, opacity 0.2s ease; }
+  .data-star.hot .core { stroke: #FFE9BF; stroke-width: 2; }
+  .tooltip {
+    position: absolute; pointer-events: none; z-index: 5; display: none;
+    max-width: 260px; background: var(--panel); border: 1px solid var(--panel-border);
+    border-radius: 10px; padding: 10px 12px; font-size: 12.5px; line-height: 1.55;
+    box-shadow: 0 8px 24px rgba(0,0,0,0.45); backdrop-filter: blur(6px);
+  }
+  .tooltip .t-cat { font-size: 11px; color: var(--gold); margin-bottom: 3px; }
+  .tooltip .t-body { color: var(--ink); }
+  .panel {
+    margin-top: 14px; background: var(--panel); border: 1px solid var(--panel-border);
+    border-radius: 12px; padding: 14px 16px; display: none; min-height: 0;
+    animation: rise 0.22s ease;
+  }
+  .panel.show { display: block; }
+  @keyframes rise { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+  .panel-head { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+  .panel-cat { font-size: 12px; color: var(--gold); }
+  .panel-content { font-size: 14.5px; line-height: 1.6; margin-bottom: 10px; }
+  .panel-meta { display: flex; gap: 18px; flex-wrap: wrap; font-size: 12px; color: var(--ink-dim); }
+  .strength-bar { width: 120px; height: 4px; background: rgba(255,255,255,0.1); border-radius: 2px; overflow: hidden; display: inline-block; vertical-align: middle; }
+  .strength-bar i { display: block; height: 100%; border-radius: 2px; }
+  .legend { display: flex; gap: 22px; flex-wrap: wrap; margin-top: 16px; font-size: 12px; color: var(--ink-dim); }
+  .legend .sw { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 5px; vertical-align: -1px; }
+  footer { margin-top: 10px; font-size: 11.5px; color: var(--ink-faint); }
+</style>
+</head>
+<body>
+  <header>
+    <h1>记忆星图</h1>
+    <span class="sub">每一颗星是一条细节记忆 · 越亮越被在意</span>
+    <span class="tag">演示数据</span>
+  </header>
+
+  <div class="memnote">记忆体 ＝ <b>全局画像</b>（中央恒星） ＋ <b>细节记忆</b>（星座，越亮越被在意） ＋ <b>上下文 RAG</b>（向量检索）</div>
+
+  <div class="chips" id="chips"></div>
+
+  <div class="stage">
+    <svg id="sky" viewBox="0 0 1200 680" preserveAspectRatio="xMidYMid meet"></svg>
+    <div class="tooltip" id="tooltip"></div>
+  </div>
+
+  <div class="panel" id="detail"></div>
+
+  <div class="legend">
+    <span><span class="sw" style="background:#6E82A6;"></span>陌生 · 刚记下</span>
+    <span><span class="sw" style="background:#E8ECF4;"></span>常被想起</span>
+    <span><span class="sw" style="background:#FFC76A;"></span>很在意 · 反复提到</span>
+    <span><span class="sw" style="background:rgba(110,140,190,0.5);"></span>连线 = 同一类别的记忆</span>
+    <span>悬停看内容 · 点击固定详情</span>
+  </div>
+  <footer>口径：星亮度 = 熟悉度（被想起次数 × 0.25 + 重要度 × 0.6），与系统细节记忆一致；中央金色主星 = 全局画像（每条一颗，可多条）；虚线 = 主星区与各星座的连接 · 演示数据，未接入产品</footer>
+
+<script>
+(function () {
+  // —— 固定种子随机（保证每次打开星图一致）——
+  var _seed = 20261103;
+  function rnd() { _seed = (_seed * 9301 + 49297) % 233280; return _seed / 233280; }
+
+  // —— 演示数据：5 个星座（类别），strength 与系统口径一致 ——
+  var cats = [
+    { name: '工作', x: 300, y: 200, items: [
+      { content: '甲方要求 12 月前交付，别拖到最后一周', access: 8, importance: 0.9 },
+      { content: '预算上限 3 万，超了要自己补', access: 3, importance: 0.6 },
+      { content: '周五和周会要提前准备汇报', access: 2, importance: 0.5 },
+      { content: '加班再晚也要记得吃饭', access: 1, importance: 0.55 }
+    ]},
+    { name: '生活', x: 655, y: 150, items: [
+      { content: '爱吃干脆面、火腿肠、辣条这类平价零食', access: 6, importance: 0.85 },
+      { content: '凌晨一点才睡，白天容易犯困', access: 5, importance: 0.7 },
+      { content: '周末想去爬山透透气', access: 2, importance: 0.45 }
+    ]},
+    { name: '学习', x: 900, y: 230, items: [
+      { content: '想攒钱买一台超级电脑，自己配显卡', access: 7, importance: 0.9 },
+      { content: 'Python 异步编程还没吃透', access: 4, importance: 0.65 },
+      { content: '数据结构要补，绩点有点危险', access: 3, importance: 0.55 }
+    ]},
+    { name: '家人', x: 270, y: 510, items: [
+      { content: '外婆在桂林平乐，过年要回老家看她', access: 5, importance: 0.85 },
+      { content: '家里条件一般，很少跟家里提难处', access: 4, importance: 0.8 }
+    ]},
+    { name: '愿望', x: 780, y: 540, items: [
+      { content: '大三下学期前攒够 10 万', access: 9, importance: 0.95 },
+      { content: '秋招想进赛力斯实习', access: 6, importance: 0.8 },
+      { content: '想要一台自己的电脑，不想再借别人的', access: 5, importance: 0.85 }
+    ]}
+  ];
+
+  function strength(m) { return Math.min(1, Math.max(0.15, m.access * 0.25 + (m.importance - 0.5) * 0.6)); }
+
+  // 颜色插值：低=灰蓝 → 中=白 → 高=金
+  function starColor(s) {
+    var stops = [
+      [0.15, [110, 130, 166]],
+      [0.45, [216, 226, 242]],
+      [0.80, [255, 214, 150]]
+    ];
+    if (s <= stops[0][0]) return stops[0][1];
+    if (s >= stops[2][0]) return stops[2][1];
+    var i = s < stops[1][0] ? 0 : 1;
+    var a = stops[i][1], b = stops[i + 1][1];
+    var t = (s - stops[i][0]) / (stops[i + 1][0] - stops[i][0]);
+    return [Math.round(a[0] + (b[0] - a[0]) * t), Math.round(a[1] + (b[1] - a[1]) * t), Math.round(a[2] + (b[2] - a[2]) * t)];
+  }
+  function rgb(c, o) { return 'rgba(' + c[0] + ',' + c[1] + ',' + c[2] + ',' + (o == null ? 1 : o) + ')'; }
+
+  var NS = 'http://www.w3.org/2000/svg';
+  var svg = document.getElementById('sky');
+  var W = 1200, H = 680;
+
+  // 背景星点（氛围，固定种子）
+  for (var i = 0; i < 70; i++) {
+    var c = document.createElementNS(NS, 'circle');
+    c.setAttribute('cx', rnd() * W); c.setAttribute('cy', rnd() * H);
+    var r = 0.5 + rnd() * 1.2;
+    c.setAttribute('r', r);
+    c.setAttribute('fill', '#fff');
+    c.setAttribute('opacity', 0.04 + rnd() * 0.14);
+    c.classList.add('sky-star');
+    svg.appendChild(c);
+  }
+
+  var stars = [];
+  var catEls = {};
+
+  cats.forEach(function (cat, ci) {
+    // 星座核心：中心点位置带固定抖动
+    var cx = cat.x + (rnd() - 0.5) * 40;
+    var cy = cat.y + (rnd() - 0.5) * 40;
+
+    var g = document.createElementNS(NS, 'g');
+    g.setAttribute('data-cat', cat.name);
+    svg.appendChild(g);
+    catEls[cat.name] = g;
+
+    // 中心点 + 类别名
+    var core = document.createElementNS(NS, 'circle');
+    core.setAttribute('cx', cx); core.setAttribute('cy', cy);
+    core.setAttribute('r', 3.2); core.setAttribute('fill', '#A8C3FF'); core.setAttribute('opacity', 0.55);
+    g.appendChild(core);
+    var label = document.createElementNS(NS, 'text');
+    label.setAttribute('x', cx + 12); label.setAttribute('y', cy + 5);
+    label.setAttribute('fill', '#A8C3FF'); label.setAttribute('font-size', 13.5); label.setAttribute('opacity', 0.85);
+    label.textContent = cat.name + ' · ' + cat.items.length;
+    g.appendChild(label);
+
+    cat.items.forEach(function (m, i) {
+      var s = strength(m);
+      var n = cat.items.length;
+      var ang = (i / n) * Math.PI * 2 + (rnd() - 0.5) * 0.55;
+      var rad = 62 + s * 55 + (rnd() - 0.5) * 26;   // 越在意越靠近星座核心
+      var x = cx + Math.cos(ang) * rad;
+      var y = cy + Math.sin(ang) * rad * 0.82;
+
+      // 星 → 核心 连线
+      var line = document.createElementNS(NS, 'line');
+      line.setAttribute('x1', x); line.setAttribute('y1', y);
+      line.setAttribute('x2', cx); line.setAttribute('y2', cy);
+      line.setAttribute('stroke', 'rgba(110,140,190,0.35)'); line.setAttribute('stroke-width', 1);
+      g.appendChild(line);
+
+      // 星（光环 + 主体）
+      var sg = document.createElementNS(NS, 'g');
+      sg.setAttribute('class', 'data-star');
+      var halo = document.createElementNS(NS, 'circle');
+      var rCore = 3.2 + s * 5.2;
+      halo.setAttribute('r', rCore * 2.1); halo.setAttribute('fill', rgb(starColor(s), 0.12));
+      halo.classList.add('halo');
+      sg.appendChild(halo);
+      var core2 = document.createElementNS(NS, 'circle');
+      core2.setAttribute('r', rCore); core2.setAttribute('fill', rgb(starColor(s)));
+      core2.setAttribute('opacity', 0.55 + s * 0.45);
+      core2.classList.add('core');
+      sg.appendChild(core2);
+      sg.setAttribute('transform', 'translate(' + x + ',' + y + ')');
+      g.appendChild(sg);
+
+      stars.push({ cat: cat.name, m: m, s: s, el: sg, core: core2, halo: halo });
+    });
+  });
+
+  // —— 全局画像（中央主星区：每条画像一颗主星）——
+  var profileItems = [
+    '小舟，西南大学 AI 专业大三，家在桂林平乐',
+    '目前在深圳实习，租住在龙华'
+  ];
+  var profileStars = (function () {
+    var out = [];
+    var groupLabel = document.createElementNS(NS, 'text');
+    groupLabel.setAttribute('x', 600); groupLabel.setAttribute('y', 296);
+    groupLabel.setAttribute('text-anchor', 'middle'); groupLabel.setAttribute('fill', '#FFC76A');
+    groupLabel.setAttribute('font-size', 13); groupLabel.setAttribute('opacity', 0.92);
+    groupLabel.textContent = '全局画像 · ' + profileItems.length;
+    svg.appendChild(groupLabel);
+    // 主星互绕短线
+    var pair = document.createElementNS(NS, 'line');
+    pair.setAttribute('x1', 568); pair.setAttribute('y1', 340);
+    pair.setAttribute('x2', 632); pair.setAttribute('y2', 340);
+    pair.setAttribute('stroke', 'rgba(255,199,106,0.35)'); pair.setAttribute('stroke-width', 1);
+    svg.insertBefore(pair, svg.firstChild);
+    // 星团中点 → 各星座核心 虚线（垫底）
+    cats.forEach(function (cat) {
+      var l = document.createElementNS(NS, 'line');
+      l.setAttribute('x1', 600); l.setAttribute('y1', 340);
+      l.setAttribute('x2', cat.x); l.setAttribute('y2', cat.y);
+      l.setAttribute('stroke', 'rgba(255,199,106,0.20)');
+      l.setAttribute('stroke-width', 1); l.setAttribute('stroke-dasharray', '3 7');
+      svg.insertBefore(l, svg.firstChild);
+    });
+    profileItems.forEach(function (item, i) {
+      var cx = i === 0 ? 568 : 632, cy = 340;
+      var g = document.createElementNS(NS, 'g');
+      g.setAttribute('class', 'profile-star');
+      g.setAttribute('data-idx', i);
+      var ring = document.createElementNS(NS, 'circle');
+      ring.setAttribute('r', 24); ring.setAttribute('fill', 'rgba(255,199,106,0.10)');
+      ring.setAttribute('class', 'ring');
+      g.appendChild(ring);
+      var halo = document.createElementNS(NS, 'circle');
+      halo.setAttribute('r', 13); halo.setAttribute('fill', 'rgba(255,199,106,0.18)');
+      g.appendChild(halo);
+      var core = document.createElementNS(NS, 'circle');
+      core.setAttribute('r', 8.5); core.setAttribute('fill', '#FFC76A');
+      g.appendChild(core);
+      g.setAttribute('transform', 'translate(' + cx + ',' + cy + ')');
+      svg.appendChild(g);
+      out.push({ el: g, item: item, i: i });
+    });
+    return out;
+  })();
+
+  // —— 筛选 chips ——
+  var chipsBox = document.getElementById('chips');
+  var allChip = document.createElement('div');
+  allChip.className = 'chip'; allChip.textContent = '全部星座';
+  chipsBox.appendChild(allChip);
+  cats.forEach(function (cat) {
+    var c = document.createElement('div');
+    c.className = 'chip'; c.textContent = cat.name;
+    c.addEventListener('click', function () { toggleCat(cat.name, c); });
+    chipsBox.appendChild(c);
+  });
+  function toggleCat(name, chip) {
+    var off = chip.classList.toggle('off');
+    catEls[name].classList.toggle('cat-dim', off);
+  }
+
+  // —— tooltip ——
+  var tip = document.getElementById('tooltip');
+  var stage = document.querySelector('.stage');
+  function showTip(star, ev) {
+    var m = star.m;
+    tip.innerHTML = '<div class="t-cat">' + star.cat + ' · 熟悉度 ' + Math.round(star.s * 100) + '%</div>' +
+                    '<div class="t-body">' + m.content + '</div>';
+    tip.style.display = 'block';
+    placeTip(ev);
+  }
+  function placeTip(ev) {
+    var rect = stage.getBoundingClientRect();
+    var x = ev.clientX - rect.left + 14;
+    var y = ev.clientY - rect.top + 10;
+    if (x + 280 > rect.width) x = ev.clientX - rect.left - 290;
+    if (y + 90 > rect.height) y = ev.clientY - rect.top - 80;
+    tip.style.left = x + 'px'; tip.style.top = y + 'px';
+  }
+  function hideTip() { tip.style.display = 'none'; }
+
+  // —— 详情面板 ——
+  var detail = document.getElementById('detail');
+  var activeStar = null;
+  function openDetail(star) {
+    activeStar = star;
+    var s = star.s;
+    var col = s > 0.7 ? '#FFC76A' : (s > 0.45 ? '#E8ECF4' : '#6E82A6');
+    detail.innerHTML =
+      '<div class="panel-head"><span class="panel-cat">' + star.cat + '</span>' +
+      '<span style="font-size:12px;color:#93A3C4;">熟悉度 ' + Math.round(s * 100) + '%</span>' +
+      '<span class="strength-bar"><i style="width:' + Math.round(s * 100) + '%;background:' + col + ';"></i></span></div>' +
+      '<div class="panel-content">' + star.m.content + '</div>' +
+      '<div class="panel-meta">' +
+      '<span>被想起 ' + star.m.access + ' 次</span>' +
+      '<span>重要度 ' + Math.round(star.m.importance * 100) + '%</span>' +
+      '</div>';
+    detail.classList.add('show');
+    stars.forEach(function (st) { st.el.classList.remove('hot'); });
+    star.el.classList.add('hot');
+  }
+
+  // 事件（事件委托）
+  svg.addEventListener('mouseover', function (e) {
+    var pg = e.target.closest ? e.target.closest('.profile-star') : null;
+    if (pg) {
+      var idx = parseInt(pg.getAttribute('data-idx'), 10);
+      var it = profileItems[idx];
+      tip.innerHTML = '<div class="t-cat">全局画像 · 主星 ' + (idx + 1) + '/' + profileItems.length + '</div>' +
+        '<div class="t-body">' + it + '</div>';
+      tip.style.display = 'block';
+      placeTip(e);
+      return;
+    }
+    var g = e.target.closest ? e.target.closest('.data-star') : null;
+    if (!g) return;
+    var star = stars.find(function (st) { return st.el === g; });
+    if (star) showTip(star, e);
+  });
+  svg.addEventListener('mousemove', function (e) { if (tip.style.display !== 'none') placeTip(e); });
+  svg.addEventListener('mouseout', function (e) {
+    if (!e.target.closest || !e.target.closest('.data-star, .profile-star')) hideTip();
+  });
+  svg.addEventListener('click', function (e) {
+    var pg = e.target.closest ? e.target.closest('.profile-star') : null;
+    if (pg) {
+      openProfile(parseInt(pg.getAttribute('data-idx'), 10));
+      return;
+    }
+    var g = e.target.closest ? e.target.closest('.data-star') : null;
+    if (g) {
+      var star = stars.find(function (st) { return st.el === g; });
+      if (star) openDetail(star);
+    } else {
+      detail.classList.remove('show');
+      stars.forEach(function (st) { st.el.classList.remove('hot'); });
+      profileStars.forEach(function (p) { p.el.classList.remove('hot'); });
+    }
+  });
+
+  function openProfile(idx) {
+    profileStars.forEach(function (p) { p.el.classList.remove('hot'); });
+    profileStars[idx].el.classList.add('hot');
+    stars.forEach(function (st) { st.el.classList.remove('hot'); });
+    detail.innerHTML =
+      '<div class="panel-head"><span class="panel-cat">全局画像 · ' + (idx + 1) + '/' + profileItems.length + '</span></div>' +
+      '<div class="panel-content">' + profileItems[idx] + '</div>' +
+      '<div class="panel-meta"><span>长期记住的核心信息</span>' +
+      '<span>共 ' + profileItems.length + ' 条 · 细节记忆在星座 · 上下文靠 RAG 向量检索</span></div>';
+    detail.classList.add('show');
+  }
+})();
+</script>
+</body>
+</html>
